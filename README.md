@@ -44,3 +44,104 @@ If the server starts successfully, you'll see the following output:
 2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
 ```
 
+**NOTE**: The service requires the DB to be running (see [next section](#docker-compose))
+
+### Docker Compose
+To start only the DB (as you might want to start the service on the IDE for debugging):
+```bash
+docker compose up db
+```
+Add -d for detached mode. 
+
+```bash
+docker compose down db
+```
+To start both the DB and the service, run: 
+```bash
+ docker compose -f docker-compose.yaml up --build
+```
+
+## Postgres CheatSheet
+# PostgreSQL psql Command Cheat Sheet
+
+A quick reference of the most useful psql commands while developing with Postgres.
+
+---
+
+## 🔐 Connection & Exit
+
+| Action | Command |
+|--------|---------|
+| Connect to a DB | `psql -U <user> -d <db>` |
+| Connect to another DB (inside psql) | `\c <db>` |
+| Quit psql | `\q` |
+| Show connection info | `\conninfo` |
+
+---
+
+## 📚 List Databases, Tables, Schemas, Users
+
+| Action | Command |
+|--------|---------|
+| List all databases | `\l` |
+| List all tables in current schema | `\dt` |
+| List all tables + system tables | `\dt+` |
+| List schemas | `\dn` |
+| List users / roles | `\du` |
+| List indexes | `\di` |
+| List functions | `\df` |
+
+---
+
+## 🧭 Inspecting Structures
+
+| Action | Command |
+|--------|---------|
+| Describe table structure | `\d <table>` |
+| Describe with details | `\d+ <table>` |
+| Show all relations | `\d` |
+| Show search path | `SHOW search_path;` |
+
+---
+
+## 📊 Query Display Options
+
+| Action | Command |
+|--------|---------|
+| Toggle expanded mode | `\x` |
+| Auto-expanded mode | `\x auto` |
+| Show command history | `\s` |
+
+---
+
+## 🛠 Admin & Utility Commands
+
+| Action | Command |
+|--------|---------|
+| Create database | `CREATE DATABASE name;` |
+| Drop database | `DROP DATABASE name;` |
+| Create user | `CREATE USER name WITH PASSWORD 'pass';` |
+| Grant privileges | `GRANT ALL PRIVILEGES ON DATABASE db TO user;` |
+
+---
+
+## 📁 Import / Export Data
+
+| Action | Command |
+|--------|---------|
+| Run SQL file | `psql -U user -d db -f file.sql` |
+| Export table → CSV | `\copy table TO '/path/out.csv' CSV HEADER;` |
+| Import CSV → table | `\copy table FROM '/path/in.csv' CSV HEADER;` |
+
+---
+
+## 🆘 Help & Reference
+
+| Action | Command |
+|--------|---------|
+| List all psql meta-commands | `\?` |
+| SQL command help | `\h` |
+| Help for specific SQL command | `\h CREATE TABLE` |
+
+---
+
