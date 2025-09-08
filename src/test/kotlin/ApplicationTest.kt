@@ -75,7 +75,7 @@ class ApplicationTest {
             )
         }
 
-        assertEquals(HttpStatusCode.NoContent, response1.status)
+        assertEquals(HttpStatusCode.Created, response1.status)
 
         val response2 = client.get("/recipes")
         assertEquals(HttpStatusCode.OK, response2.status)

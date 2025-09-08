@@ -9,8 +9,9 @@ object RecipesRepository {
     val testRecipe2 = Recipe(uuid = "2", title = "Recipe 2", description = "Recipe Description 2", label = Label.Mediterranean, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 40)
     val testRecipe3 = Recipe(uuid = "3", title = "Recipe 3", description = "Recipe Description 3", label = Label.Vegetarian, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 50)
     val testRecipe4 = Recipe(uuid = "4", title = "Recipe 4", description = "Recipe Description 4", label = Label.LowCarb, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 60)
+    val testRecipe5 = Recipe(uuid = "5", title = "Recipe 5", description = "Recipe Description 5", label = Label.LowCarb, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 60)
 
-    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4)
+    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4, testRecipe5)
 
     fun allRecipes(): List<Recipe> = recipes
 
@@ -26,4 +27,6 @@ object RecipesRepository {
         }
         recipes.add(recipe)
     }
+
+    fun removeRecipe(uuid: String) : Boolean = recipes.removeIf { it.uuid == uuid }
 }

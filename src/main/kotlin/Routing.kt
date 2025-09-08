@@ -1,7 +1,9 @@
 package com.tenmilelabs
 
+import com.tenmilelabs.api.recipes.deleteRecipeById
 import com.tenmilelabs.api.recipes.getAllRecipes
 import com.tenmilelabs.api.recipes.getRecipesByLabel
+import com.tenmilelabs.api.recipes.getRecipesByName
 import com.tenmilelabs.api.recipes.postNewRecipe
 import com.tenmilelabs.data.RecipesRepository
 import io.ktor.server.application.*
@@ -24,9 +26,13 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
         route("/recipes") {
             getAllRecipes(recipeRepository)
 
-            getRecipesByLabel(recipeRepository)
+            getRecipesByLabel(recipeRepository, application.log)
+
+            getRecipesByName(recipeRepository, application.log)
 
             postNewRecipe(recipeRepository, application.log)
+
+            deleteRecipeById(recipeRepository, application.log)
 
             get("/error-test") {
                 throw IllegalStateException("Too Busy")
