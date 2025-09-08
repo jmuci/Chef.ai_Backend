@@ -1,4 +1,7 @@
 package com.tenmilelabs.model
+
+import kotlinx.serialization.Serializable
+
 enum class Label() {
     Vegetarian,
     Pescatarian,
@@ -14,6 +17,8 @@ enum class Label() {
  *     LowCarb("Low-Carb")
  * }
  */
+
+@Serializable
 data class Recipe (
     val uuid: String,
     val title: String,
