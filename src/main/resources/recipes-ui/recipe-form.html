@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Adding a new recipe</title>
+</head>
+<body>
+<h1>Adding a new recipe</h1>
+<form method="post" action="/recipes">
+    <div>
+        <label for="title">Title: </label>
+        <input type="text" id="title" name="title" size="10">
+    </div>
+    <div>
+        <label for="description">Description: </label>
+        <input type="text" id="description" name="description" size="20">
+    </div>
+    <div>
+        <label for="label">Label: </label>
+        <select id="label" name="label">
+            <option name="LowCarb">LowCarb</option>
+            <option name="Mediterranean">Mediterranean</option>
+            <option name="Vegetarian">Vegetarian</option>
+            <option name="Pescatarian">Pescatarian</option>
+        </select>
+    </div>
+    <input type="submit">
+</form>
+</body>
+</html>
