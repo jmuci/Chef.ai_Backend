@@ -1,4 +1,4 @@
-package com.tenmilelabs.model
+package com.tenmilelabs.domain.model
 
 import kotlinx.serialization.Serializable
 

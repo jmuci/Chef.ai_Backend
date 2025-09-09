@@ -27,7 +27,7 @@ class ApplicationTest {
             module()
         }
 
-        val response = client.get("/recipes/byLabel/Vegetarian")
+        val response = client.get("/recipes/byLabel?label=Vegetarian")
         val body = response.bodyAsText()
 
         assertEquals(HttpStatusCode.OK, response.status)
@@ -41,7 +41,7 @@ class ApplicationTest {
             module()
         }
 
-        val response = client.get("/recipes/byLabel/Invalid")
+        val response = client.get("/recipes/byLabel?label=FooBAr")
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
@@ -70,7 +70,10 @@ class ApplicationTest {
                 listOf(
                     "title" to "swimming peaches",
                     "description" to "Go to the beach",
-                    "label" to "LowCarb"
+                    "label" to "LowCarb",
+                    "preparationTimeMinutes" to "45",
+                    "recipeUrl" to "https://example.com",
+                    "imageUrl" to "https://example.com"
                 ).formUrlEncode()
             )
         }
@@ -83,5 +86,32 @@ class ApplicationTest {
 
         assertContains(body, "swimming")
         assertContains(body, "Go to the beach")
+    }
+
+    @Test
+    fun newRecipesFailToBeAddedWithInvalidLabel() = testApplication {
+        application {
+            module()
+        }
+
+        val response1 = client.post("/recipes") {
+            header(
+                HttpHeaders.ContentType,
+                ContentType.Application.FormUrlEncoded.toString()
+            )
+            setBody(
+                listOf(
+                    "title" to "swimming peaches",
+                    "description" to "Go to the beach",
+                    "label" to "Invalid",
+                    "preparationTimeMinutes" to "45",
+                    "recipeUrl" to "https://example.com",
+                    "imageUrl" to "https://example.com"
+                ).formUrlEncode()
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response1.status)
+
     }
 }

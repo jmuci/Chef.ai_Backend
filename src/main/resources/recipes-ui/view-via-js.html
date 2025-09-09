@@ -1,0 +1,65 @@
+<html lang="en">
+<head>
+    <title>A Simple SPA For Recipes</title>
+    <script type="application/javascript">
+        function fetchAndDisplayRecipes() {
+            fetchRecipes()
+                .then(recipes => displayRecipes(recipes))
+        }
+
+        function fetchRecipes() {
+            return fetch(
+                "/recipes",
+                {
+                    headers: { 'Accept': 'application/json' }
+                }
+            ).then(resp => resp.json());
+        }
+
+        function displayRecipes(recipes) {
+            const recipesTableBody = document.getElementById("recipesTableBody")
+            recipes.forEach(recipe => {
+                const newRow = recipeRow(recipe);
+                recipesTableBody.appendChild(newRow);
+            });
+        }
+
+        function recipeRow(recipe) {
+            return tr([
+                td(recipe.title),
+                td(recipe.description),
+                td(recipe.label)
+            ]);
+        }
+
+        function tr(children) {
+            const node = document.createElement("tr");
+            children.forEach(child => node.appendChild(child));
+            return node;
+        }
+
+        function td(text) {
+            const node = document.createElement("td");
+            node.appendChild(document.createTextNode(text));
+            return node;
+        }
+    </script>
+</head>
+<body>
+<h1>Viewing Recipes Via JS</h1>
+<form action="javascript:fetchAndDisplayRecipes()">
+    <input type="submit" value="View The Recipes">
+</form>
+<table>
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Description</th>
+        <th>Priority</th>
+    </tr>
+    </thead>
+    <tbody id="recipesTableBody">
+    </tbody>
+</table>
+</body>
+</html>
