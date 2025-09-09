@@ -1,16 +1,20 @@
 package com.tenmilelabs.plugins
 
+import com.tenmilelabs.data.FilterFields
 import com.tenmilelabs.data.RecipesRepository
 import com.tenmilelabs.model.Label
 import com.tenmilelabs.model.Recipe
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.*
 import io.ktor.server.application.*
-import io.ktor.server.request.receiveParameters
+import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.thymeleaf.*
+import io.ktor.util.logging.*
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
-import java.util.UUID
+import java.util.*
+
+private const val ACCEPT_APP_JSON = "application/json"
 
 fun Application.configureTemplating(recipeRepository: RecipesRepository) {
     install(Thymeleaf) {
@@ -21,52 +25,21 @@ fun Application.configureTemplating(recipeRepository: RecipesRepository) {
         })
     }
     routing {
-        // TODO Those endpoints duplicate those in RecipesEnpoints.
-        // Ideally merge them based on the content type? eg. respond JSON for API calls and rendered
-        // Templates for web views
-        route("/templated/recipes") {
+        route("/recipes") {
             get {
                 val recipes = recipeRepository.allRecipes()
-                call.respond(ThymeleafContent("all-recipes", mapOf("recipes" to recipes)))
+                val accept = call.request.acceptItems().map { it.value }
+                if (ACCEPT_APP_JSON in accept) {
+                    call.respond(recipeRepository.allRecipes())
+                } else {
+                    call.respond(ThymeleafContent("all-recipes", mapOf("recipes" to recipes)))
+                }
             }
             get("/byName") {
-                val title = call.request.queryParameters["title"]
-                if (title == null) {
-                    log.warn("no title provided")
-                    call.respond(HttpStatusCode.BadRequest)
-                    return@get
-                }
-                val recipe = recipeRepository.recipeByTitle(title)
-                if (recipe == null) {
-                    log.warn("no recipe found for $title")
-                    call.respond(HttpStatusCode.NotFound)
-                    return@get
-                }
-                call.respond(
-                    ThymeleafContent("single-recipe", mapOf("recipe" to recipe))
-                )
+                findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipeRepository)
             }
             get("/byId") {
-                val recipeId = call.request.queryParameters["recipeId"]
-                if (recipeId == null) {
-                    log.warn("no recipeId provided")
-                    call.respond(HttpStatusCode.BadRequest)
-                    return@get
-                }
-                val recipe = recipeRepository.recipeById(recipeId)
-                if (recipe == null) {
-                    log.warn("no recipe found for $recipeId")
-                    call.respond(HttpStatusCode.NotFound)
-                    return@get
-                }
-                try {
-
-                    call.respond(
-                        ThymeleafContent("single-recipe", mapOf("recipe" to recipe))
-                    )
-                } catch (e: Exception) {
-                    log.error("failed to get recipe for $recipeId", e)
-                }
+                findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
             }
             get("/byLabel") {
                 val labelAsText = call.request.queryParameters["label"]
@@ -89,7 +62,12 @@ fun Application.configureTemplating(recipeRepository: RecipesRepository) {
                         "label" to label,
                         "recipes" to recipes
                     )
-                    call.respond(ThymeleafContent("recipes-by-label", data))
+                    val accept = call.request.acceptItems().map { it.value }
+                    if (ACCEPT_APP_JSON in accept) {
+                        call.respond(recipeRepository.allRecipes())
+                    } else {
+                        call.respond(ThymeleafContent("recipes-by-label", data))
+                    }
                 } catch (ex: IllegalArgumentException) {
                     log.warn(ex.message, ex)
                     call.respond(HttpStatusCode.BadRequest)
@@ -123,10 +101,15 @@ fun Application.configureTemplating(recipeRepository: RecipesRepository) {
                     )
                     val recipes = recipeRepository.allRecipes()
                     log.info("Successfully added recipe with params $params.first, $params.second, $params.third")
-                    call.respond(
-                        HttpStatusCode.Created,
-                        ThymeleafContent("all-recipes", mapOf("recipes" to recipes))
-                    )
+                    val accept = call.request.acceptItems().map { it.value }
+                    if (ACCEPT_APP_JSON in accept) {
+                        call.respond(HttpStatusCode.Created, recipes)
+                    } else {
+                        call.respond(
+                            HttpStatusCode.Created,
+                            ThymeleafContent("all-recipes", mapOf("recipes" to recipes))
+                        )
+                    }
                 } catch (ex: IllegalArgumentException) {
                     log.warn(ex.message, ex)
                     call.respond(HttpStatusCode.BadRequest)
@@ -137,5 +120,37 @@ fun Application.configureTemplating(recipeRepository: RecipesRepository) {
             }
         }
 
+    }
+}
+
+private suspend fun findRecipeByField(
+    field: FilterFields,
+    call: RoutingCall,
+    log: Logger,
+    recipeRepository: RecipesRepository
+) {
+    val filterField = call.request.queryParameters[field.label]
+    if (filterField == null) {
+        log.warn("no $field provided")
+        call.respond(HttpStatusCode.BadRequest)
+        return
+    }
+
+    val recipe = when (field) {
+        FilterFields.BY_TITLE -> recipeRepository.recipeByTitle(filterField)
+        FilterFields.BY_ID -> recipeRepository.recipeById(filterField)
+    }
+    if (recipe == null) {
+        log.warn("No recipe found for $filterField")
+        call.respond(HttpStatusCode.NotFound)
+        return
+    }
+    val accept = call.request.acceptItems().map { it.value }
+    if (ACCEPT_APP_JSON in accept) {
+        call.respond(recipe)
+    } else {
+        call.respond(
+            ThymeleafContent("single-recipe", mapOf("recipe" to recipe))
+        )
     }
 }

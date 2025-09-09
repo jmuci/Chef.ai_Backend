@@ -3,6 +3,10 @@ package com.tenmilelabs.data
 import com.tenmilelabs.model.Label
 import com.tenmilelabs.model.Recipe
 
+enum class FilterFields(val label: String) {
+    BY_ID("recipeId"),
+    BY_TITLE("title"),
+}
 // Repository Singleton
 object RecipesRepository {
     val testRecipe1 = Recipe(uuid = "1", title = "Recipe 1", description = "Recipe Description 1", label = Label.Mediterranean, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 30)

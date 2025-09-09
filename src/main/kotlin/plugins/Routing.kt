@@ -25,7 +25,7 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
         staticResources("/recipes-ui", "recipes-ui")
         staticResources("/", "static")
 
-        route("/recipes") {
+        route("/old/recipes/") {
             getAllRecipes(recipeRepository)
 
             getRecipesByLabel(recipeRepository, application.log)
