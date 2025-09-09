@@ -1,4 +1,4 @@
-package com.tenmilelabs.plugins
+package com.tenmilelabs.infrastructure.plugins
 
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*

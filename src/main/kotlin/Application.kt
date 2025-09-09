@@ -1,9 +1,8 @@
 package com.tenmilelabs
 
-import com.tenmilelabs.data.RecipesRepository
-import com.tenmilelabs.plugins.configureRouting
-import com.tenmilelabs.plugins.configureSerialization
-import com.tenmilelabs.plugins.configureTemplating
+import com.tenmilelabs.infrastructure.database.RecipesRepositoryImpl
+import com.tenmilelabs.infrastructure.plugins.configureSerialization
+import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
 
 fun main(args: Array<String>) {
@@ -13,6 +12,5 @@ fun main(args: Array<String>) {
 fun Application.module() {
     // Set up plugins
     configureSerialization()
-    configureRouting(recipeRepository = RecipesRepository)
-    configureTemplating(recipeRepository = RecipesRepository)
+    configureRouting(recipeRepository = RecipesRepositoryImpl)
 }

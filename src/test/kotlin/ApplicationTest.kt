@@ -27,7 +27,7 @@ class ApplicationTest {
             module()
         }
 
-        val response = client.get("/recipes/byLabel/Vegetarian")
+        val response = client.get("/recipes/byLabel?label=Vegetarian")
         val body = response.bodyAsText()
 
         assertEquals(HttpStatusCode.OK, response.status)
@@ -41,7 +41,7 @@ class ApplicationTest {
             module()
         }
 
-        val response = client.get("/recipes/byLabel/Invalid")
+        val response = client.get("/recipes/byLabel?label=FooBAr")
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 

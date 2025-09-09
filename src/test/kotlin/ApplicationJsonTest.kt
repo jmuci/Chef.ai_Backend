@@ -2,7 +2,7 @@ package com.tenmilelabs
 
 import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
-import com.tenmilelabs.model.Label
+import com.tenmilelabs.domain.model.Label
 import io.ktor.client.HttpClient
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
@@ -32,7 +32,7 @@ class ApplicationJsonPathTest {
             module()
         }
         val label = Label.LowCarb
-        val jsonDoc = client.getAsJsonPath("/recipes/byLabel/$label")
+        val jsonDoc = client.getAsJsonPath("/recipes/byLabel?label=$label")
 
         val result: List<String> =
             jsonDoc.read("$[?(@.label == '$label')].title")
