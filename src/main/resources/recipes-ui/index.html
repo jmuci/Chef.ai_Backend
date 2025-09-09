@@ -9,7 +9,7 @@
 </div>
 <div>
     <h3>View recipes by label</h3>
-    <form method="get" action="/recipes/byLabel">
+    <form method="get" action="/templated/recipes/byLabel">
         <select name="label">
             <option name="LowCarb">LowCarb</option>
             <option name="Mediterranean">Mediterranean</option>
@@ -21,21 +21,21 @@
 </div>
 <div>
     <h3>View a recipe by recipe id</h3>
-    <form method="get" action="/recipes/byId">
+    <form method="get" action="/templated/recipes/byId">
         <input type="text" name="recipeId" width="20">
         <input type="submit">
     </form>
 </div>
 <div>
     <h3>View a recipe by name</h3>
-    <form method="get" action="/recipes/byName">
+    <form method="get" action="/templated/recipes/byName">
         <input type="text" name="title" width="20">
         <input type="submit">
     </form>
 </div>
 <div>
     <h3>Create or edit a recipe</h3>
-    <form method="post" action="/recipes">
+    <form method="post" action="/templated/recipes">
         <div>
             <label for="title">Recipe Title: </label>
             <input type="text" id="title" name="title" size="20">
