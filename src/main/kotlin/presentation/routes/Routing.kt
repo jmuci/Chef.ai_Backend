@@ -1,7 +1,8 @@
 package com.tenmilelabs.presentation.routes
 
+import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.domain.model.Label
-import com.tenmilelabs.domain.model.Recipe
+import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.database.FilterFields
 import com.tenmilelabs.infrastructure.database.RecipesRepository
 import io.ktor.http.HttpStatusCode
@@ -9,6 +10,7 @@ import io.ktor.server.application.*
 import io.ktor.server.http.content.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.acceptItems
+import io.ktor.server.request.receive
 import io.ktor.server.request.receiveParameters
 import io.ktor.server.response.*
 import io.ktor.server.response.respond
@@ -17,16 +19,20 @@ import io.ktor.server.thymeleaf.Thymeleaf
 import io.ktor.server.thymeleaf.ThymeleafContent
 import io.ktor.util.logging.Logger
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
-import java.util.UUID
-import kotlin.text.isEmpty
 
 private const val ACCEPT_APP_JSON = "application/json"
 
-fun Application.configureRouting(recipeRepository: RecipesRepository) {
+fun Application.configureRouting(recipeRepository: RecipesRepository, recipesService: RecipesService) {
     // Install plugins related to routing
     install(StatusPages) {
         exception<IllegalStateException> { call, cause ->
-            call.respondText("App in illegal state as ${cause.message}")
+            call.respondText(
+                "500: App in illegal state as ${cause.message}",
+                status = HttpStatusCode.InternalServerError
+            )
+        }
+        status(HttpStatusCode.NotFound) { call, status ->
+            call.respondText(text = "404: Resource Not Found", status = status)
         }
     }
     install(Thymeleaf) {
@@ -45,7 +51,7 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
         route("/recipes") {
 
             get {
-                handleGetAllRecipes(recipeRepository)
+                handleGetAllRecipes(recipesService)
             }
             get("/byName") {
                 findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipeRepository)
@@ -54,10 +60,13 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
                 findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
             }
             get("/byLabel") {
-                handleGetRecipesByLabel(call, application.log, recipeRepository)
+                handleGetRecipesByLabel(call, application.log, recipesService)
             }
             post {
-                handlePostNewRecipe(call, application.log, recipeRepository)
+                handlePostNewRecipe(call, application.log, recipesService)
+            }
+            delete {
+                handleDeleteRecipe(call, log, recipeRepository)
             }
         }
 
@@ -65,13 +74,32 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
             throw IllegalStateException("Too Busy")
         }
     }
+}
 
+private suspend fun handleDeleteRecipe(
+    call: RoutingCall,
+    log: Logger,
+    recipeRepository: RecipesRepository
+) {
+    val id = call.parameters["recipeId"]
+    if (id == null) {
+        call.respond(HttpStatusCode.BadRequest)
+        return
+    }
+
+    if (recipeRepository.removeRecipe(uuid = id)) {
+        log.info("Successfully removed recipe $id from DB.")
+        call.respond(HttpStatusCode.NoContent)
+    } else {
+        log.info("Recipe with $id not found.")
+        call.respond(HttpStatusCode.NotFound)
+    }
 }
 
 private suspend fun handleGetRecipesByLabel(
     call: RoutingCall,
     log: Logger,
-    recipeRepository: RecipesRepository
+    recipesService: RecipesService
 ) {
     val labelAsText = call.request.queryParameters["label"]
     if (labelAsText == null) {
@@ -81,7 +109,7 @@ private suspend fun handleGetRecipesByLabel(
     }
     try {
         val label = Label.valueOf(labelAsText)
-        val recipes = recipeRepository.recipesByLabel(label)
+        val recipes = recipesService.getRecipesByLabel(label)
         if (recipes.isEmpty()) {
             log.warn("no recipes found for $label")
             call.respond(HttpStatusCode.NotFound)
@@ -103,8 +131,8 @@ private suspend fun handleGetRecipesByLabel(
     }
 }
 
-private suspend fun RoutingContext.handleGetAllRecipes(recipeRepository: RecipesRepository) {
-    val recipes = recipeRepository.allRecipes()
+private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService) {
+    val recipes = recipesService.getAllRecipes()
     val accept = call.request.acceptItems().map { it.value }
     if (ACCEPT_APP_JSON in accept) {
         call.respond(recipes)
@@ -116,48 +144,54 @@ private suspend fun RoutingContext.handleGetAllRecipes(recipeRepository: Recipes
 private suspend fun handlePostNewRecipe(
     call: RoutingCall,
     log: Logger,
-    recipeRepository: RecipesRepository
+    recipesService: RecipesService
 ) {
-    val formContent = call.receiveParameters()
-    val params = Triple(
-        formContent["title"] ?: "",
-        formContent["description"] ?: "",
-        formContent["label"] ?: ""
+    val params = call.receiveParameters()
+    var parsedLabel = Label.LowCarb
+    try {
+        parsedLabel= Label.valueOf(params["label"] ?: "")
+    } catch (e : IllegalArgumentException) {
+        log.error("500: Illegal Argument $params[\"label\"] doesn't match an existing label. " + e.message, e)
+        call.respond(HttpStatusCode.BadRequest, "Invalid label parameter!")
+        return
+    }
+
+    val request = CreateRecipeRequest(
+        title = params["title"] ?: "",
+        label = parsedLabel,
+        description = params["description"] ?: "",
+        preparationTimeMinutes = params["preparationTimeMinutes"]?.toInt() ?: 0,
+        recipeUrl = params["recipeUrl"] ?: "",
+        imageUrl = params["imageUrl"] ?: ""
     )
-    if (params.toList().any { it.isEmpty() }) {
-        log.warn("At least one param is missing, params: $params")
-        call.respond(HttpStatusCode.BadRequest)
+
+    // Request-level validation (HTTP-specific)
+    if (request.title.length > 100) {
+        call.respond(HttpStatusCode.BadRequest, "Title too long (max 100 chars)")
+        return
+    }
+    if (request.title.isBlank() || request.description.isBlank() || request.recipeUrl.isBlank()
+        || request.imageUrl.isBlank() || request.preparationTimeMinutes == 0
+    ) {
+        call.respond(HttpStatusCode.BadRequest, "None of the fields can be blank")
         return
     }
     try {
-        val label = Label.valueOf(params.third)
-        recipeRepository.addRecipe(
-            Recipe(
-                uuid = UUID.randomUUID().toString(),
-                title = params.first,
-                description = params.second,
-                label = label,
-                preparationTimeMinutes = 40,
-                imageUrlThumbnail = "",
-                imageUrl = "",
-                recipeUrl = ""
-            )
-        )
-        val recipes = recipeRepository.allRecipes()
-        log.info("Successfully added recipe with params $params.first, $params.second, $params.third")
+        val recipe = recipesService.createRecipe(request)
+        log.info("Successfully added recipe with params ${recipe.title}.first, ID: ${recipe.uuid}")
         val accept = call.request.acceptItems().map { it.value }
         if (ACCEPT_APP_JSON in accept) {
-            call.respond(HttpStatusCode.Created, recipes)
+            call.respond(HttpStatusCode.Created, recipe)
         } else {
             call.respond(
                 HttpStatusCode.Created,
-                ThymeleafContent("all-recipes", mapOf("recipes" to recipes))
+                ThymeleafContent("single-recipe", mapOf("recipe" to recipe))
             )
         }
     } catch (ex: IllegalArgumentException) {
         log.warn(ex.message, ex)
         call.respond(HttpStatusCode.BadRequest)
-    } catch (ex: IllegalStateException) {
+    } catch (ex: Exception) {
         log.warn(ex.message, ex)
         call.respond(HttpStatusCode.BadRequest)
     }

@@ -35,7 +35,7 @@
 </div>
 <div>
     <h3>Create or edit a recipe</h3>
-    <form method="post" action="/recipes">
+    <form method="post" action="/recipes" content="application/json">
         <div>
             <label for="title">Recipe Title: </label>
             <input type="text" id="title" name="title" size="20">
@@ -53,6 +53,18 @@
                 <option name="Vegetarian">Vegetarian</option>
                 <option name="Pescatarian">Pescatarian</option>
             </select>
+        </div>
+        <div>
+            <label for="preparationTimeMinutes">Prep Time: </label>
+            <input type="text" id="preparationTimeMinutes" name="preparationTimeMinutes" size="3">
+        </div>
+        <div>
+            <label for="imageUrl">Image URL: </label>
+            <input type="text" id="imageUrl" name="imageUrl" size="80">
+        </div>
+        <div>
+            <label for="recipeUrl">Recipe URL: </label>
+            <input type="text" id="recipeUrl" name="recipeUrl" size="80">
         </div>
         <input type="submit">
     </form>

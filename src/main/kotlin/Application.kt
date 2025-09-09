@@ -1,5 +1,6 @@
 package com.tenmilelabs
 
+import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.database.RecipesRepositoryImpl
 import com.tenmilelabs.infrastructure.plugins.configureSerialization
 import com.tenmilelabs.presentation.routes.configureRouting
@@ -10,7 +11,8 @@ fun main(args: Array<String>) {
 }
 
 fun Application.module() {
+    val recipesService = RecipesService(RecipesRepositoryImpl)
     // Set up plugins
     configureSerialization()
-    configureRouting(recipeRepository = RecipesRepositoryImpl)
+    configureRouting(recipeRepository = RecipesRepositoryImpl, recipesService)
 }
