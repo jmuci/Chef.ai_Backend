@@ -23,6 +23,7 @@ fun Route.getAllRecipes(recipeRepository: RecipesRepository) {
 fun Route.getRecipesByLabel(recipeRepository: RecipesRepository, log: Logger) {
     get("/byLabel/{label?}") {
         val labelAsText = call.parameters["label"]
+        log.info("Getting recipe by label: $labelAsText")
         if (labelAsText == null) {
             call.respond(HttpStatusCode.BadRequest)
             return@get
@@ -44,17 +45,39 @@ fun Route.getRecipesByLabel(recipeRepository: RecipesRepository, log: Logger) {
         }
     }
 }
-
-fun Route.getRecipesByName(recipeRepository: RecipesRepository, log: Logger) {
-    get("/byName/{recipeName}") {
-        val name = call.parameters["recipeName"]
-        if (name == null) {
+fun Route.getRecipesById(recipeRepository: RecipesRepository, log: Logger) {
+    get("/byId/{recipeId?}") {
+        val id = call.parameters["recipeId"]
+        log.info("Getting recipe byId with id: $id")
+        if (id == null) {
+            log.warn("Missing id param in getRecipesById request")
             call.respond(HttpStatusCode.BadRequest)
             return@get
         }
 
-        val recipe = recipeRepository.recipeByName(name)
+        val recipe = recipeRepository.recipeById(id)
         if (recipe == null) {
+            log.info("No recipe with id $id found")
+            call.respond(HttpStatusCode.NotFound)
+            return@get
+        }
+        call.respond(recipe)
+    }
+}
+
+fun Route.getRecipesByName(recipeRepository: RecipesRepository, log: Logger) {
+    get("/byName/{title?}") {
+        val title = call.parameters["title"]
+        log.info("Getting recipe by name: $title")
+        if (title == null) {
+            log.warn("Missing title param in getRecipesByName request")
+            call.respond(HttpStatusCode.BadRequest)
+            return@get
+        }
+
+        val recipe = recipeRepository.recipeByTitle(title)
+        if (recipe == null) {
+            log.info("No recipe with title $title found")
             call.respond(HttpStatusCode.NotFound)
             return@get
         }
@@ -71,8 +94,9 @@ fun Route.postNewRecipe(recipeRepository: RecipesRepository, log: Logger) {
             formContent["description"] ?: "",
             formContent["label"] ?: ""
         )
-
+        log.info("Posting new recipe with params: $params")
         if (params.toList().any { it.isEmpty() }) {
+            log.warn("Found empty parameter. Invalid posting new recipe call")
             call.respond(HttpStatusCode.BadRequest)
             return@post
         }
@@ -108,6 +132,7 @@ fun Route.postNewRecipe(recipeRepository: RecipesRepository, log: Logger) {
 fun Route.deleteRecipeById(recipeRepository: RecipesRepository, log: Logger) {
     delete("/{recipeId") {
         val id = call.parameters["recipeId"]
+        log.info("Deleting recipe by id: $id")
         if (id == null) {
             call.respond(HttpStatusCode.BadRequest)
             return@delete

@@ -1,7 +1,8 @@
-package com.tenmilelabs
+package com.tenmilelabs.plugins
 
 import com.tenmilelabs.api.recipes.deleteRecipeById
 import com.tenmilelabs.api.recipes.getAllRecipes
+import com.tenmilelabs.api.recipes.getRecipesById
 import com.tenmilelabs.api.recipes.getRecipesByLabel
 import com.tenmilelabs.api.recipes.getRecipesByName
 import com.tenmilelabs.api.recipes.postNewRecipe
@@ -20,6 +21,7 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
         }
     }
     routing {
+        application.log.info("Setting up routes")
         staticResources("/recipes-ui", "recipes-ui")
         staticResources("/", "static")
 
@@ -29,6 +31,8 @@ fun Application.configureRouting(recipeRepository: RecipesRepository) {
             getRecipesByLabel(recipeRepository, application.log)
 
             getRecipesByName(recipeRepository, application.log)
+
+            getRecipesById(recipeRepository, application.log)
 
             postNewRecipe(recipeRepository, application.log)
 

@@ -17,12 +17,12 @@ object RecipesRepository {
 
     fun recipesByLabel(label: Label): List<Recipe> = recipes.filter { it.label == label }
 
-    fun recipeByName(name: String) = recipes.find { it.title.equals(name, ignoreCase = true) }
+    fun recipeByTitle(title: String) = recipes.find { it.title.equals(title, ignoreCase = true) }
 
     fun recipeById(id: String) = recipes.find { it.uuid == id }
 
     fun addRecipe(recipe: Recipe) {
-        if (recipeByName(recipe.title) != null) {
+        if (recipeByTitle(recipe.title) != null) {
             throw IllegalStateException("Cannot duplicate recipe titles!")
         }
         recipes.add(recipe)
