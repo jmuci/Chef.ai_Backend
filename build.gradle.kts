@@ -12,6 +12,7 @@ application {
 }
 
 dependencies {
+
     implementation(libs.logback.classic)
 
     implementation(libs.ktor.server.config.yaml)
@@ -23,7 +24,16 @@ dependencies {
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.thymeleaf)
 
+    // Database
+    implementation(libs.exposed.core)
+    implementation(libs.exposed.jdbc)
+    implementation(libs.exposed.dao)
+    implementation(libs.h2)
+    implementation(libs.postgresql)
+
     testImplementation(libs.json.path)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
+
 }

@@ -1,8 +1,16 @@
 package com.tenmilelabs
 
+import com.tenmilelabs.application.dto.CreateRecipeRequest
+import com.tenmilelabs.application.service.module
+import com.tenmilelabs.domain.service.RecipesService
+import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
+import com.tenmilelabs.presentation.routes.configureRouting
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.*
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
 import io.ktor.server.testing.*
 import kotlin.test.Test
 import kotlin.test.assertContains
@@ -21,6 +29,7 @@ class ApplicationTest {
 
         }
     }
+
     @Test
     fun recipesCanBeFoundByLabel() = testApplication {
         application {
@@ -33,6 +42,59 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.OK, response.status)
         assertContains(body, "Recipe 3")
         assertContains(body, "Description 3")
+    }
+
+    @Test
+    fun recipesCanBeFoundByName() = testApplication {
+        application {
+            module()
+        }
+
+        val response = client.get("/recipes/byName?title=Recipe+1") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+        }
+
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(body, "Recipe 1")
+        assertContains(body, "Description 1")
+    }
+
+    @Test
+    fun recipesCanBeFoundById() = testApplication {
+        application {
+            module()
+        }
+
+        val response = client.get("/recipes/byId?uuid=1") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+        }
+
+        val body = response.bodyAsText()
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertContains(body, "Recipe 1")
+        assertContains(body, "Description 1")
+    }
+
+    @Test
+    fun recipesCanBeDeletedById() = testApplication {
+        application {
+            module()
+        }
+
+        val response = client.delete("/recipes?uuid=6") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+
+        val response2 = client.get("/recipes/byId?uuid=6") {
+            header(HttpHeaders.ContentType, ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response2.status)
     }
 
     @Test
@@ -55,26 +117,34 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.NotFound, response.status)
     }
 
+
     @Test
     fun newRecipesCanBeAdded() = testApplication {
         application {
             module()
         }
-
+        val client = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
         val response1 = client.post("/recipes") {
             header(
                 HttpHeaders.ContentType,
-                ContentType.Application.FormUrlEncoded.toString()
+                ContentType.Application.Json
             )
+            accept(ContentType.Application.Json)
+            contentType(ContentType.Application.Json)
             setBody(
-                listOf(
-                    "title" to "swimming peaches",
-                    "description" to "Go to the beach",
-                    "label" to "LowCarb",
-                    "preparationTimeMinutes" to "45",
-                    "recipeUrl" to "https://example.com",
-                    "imageUrl" to "https://example.com"
-                ).formUrlEncode()
+                CreateRecipeRequest(
+                    "swimming peaches",
+                    "LowCarb",
+                    "Go to the beach",
+                    "45",
+                    "https://example.com",
+                    "https://example.com"
+                )
+
             )
         }
 
@@ -84,9 +154,43 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.OK, response2.status)
         val body = response2.bodyAsText()
 
-        assertContains(body, "swimming")
+        assertContains(body, "swimming peaches")
         assertContains(body, "Go to the beach")
     }
+
+    @Test
+    fun postCreateRecipeRequest_withWrongLabel() = testApplication {
+        application {
+            module()
+        }
+        val client = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+        val response1 = client.post("/recipes") {
+            header(
+                HttpHeaders.ContentType,
+                ContentType.Application.Json
+            )
+            accept(ContentType.Application.Json)
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreateRecipeRequest(
+                    "swimming peaches",
+                    "NotExists",
+                    "Go to the beach",
+                    "45",
+                    "https://example.com",
+                    "https://example.com"
+                )
+
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response1.status)
+    }
+
 
     @Test
     fun newRecipesFailToBeAddedWithInvalidLabel() = testApplication {
@@ -114,4 +218,5 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.BadRequest, response1.status)
 
     }
+
 }

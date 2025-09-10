@@ -5,25 +5,27 @@ import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.database.FilterFields
 import com.tenmilelabs.infrastructure.database.RecipesRepository
-import io.ktor.http.HttpStatusCode
+import io.ktor.http.*
+import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
+import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.statuspages.*
-import io.ktor.server.request.acceptItems
-import io.ktor.server.request.receive
-import io.ktor.server.request.receiveParameters
+import io.ktor.server.request.*
 import io.ktor.server.response.*
-import io.ktor.server.response.respond
 import io.ktor.server.routing.*
-import io.ktor.server.thymeleaf.Thymeleaf
-import io.ktor.server.thymeleaf.ThymeleafContent
-import io.ktor.util.logging.Logger
+import io.ktor.server.thymeleaf.*
+import io.ktor.util.logging.*
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
 
 private const val ACCEPT_APP_JSON = "application/json"
+private const val ACCEPT_WILDCARD = "*/*"
 
 fun Application.configureRouting(recipeRepository: RecipesRepository, recipesService: RecipesService) {
     // Install plugins related to routing
+    install(ContentNegotiation) {
+        json()
+    }
     install(StatusPages) {
         exception<IllegalStateException> { call, cause ->
             call.respondText(
@@ -81,7 +83,7 @@ private suspend fun handleDeleteRecipe(
     log: Logger,
     recipeRepository: RecipesRepository
 ) {
-    val id = call.parameters["recipeId"]
+    val id = call.parameters["uuid"]
     if (id == null) {
         call.respond(HttpStatusCode.BadRequest)
         return
@@ -120,7 +122,7 @@ private suspend fun handleGetRecipesByLabel(
             "recipes" to recipes
         )
         val accept = call.request.acceptItems().map { it.value }
-        if (ACCEPT_APP_JSON in accept) {
+        if (ACCEPT_APP_JSON in accept || ACCEPT_WILDCARD in accept) {
             call.respond(recipes)
         } else {
             call.respond(ThymeleafContent("recipes-by-label", data))
@@ -134,7 +136,7 @@ private suspend fun handleGetRecipesByLabel(
 private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService) {
     val recipes = recipesService.getAllRecipes()
     val accept = call.request.acceptItems().map { it.value }
-    if (ACCEPT_APP_JSON in accept) {
+    if (ACCEPT_APP_JSON in accept || ACCEPT_WILDCARD in accept) {
         call.respond(recipes)
     } else {
         call.respond(ThymeleafContent("all-recipes", mapOf("recipes" to recipes)))
@@ -146,47 +148,16 @@ private suspend fun handlePostNewRecipe(
     log: Logger,
     recipesService: RecipesService
 ) {
-    val params = call.receiveParameters()
-    var parsedLabel = Label.LowCarb
     try {
-        parsedLabel= Label.valueOf(params["label"] ?: "")
-    } catch (e : IllegalArgumentException) {
-        log.error("500: Illegal Argument $params[\"label\"] doesn't match an existing label. " + e.message, e)
-        call.respond(HttpStatusCode.BadRequest, "Invalid label parameter!")
-        return
-    }
-
-    val request = CreateRecipeRequest(
-        title = params["title"] ?: "",
-        label = parsedLabel,
-        description = params["description"] ?: "",
-        preparationTimeMinutes = params["preparationTimeMinutes"]?.toInt() ?: 0,
-        recipeUrl = params["recipeUrl"] ?: "",
-        imageUrl = params["imageUrl"] ?: ""
-    )
-
-    // Request-level validation (HTTP-specific)
-    if (request.title.length > 100) {
-        call.respond(HttpStatusCode.BadRequest, "Title too long (max 100 chars)")
-        return
-    }
-    if (request.title.isBlank() || request.description.isBlank() || request.recipeUrl.isBlank()
-        || request.imageUrl.isBlank() || request.preparationTimeMinutes == 0
-    ) {
-        call.respond(HttpStatusCode.BadRequest, "None of the fields can be blank")
-        return
-    }
-    try {
-        val recipe = recipesService.createRecipe(request)
-        log.info("Successfully added recipe with params ${recipe.title}.first, ID: ${recipe.uuid}")
-        val accept = call.request.acceptItems().map { it.value }
-        if (ACCEPT_APP_JSON in accept) {
+        val createRecipeRequest = call.receive<CreateRecipeRequest>()
+        val recipe = recipesService.createRecipe(createRecipeRequest)
+        if (recipe != null) {
+            log.info("Successfully added recipe with params ${recipe.title}.first, ID: ${recipe.uuid}")
             call.respond(HttpStatusCode.Created, recipe)
+
         } else {
-            call.respond(
-                HttpStatusCode.Created,
-                ThymeleafContent("single-recipe", mapOf("recipe" to recipe))
-            )
+            call.respond(HttpStatusCode.BadRequest)
+            log.warn("Failed to add recipe! Title:  ${createRecipeRequest.title}")
         }
     } catch (ex: IllegalArgumentException) {
         log.warn(ex.message, ex)
@@ -220,7 +191,7 @@ private suspend fun findRecipeByField(
         return
     }
     val accept = call.request.acceptItems().map { it.value }
-    if (ACCEPT_APP_JSON in accept) {
+    if (ACCEPT_APP_JSON in accept || ACCEPT_WILDCARD in accept) {
         call.respond(recipe)
     } else {
         call.respond(

@@ -1,73 +1,221 @@
-<html lang="en">
+<html>
 <head>
-    <title>Recipe Manager Web Application</title>
+    <title>A Simple SPA For Recipes</title>
+    <script type="application/javascript">
+        function displayAllRecipes() {
+            clearRecipesTable();
+            fetchAllRecipes().then(displayRecipes)
+        }
+
+        function displayRecipesWithLabel() {
+            clearRecipesTable();
+            const label = readRecipeLabel();
+            fetchRecipesWithLabel(label).then(displayRecipes)
+        }
+
+        function displayRecipe(title) {
+            fetchRecipeWithName(title).then(t =>
+                recipeDisplay().innerHTML
+                    = `${t.label} label recipe ${t.title} with description "${t.description}"`
+            )
+        }
+
+        function deleteRecipe(id) {
+            deleteRecipeWithId(id).then(() => {
+                clearRecipeDisplay();
+                displayAllRecipes();
+            })
+        }
+
+        function deleteRecipeWithId(id) {
+            return sendDELETE(`/recipes?uuid=${id}`)
+        }
+
+        function addNewRecipe() {
+            const recipe = buildRecipeFromForm();
+            sendPOST("/recipes", recipe).then(displayAllRecipes);
+        }
+
+        function buildRecipeFromForm() {
+            return {
+                title: getRecipeFormValue("title"),
+                description: getRecipeFormValue("newRecipeDescription"),
+                label: getRecipeFormValue("newRecipeLabel"),
+                preparationTimeMinutes: getRecipeFormValue("preparationTimeMinutes"),
+                recipeUrl: getRecipeFormValue("recipeUrl"),
+                imageUrl: getRecipeFormValue("imageUrl")
+            }
+        }
+
+        function getRecipeFormValue(controlName) {
+            return document.addRecipeForm[controlName].value;
+        }
+
+        function recipeDisplay() {
+            return document.getElementById("currentRecipeDisplay");
+        }
+
+        function readRecipeLabel() {
+            return document.labelForm.label.value
+        }
+
+        function fetchRecipesWithLabel(label) {
+            return sendGET(`/recipes/byLabel?label=${label}`);
+        }
+
+        function fetchRecipeWithName(title) {
+            return sendGET(`/recipes/byName?title=${title}`);
+        }
+
+        function fetchAllRecipes() {
+            return sendGET("/recipes")
+        }
+
+        function sendGET(url) {
+            return fetch(
+                url,
+                {headers: {'Accept': 'application/json'}}
+            ).then(response => {
+                if (response.ok) {
+                    return response.json()
+                }
+                return [];
+            });
+        }
+
+        function sendPOST(url, data) {
+            return fetch(url, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+        }
+
+        function sendDELETE(url) {
+            return fetch(url, {
+                method: "DELETE"
+            });
+        }
+
+        function recipesTable() {
+            return document.getElementById("recipesTableBody");
+        }
+
+        function clearRecipesTable() {
+            recipesTable().innerHTML = "";
+        }
+
+        function clearRecipeDisplay() {
+            recipeDisplay().innerText = "None";
+        }
+
+        function displayRecipes(recipes) {
+            const recipesTableBody = recipesTable()
+            recipes.forEach(recipe => {
+                const newRow = recipeRow(recipe);
+                recipesTableBody.appendChild(newRow);
+            });
+        }
+
+        function recipeRow(recipe) {
+            return tr([
+                td(recipe.uuid),
+                td(recipe.title),
+                td(recipe.label),
+                td(viewLink(recipe.title)),
+                td(deleteLink(recipe.uuid)),
+            ]);
+        }
+
+        function tr(children) {
+            const node = document.createElement("tr");
+            children.forEach(child => node.appendChild(child));
+            return node;
+        }
+
+        function td(content) {
+            const node = document.createElement("td");
+            if (content instanceof Element) {
+                node.appendChild(content)
+            } else {
+                node.appendChild(document.createTextNode(content));
+            }
+            return node;
+        }
+
+        function viewLink(title) {
+            const node = document.createElement("a");
+            node.setAttribute(
+                "href", `javascript:displayRecipe("${title}")`
+            )
+            node.appendChild(document.createTextNode("view"));
+            return node;
+        }
+
+        function deleteLink(uuid) {
+            const node = document.createElement("a");
+            node.setAttribute(
+                "href", `javascript:deleteRecipe("${uuid}")`
+            )
+            node.appendChild(document.createTextNode("delete"));
+            return node;
+        }
+    </script>
 </head>
-<body>
-<h1>Recipe Manager Web Application</h1>
+<body onload="displayAllRecipes()">
+<h1>Recipe Manager Client</h1>
+<form action="javascript:displayAllRecipes()">
+    <span>View all the recipes</span>
+    <input type="submit" value="Go">
+</form>
+<form name="labelForm" action="javascript:displayRecipesWithLabel()">
+    <span>View recipes with label</span>
+    <select name="label">
+        <option name="LowCarb">LowCarb</option>
+        <option name="Mediterranean">Mediterranean</option>
+        <option name="Vegetarian">Vegetarian</option>
+        <option name="Pescatarian">Pescatarian</option>
+    </select>
+    <input type="submit" value="Go">
+</form>
+<form name="addRecipeForm" action="javascript:addNewRecipe()">
+    <span>Create new recipe with</span>
+    <label for="title">title</label>
+    <input type="text" id="title" name="title" size="10">
+    <label for="newRecipeDescription">description</label>
+    <input type="text" id="newRecipeDescription" name="newRecipeDescription" size="20">
+    <label for="newRecipeLabel">label</label>
+    <select id="newRecipeLabel" name="newRecipeLabel">
+        <option name="LowCarb">LowCarb</option>
+        <option name="Mediterranean">Mediterranean</option>
+        <option name="Vegetarian">Vegetarian</option>
+        <option name="Pescatarian">Pescatarian</option>
+    </select>
+    <label for="preparationTimeMinutes"> prep Time: </label>
+    <input type="text" id="preparationTimeMinutes" name="preparationTimeMinutes" size="3">
+    <label for="imageUrl"> Image URL: </label>
+    <input type="text" id="imageUrl" name="imageUrl" size="20">
+    <label for="recipeUrl"> Recipe URL: </label>
+    <input type="text" id="recipeUrl" name="recipeUrl" size="20">
+    <input type="submit" value="Go">
+</form>
+<hr>
 <div>
-    <h3><a href="/recipes">View all the recipes</a></h3>
+    Current recipe is <em id="currentRecipeDisplay">None</em>
 </div>
-<div>
-    <h3>View recipes by label</h3>
-    <form method="get" action="/recipes/byLabel">
-        <select name="label">
-            <option name="LowCarb">LowCarb</option>
-            <option name="Mediterranean">Mediterranean</option>
-            <option name="Vegetarian">Vegetarian</option>
-            <option name="Pescatarian">Pescatarian</option>
-        </select>
-        <input type="submit">
-    </form>
-</div>
-<div>
-    <h3>View a recipe by recipe id</h3>
-    <form method="get" action="/recipes/byId">
-        <input type="text" name="recipeId" width="20">
-        <input type="submit">
-    </form>
-</div>
-<div>
-    <h3>View a recipe by name</h3>
-    <form method="get" action="/recipes/byName">
-        <input type="text" name="title" width="20">
-        <input type="submit">
-    </form>
-</div>
-<div>
-    <h3>Create or edit a recipe</h3>
-    <form method="post" action="/recipes" content="application/json">
-        <div>
-            <label for="title">Recipe Title: </label>
-            <input type="text" id="title" name="title" size="20">
-        </div>
-        <div>
-            <label for="description">Description: </label>
-            <input type="text" id="description"
-                   name="description" size="40">
-        </div>
-        <div>
-            <label for="label">Label: </label>
-            <select id="label" name="label">
-                <option name="LowCarb">LowCarb</option>
-                <option name="Mediterranean">Mediterranean</option>
-                <option name="Vegetarian">Vegetarian</option>
-                <option name="Pescatarian">Pescatarian</option>
-            </select>
-        </div>
-        <div>
-            <label for="preparationTimeMinutes">Prep Time: </label>
-            <input type="text" id="preparationTimeMinutes" name="preparationTimeMinutes" size="3">
-        </div>
-        <div>
-            <label for="imageUrl">Image URL: </label>
-            <input type="text" id="imageUrl" name="imageUrl" size="80">
-        </div>
-        <div>
-            <label for="recipeUrl">Recipe URL: </label>
-            <input type="text" id="recipeUrl" name="recipeUrl" size="80">
-        </div>
-        <input type="submit">
-    </form>
-</div>
+<hr>
+<table>
+    <thead>
+    <tr>
+        <th>Id</th>
+        <th>Title</th>
+        <th>Label</th>
+        <th></th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody id="recipesTableBody">
+    </tbody>
+</table>
 </body>
 </html>

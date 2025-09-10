@@ -4,14 +4,15 @@ import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 
 // Repository Singleton
-object RecipesRepositoryImpl : RecipesRepository {
+object FakeRecipesRepository : RecipesRepository {
     val testRecipe1 = Recipe(uuid = "1", title = "Recipe 1", description = "Recipe Description 1", label = Label.Mediterranean, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 30)
     val testRecipe2 = Recipe(uuid = "2", title = "Recipe 2", description = "Recipe Description 2", label = Label.Mediterranean, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 40)
     val testRecipe3 = Recipe(uuid = "3", title = "Recipe 3", description = "Recipe Description 3", label = Label.Vegetarian, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 50)
     val testRecipe4 = Recipe(uuid = "4", title = "Recipe 4", description = "Recipe Description 4", label = Label.LowCarb, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 60)
     val testRecipe5 = Recipe(uuid = "5", title = "Recipe 5", description = "Recipe Description 5", label = Label.LowCarb, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 60)
+    val testRecipe6 = Recipe(uuid = "6", title = "Recipe 6", description = "Recipe Description 6", label = Label.Vegetarian, recipeUrl = "http://example.com/recipe", imageUrl = "http://example.com/image.jpg", imageUrlThumbnail = "http://example.com/thumb.jpg", preparationTimeMinutes = 60)
 
-    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4, testRecipe5)
+    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4, testRecipe5, testRecipe6)
 
     override fun allRecipes(): List<Recipe> = recipes
 
