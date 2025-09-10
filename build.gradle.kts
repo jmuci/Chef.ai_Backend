@@ -33,5 +33,7 @@ dependencies {
 
     testImplementation(libs.json.path)
     testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
+
 }

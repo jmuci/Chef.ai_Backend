@@ -4,7 +4,7 @@ import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 
 enum class FilterFields(val label: String) {
-    BY_ID("recipeId"),
+    BY_ID("uuid"),
     BY_TITLE("title"),
 }
 

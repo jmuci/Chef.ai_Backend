@@ -2,6 +2,7 @@ package com.tenmilelabs
 
 import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
+import com.tenmilelabs.application.service.module
 import com.tenmilelabs.domain.model.Label
 import io.ktor.client.HttpClient
 import io.ktor.client.request.accept

@@ -1,6 +1,6 @@
 ktor:
     application:
         modules:
-            - com.tenmilelabs.ApplicationKt.module
+            - com.tenmilelabs.application.service.ApplicationKt.module
     deployment:
         port: 8080
