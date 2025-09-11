@@ -2,15 +2,11 @@ package com.tenmilelabs
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.service.module
-import com.tenmilelabs.domain.service.RecipesService
-import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
-import com.tenmilelabs.presentation.routes.configureRouting
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
-import io.ktor.server.application.*
 import io.ktor.server.testing.*
 import kotlin.test.Test
 import kotlin.test.assertContains

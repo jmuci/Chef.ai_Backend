@@ -11,6 +11,11 @@ application {
     mainClass = "io.ktor.server.netty.EngineMain"
 }
 
+tasks.test {
+    useJUnitPlatform()
+}
+
+
 dependencies {
 
     implementation(libs.logback.classic)
@@ -35,5 +40,4 @@ dependencies {
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
-
 }
