@@ -15,7 +15,6 @@ tasks.test {
     useJUnitPlatform()
 }
 
-
 dependencies {
 
     implementation(libs.logback.classic)
@@ -37,7 +36,18 @@ dependencies {
     implementation(libs.postgresql)
 
     testImplementation(libs.json.path)
-    testImplementation(libs.kotlin.test.junit)
+//    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
+    // Ktor server test engine
+    testImplementation("io.ktor:ktor-server-tests-jvm:2.3.12")
+
+    // Ktor testing
+    testImplementation("io.ktor:ktor-server-tests-jvm:2.3.12")
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
+
+    // JUnit 5
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+
 }
