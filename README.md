@@ -12,26 +12,31 @@ Here are some useful links to get you started:
 
 Here's a list of features included in this project:
 
-| Name                                                                   | Description                                                                        |
-| ------------------------------------------------------------------------|------------------------------------------------------------------------------------ |
-| [Routing](https://start.ktor.io/p/routing)                             | Provides a structured routing DSL                                                  |
-| [Static Content](https://start.ktor.io/p/static-content)               | Serves static files from defined locations                                         |
-| [Content Negotiation](https://start.ktor.io/p/content-negotiation)     | Provides automatic content conversion according to Content-Type and Accept headers |
-| [kotlinx.serialization](https://start.ktor.io/p/kotlinx-serialization) | Handles JSON serialization using kotlinx.serialization library                     |
+| Name                                                                   | Description                                                                                      |
+|------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------|
+| [Routing](https://start.ktor.io/p/routing)                             | Provides a structured routing DSL                                                                |
+| [Static Content](https://start.ktor.io/p/static-content)               | Serves static files from defined locations                                                       |
+| [Content Negotiation](https://start.ktor.io/p/content-negotiation)     | Provides automatic content conversion according to Content-Type and Accept headers               |
+| [Exposed](https://www.jetbrains.com/exposed/)                          | Kotlin SQL library and tools: DSL, DAO Framework, ORM`                                           |
+| [kotlinx.serialization](https://start.ktor.io/p/kotlinx-serialization) | Handles JSON serialization using kotlinx.serialization library                                   |
+| [Thymeleaf](https://ktor.io/docs/server-thymeleaf.html)                | Thymeleaf is a modern server-side Java template engine for both web and standalone environments. 
+
+                     
 
 ## Building & Running
 
 To build or run the project, use one of the following tasks:
 
-| Task                          | Description                                                          |
-| -------------------------------|---------------------------------------------------------------------- |
-| `./gradlew test`              | Run the tests                                                        |
-| `./gradlew build`             | Build everything                                                     |
-| `buildFatJar`                 | Build an executable JAR of the server with all dependencies included |
-| `buildImage`                  | Build the docker image to use with the fat JAR                       |
-| `publishImageToLocalRegistry` | Publish the docker image locally                                     |
-| `run`                         | Run the server                                                       |
-| `runDocker`                   | Run using the local docker image                                     |
+| Task                                         | Description                                                                |
+|----------------------------------------------|----------------------------------------------------------------------------|
+| `./gradlew test`                             | Run the tests                                                              |
+| `./gradlew build`                            | Build everything                                                           |
+| `buildFatJar`                                | Build an executable JAR of the server with all dependencies included       |
+| `buildImage`                                 | Build the docker image to use with the fat JAR                             |
+| `publishImageToLocalRegistry`                | Publish the docker image locally                                           |
+| `run`                                        | Run the server                                                             |
+| `runDocker`                                  | Run using the local docker image                                           |
+| ` docker compose -f docker-compose.yaml up`  | Run with docker compose which will also start and connect to a Postgres Db |
 
 If the server starts successfully, you'll see the following output:
 
