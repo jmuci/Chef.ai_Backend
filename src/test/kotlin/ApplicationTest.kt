@@ -81,13 +81,13 @@ class ApplicationTest {
             module(recipeRepository = FakeRecipesRepository)
         }
 
-        val response = client.delete("/recipes?uuid=6") {
+        val response = client.delete("/recipes?uuid=recipeToBeDeleted1") {
             header(HttpHeaders.ContentType, ContentType.Application.Json)
         }
 
         assertEquals(HttpStatusCode.NoContent, response.status)
 
-        val response2 = client.get("/recipes/byId?uuid=6") {
+        val response2 = client.get("/recipes/byId?uuid=recipeToBeDeleted1") {
             header(HttpHeaders.ContentType, ContentType.Application.Json)
         }
 
@@ -135,7 +135,7 @@ class ApplicationTest {
             setBody(
                 CreateRecipeRequest(
                     "swimming peaches",
-                    "LowCarb",
+                    "French",
                     "Go to the beach",
                     "45",
                     "https://example.com",

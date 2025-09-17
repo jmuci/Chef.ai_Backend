@@ -7,8 +7,8 @@ import java.sql.DriverManager
 
 fun configureDatabases() {
     Database.connect(
-        //   "jdbc:postgresql://db:5432/chefai_db",
-        "jdbc:postgresql://0.0.0.0:5432/chefai_db",
+           "jdbc:postgresql://db:5432/chefai_db",
+        //"jdbc:postgresql://0.0.0.0:5432/chefai_db", change while running a dev instance
         user = "postgres",
         password = "password"
     )

@@ -67,8 +67,18 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 60
     )
+    val testRecipeToBeDeleted1 = Recipe(
+        uuid = "recipeToBeDeleted1",
+        title = "Recipe To Be DELETED 1",
+        description = "Recipe Description 6",
+        label = Label.French,
+        recipeUrl = "http://example.com/recipe",
+        imageUrl = "http://example.com/image.jpg",
+        imageUrlThumbnail = "http://example.com/thumb.jpg",
+        prepTimeMins = 70
+    )
 
-    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4, testRecipe5, testRecipe6)
+    private val recipes = mutableListOf(testRecipe1, testRecipe2, testRecipe3, testRecipe4, testRecipe5, testRecipe6, testRecipeToBeDeleted1)
 
     override suspend fun allRecipes(): List<Recipe> = recipes
 
