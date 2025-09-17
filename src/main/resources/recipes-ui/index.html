@@ -27,8 +27,8 @@
             })
         }
 
-        function deleteRecipeWithId(id) {
-            return sendDELETE(`/recipes?uuid=${id}`)
+        function deleteRecipeWithId(uuid) {
+            return sendDELETE(`/recipes?uuid=${uuid}`)
         }
 
         function addNewRecipe() {
@@ -41,7 +41,7 @@
                 title: getRecipeFormValue("title"),
                 description: getRecipeFormValue("newRecipeDescription"),
                 label: getRecipeFormValue("newRecipeLabel"),
-                preparationTimeMinutes: getRecipeFormValue("preparationTimeMinutes"),
+                prepTimeMins: getRecipeFormValue("prepTimeMins"),
                 recipeUrl: getRecipeFormValue("recipeUrl"),
                 imageUrl: getRecipeFormValue("imageUrl")
             }
@@ -168,35 +168,47 @@
     <span>View all the recipes</span>
     <input type="submit" value="Go">
 </form>
-<form name="labelForm" action="javascript:displayRecipesWithLabel()">
+<form action="javascript:displayRecipesWithLabel()" name="labelForm">
     <span>View recipes with label</span>
     <select name="label">
         <option name="LowCarb">LowCarb</option>
         <option name="Mediterranean">Mediterranean</option>
         <option name="Vegetarian">Vegetarian</option>
         <option name="Pescatarian">Pescatarian</option>
+        <option name="Spanish">Spanish</option>
+        <option name="NewAmerican">NewAmerican</option>
+        <option name="French">French</option>
+        <option name="Vegan">Vegan</option>
+        <option name="Caribbean">Caribbean</option>
+        <option name="Italian">Italian</option>
     </select>
     <input type="submit" value="Go">
 </form>
-<form name="addRecipeForm" action="javascript:addNewRecipe()">
+<form action="javascript:addNewRecipe()" name="addRecipeForm">
     <span>Create new recipe with</span>
     <label for="title">title</label>
-    <input type="text" id="title" name="title" size="10">
+    <input id="title" name="title" size="10" type="text">
     <label for="newRecipeDescription">description</label>
-    <input type="text" id="newRecipeDescription" name="newRecipeDescription" size="20">
+    <input id="newRecipeDescription" name="newRecipeDescription" size="20" type="text">
     <label for="newRecipeLabel">label</label>
     <select id="newRecipeLabel" name="newRecipeLabel">
         <option name="LowCarb">LowCarb</option>
         <option name="Mediterranean">Mediterranean</option>
         <option name="Vegetarian">Vegetarian</option>
         <option name="Pescatarian">Pescatarian</option>
+        <option name="Spanish">Spanish</option>
+        <option name="NewAmerican">NewAmerican</option>
+        <option name="French">French</option>
+        <option name="Vegan">Vegan</option>
+        <option name="Caribbean">Caribbean</option>
+        <option name="Italian">Italian</option>
     </select>
-    <label for="preparationTimeMinutes"> prep Time: </label>
-    <input type="text" id="preparationTimeMinutes" name="preparationTimeMinutes" size="3">
+    <label for="prepTimeMins"> prep Time: </label>
+    <input id="prepTimeMins" name="prepTimeMins" size="3" type="text">
     <label for="imageUrl"> Image URL: </label>
-    <input type="text" id="imageUrl" name="imageUrl" size="20">
+    <input id="imageUrl" name="imageUrl" size="20" type="text">
     <label for="recipeUrl"> Recipe URL: </label>
-    <input type="text" id="recipeUrl" name="recipeUrl" size="20">
+    <input id="recipeUrl" name="recipeUrl" size="20" type="text">
     <input type="submit" value="Go">
 </form>
 <hr>
@@ -207,9 +219,9 @@
 <table>
     <thead>
     <tr>
-        <th>Id</th>
-        <th>Title</th>
-        <th>Label</th>
+        <th> Id</th>
+        <th> Title</th>
+        <th> Label</th>
         <th></th>
         <th></th>
     </tr>

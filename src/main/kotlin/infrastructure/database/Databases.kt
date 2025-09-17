@@ -1,18 +1,19 @@
 package com.tenmilelabs.infrastructure.database
 
 import io.ktor.server.application.*
+import org.jetbrains.exposed.sql.Database
 import java.sql.Connection
 import java.sql.DriverManager
 
-fun Application.configureDatabases() {
-    /**
-     *     Database.connect(
-     *         "jdbc:postgresql://localhost:5432/ktor_tutorial_db",
-     *         user = "postgresql",
-     *         password = "password"
-     *     )
-     */
+fun configureDatabases() {
+    Database.connect(
+           "jdbc:postgresql://db:5432/chefai_db",
+        //"jdbc:postgresql://0.0.0.0:5432/chefai_db", change while running a dev instance
+        user = "postgres",
+        password = "password"
+    )
 }
+
 /**
  * Makes a connection to a Postgres database.
  *

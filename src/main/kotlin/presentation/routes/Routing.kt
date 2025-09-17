@@ -150,11 +150,10 @@ private suspend fun handlePostNewRecipe(
 ) {
     try {
         val createRecipeRequest = call.receive<CreateRecipeRequest>()
-        val recipe = recipesService.createRecipe(createRecipeRequest)
-        if (recipe != null) {
-            log.info("Successfully added recipe with params ${recipe.title}.first, ID: ${recipe.uuid}")
-            call.respond(HttpStatusCode.Created, recipe)
-
+        val recipeResponse = recipesService.createRecipe(createRecipeRequest)
+        if (recipeResponse != null) {
+            log.info("Successfully added recipe with params ${createRecipeRequest.title}.first, ID: ${recipeResponse.uuid} ")
+            call.respond(HttpStatusCode.Created, recipeResponse)
         } else {
             call.respond(HttpStatusCode.BadRequest)
             log.warn("Failed to add recipe! Title:  ${createRecipeRequest.title}")

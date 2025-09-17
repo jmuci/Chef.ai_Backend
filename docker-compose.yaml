@@ -1,0 +1,35 @@
+# Use postgres/example user/password credentials
+services:
+  db:
+    image: postgres:16
+    restart: always
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: chefai_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d chefai_db -U postgres" ]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    container_name: recipes_app_service
+    depends_on:
+      - db
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/chefai_db
+      DB_USER: postgres
+      DB_PASSWORD: password
+    ports:
+      - "8080:8080"
+    restart: always
+
+volumes:
+  postgres_data:
