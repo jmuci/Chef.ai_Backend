@@ -2,6 +2,7 @@ package com.tenmilelabs
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.service.module
+import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -17,7 +18,7 @@ class ApplicationTest {
     @Test
     fun testRoot() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
         client.get("/").apply {
             assertEquals(HttpStatusCode.OK, status)
@@ -29,7 +30,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundByLabel() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.get("/recipes/byLabel?label=Vegetarian")
@@ -43,7 +44,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundByName() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.get("/recipes/byName?title=Recipe+1") {
@@ -60,7 +61,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundById() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.get("/recipes/byId?uuid=1") {
@@ -77,7 +78,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeDeletedById() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.delete("/recipes?uuid=6") {
@@ -96,7 +97,7 @@ class ApplicationTest {
     @Test
     fun invalidLabelProduces400() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.get("/recipes/byLabel?label=FooBAr")
@@ -106,7 +107,7 @@ class ApplicationTest {
     @Test
     fun unusedLabelProduces404() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response = client.get("/recipes/byLabel/Pescatarian")
@@ -117,7 +118,7 @@ class ApplicationTest {
     @Test
     fun newRecipesCanBeAdded() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -157,7 +158,7 @@ class ApplicationTest {
     @Test
     fun postCreateRecipeRequest_withWrongLabel() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -191,7 +192,7 @@ class ApplicationTest {
     @Test
     fun newRecipesFailToBeAddedWithInvalidLabel() = testApplication {
         application {
-            module()
+            module(recipeRepository = FakeRecipesRepository)
         }
 
         val response1 = client.post("/recipes") {
@@ -204,7 +205,7 @@ class ApplicationTest {
                     "title" to "swimming peaches",
                     "description" to "Go to the beach",
                     "label" to "Invalid",
-                    "preparationTimeMinutes" to "45",
+                    "prepTimeMins" to "45",
                     "recipeUrl" to "https://example.com",
                     "imageUrl" to "https://example.com"
                 ).formUrlEncode()

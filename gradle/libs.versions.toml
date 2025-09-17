@@ -2,7 +2,8 @@
 exposed-version = "0.56.0"
 h2-version = "2.3.232"
 json-path = "2.9.0"
-kotlin = "2.1.10"
+jupiter-version = "5.13.3"
+kotlin = "2.2.20"
 ktor = "3.2.3"
 logback = "1.5.13"
 postgres-version = "42.7.4"
@@ -18,18 +19,21 @@ ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negoti
 ktor-server-host-common = { module = "io.ktor:ktor-server-host-common", version.ref = "ktor" }
 ktor-server-netty = { module = "io.ktor:ktor-server-netty", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor"}
+ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-server-thymeleaf = { module = "io.ktor:ktor-server-thymeleaf", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
 
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed-version" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed-version" }
 exposed-dao = { module = "org.jetbrains.exposed:exposed-dao", version.ref = "exposed-version" }
+exposed-kotlin-datetime = { module = "org.jetbrains.exposed:exposed-kotlin-datetime", version.ref = "exposed-version" }
+
 h2 = { module = "com.h2database:h2", version.ref = "h2-version" }
 postgresql = { module = "org.postgresql:postgresql", version.ref = "postgres-version" }
 
-
-kotlin-test-junit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
+kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test" }
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "jupiter-version" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "jupiter-version" }
 
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 

@@ -1,7 +1,8 @@
 package com.tenmilelabs.application.service
 
 import com.tenmilelabs.domain.service.RecipesService
-import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
+import com.tenmilelabs.infrastructure.database.PostgresRecipesRepository
+import com.tenmilelabs.infrastructure.database.RecipesRepository
 import com.tenmilelabs.infrastructure.database.configureDatabases
 import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
@@ -11,10 +12,13 @@ fun main(args: Array<String>) {
     EngineMain.main(args)
 }
 
-fun Application.module() {
-    val recipesService = RecipesService(FakeRecipesRepository, log)
+fun Application.module(
+    recipeRepository: RecipesRepository = PostgresRecipesRepository(log),
+) {
+    val recipeRepository = recipeRepository
+    val recipesService = RecipesService(recipeRepository, log)
+
     // Set up plugins
-    //configureSerialization()
     configureDatabases()
-    configureRouting(recipeRepository = FakeRecipesRepository, recipesService)
+    configureRouting(recipeRepository = recipeRepository, recipesService)
 }

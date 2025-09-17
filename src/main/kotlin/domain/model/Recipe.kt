@@ -4,33 +4,33 @@ import kotlinx.serialization.Serializable
 
 enum class Label() {
     Vegetarian,
+    Vegan,
     Pescatarian,
     Mediterranean,
-    LowCarb
+    LowCarb,
+    Spanish,
+    American,
+    French,
+    Italian,
+    Caribbean,
+    NewAmerican,
 }
 
-/**
- * enum class Label(string: String) {
- *     Vegetarian("Vegetarian"),
- *     Pescatarian("Pescatarian"),
- *     Mediterranean("Mediterranean"),
- *     LowCarb("Low-Carb")
- * }
- */
-
 @Serializable
-data class Recipe (
+data class Recipe(
     val uuid: String,
     val title: String,
     val label: Label, //TODO there should be a table for labels
     val description: String,
-    val preparationTimeMinutes: Int,
+
+    val prepTimeMins: Int,
     val recipeUrl: String,
     val imageUrl: String,
-    val imageUrlThumbnail: String
+    val imageUrlThumbnail: String,
+    val createdAt: String = "",
 )
 
-data class RecipeList (
+data class RecipeList(
     val recipes: List<Recipe>
 )
 

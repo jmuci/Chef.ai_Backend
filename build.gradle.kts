@@ -32,22 +32,18 @@ dependencies {
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.exposed.dao)
+    implementation(libs.exposed.kotlin.datetime)
     implementation(libs.h2)
     implementation(libs.postgresql)
 
+    // Tests
     testImplementation(libs.json.path)
-//    testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
-    // Ktor server test engine
-    testImplementation("io.ktor:ktor-server-tests-jvm:2.3.12")
-
-    // Ktor testing
-    testImplementation("io.ktor:ktor-server-tests-jvm:2.3.12")
-    testImplementation("org.jetbrains.kotlin:kotlin-test")
 
     // JUnit 5
-    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
-    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation(libs.kotlin.test)
+    testImplementation(libs.junit.jupiter.api)
+    testRuntimeOnly(libs.junit.jupiter.engine)
 
 }

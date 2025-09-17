@@ -1,6 +1,9 @@
 ktor:
-    application:
-        modules:
-            - com.tenmilelabs.application.service.ApplicationKt.module
-    deployment:
-        port: 8080
+  application:
+    modules:
+      - com.tenmilelabs.application.service.ApplicationKt.module
+  deployment:
+    port: 8080
+ #   port: 8082
+ # - Change port while developing to run a dev instance along
+ # with a docker-compose started postgres DB
