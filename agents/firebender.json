@@ -1,0 +1,151 @@
+{
+  "version": "1.0",
+  "description": "Firebender agent rules for ChefAI backend (Kotlin + Ktor + Exposed + Clean Architecture)",
+  "modules": {
+    "kotlin_backend": {
+      "tools": [
+        {
+          "name": "generate_kotlin_code",
+          "description": "Generate Kotlin backend code following Clean Architecture and idiomatic practices.",
+          "inputs": {
+            "layer": {"type": "string", "enum": ["domain", "data", "presentation", "infrastructure"]},
+            "artifact": {"type": "string"},
+            "requirements": {"type": "string"}
+          },
+          "rules": [
+            "Domain layer must not depend on any framework.",
+            "Repositories must be interfaces in domain and implemented in data layer.",
+            "Use Result/Either for error handling.",
+            "Inject dependencies, never instantiate.",
+            "No secrets or credentials in code.",
+            "Services must be stateless; state stored only in DB or caches."
+          ]
+        }
+      ]
+    },
+    "database": {
+      "tools": [
+        {
+          "name": "generate_database_code",
+          "description": "Generate Exposed table definitions, queries, and migrations.",
+          "inputs": {
+            "entity": {"type": "string"},
+            "fields": {"type": "array"}
+          },
+          "rules": [
+            "Tables must be snake_case.",
+            "Avoid nullable fields unless required.",
+            "Use transactions minimally and explicitly.",
+            "Run DB operations on IO dispatcher.",
+            "Store only hashed+peppered passwords."
+          ]
+        }
+      ]
+    },
+    "api": {
+      "tools": [
+        {
+          "name": "generate_api_endpoint",
+          "description": "Generate secure Ktor API endpoints with JWT and RBAC.",
+          "inputs": {
+            "route": {"type": "string"},
+            "method": {"type": "string"},
+            "requestModel": {"type": "string"},
+            "responseModel": {"type": "string"}
+          },
+          "rules": [
+            "Authenticate all private endpoints.",
+            "Validate all input before touching DB.",
+            "Do not put business logic in controllers.",
+            "Use proper HTTP status codes.",
+            "Do not expose stack traces or internal errors."
+          ]
+        }
+      ]
+    },
+    "domain_use_cases": {
+      "tools": [
+        {
+          "name": "generate_use_case",
+          "description": "Generate domain use cases with request/response boundaries.",
+          "inputs": {
+            "name": {"type": "string"},
+            "description": {"type": "string"}
+          },
+          "rules": [
+            "Use cases must be single-purpose.",
+            "Must return sealed results.",
+            "May depend only on domain interfaces.",
+            "Must validate invariants and inputs.",
+            "No framework or database references."
+          ]
+        }
+      ]
+    },
+    "testing": {
+      "tools": [
+        {
+          "name": "generate_test",
+          "description": "Generate unit or integration tests.",
+          "inputs": {
+            "type": {"type": "string", "enum": ["unit", "integration"]},
+            "target": {"type": "string"}
+          },
+          "rules": [
+            "Unit tests mock repositories.",
+            "Integration tests use Testcontainers.",
+            "Tests must be deterministic.",
+            "No real external API calls.",
+            "Prefer Kotest DSL."
+          ]
+        }
+      ]
+    },
+    "conventions": {
+      "dto": {
+        "rules": [
+          "DTOs contain no business logic.",
+          "DTO names reflect API contract.",
+          "Use @Serializable.",
+          "DTOs must be immutable.",
+          "Do not expose internal IDs unless needed."
+        ]
+      },
+      "mappers": {
+        "rules": [
+          "Mappers must be pure functions.",
+          "Explicit domain <-> DTO conversion.",
+          "Never leak infrastructure types into domain.",
+          "Avoid throwing inside mappers.",
+          "Prefer dedicated mapper classes for clarity."
+        ]
+      },
+      "use_case_boundaries": {
+        "rules": [
+          "Every use case defines Request/Response models.",
+          "Only controllers may call use cases.",
+          "Use cases depend only on domain abstractions.",
+          "Use sealed results.",
+          "Validate invariants inside domain."
+        ]
+      },
+      "event_driven": {
+        "rules": [
+          "Domain events must be immutable.",
+          "Event handlers must be idempotent.",
+          "Publisher abstraction lives in domain; implementation in infrastructure.",
+          "Event schemas must be versioned.",
+          "No sensitive data in events."
+        ]
+      }
+    }
+  },
+  "global_rules": [
+    "Generated code must be idiomatic Kotlin.",
+    "No insecure cryptography.",
+    "All secrets must be environment-injected.",
+    "All services must remain stateless.",
+    "Follow Clean Architecture boundaries strictly.",
+    "Prefer immutability and pure functions."
+  ]
+}
