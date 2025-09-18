@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.ktor.server.status.pages)
     implementation(libs.ktor.server.thymeleaf)
+    implementation(libs.ktor.server.auth)
+    implementation(libs.ktor.server.auth.jwt)
 
     // Database
     implementation(libs.exposed.core)
@@ -35,6 +37,9 @@ dependencies {
     implementation(libs.exposed.kotlin.datetime)
     implementation(libs.h2)
     implementation(libs.postgresql)
+
+    // Security
+    implementation(libs.bcrypt)
 
     // Tests
     testImplementation(libs.json.path)

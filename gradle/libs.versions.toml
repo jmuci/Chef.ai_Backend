@@ -7,6 +7,7 @@ kotlin = "2.2.20"
 ktor = "3.2.3"
 logback = "1.5.13"
 postgres-version = "42.7.4"
+bcrypt-version = "0.10.2"
 
 
 [libraries]
@@ -22,6 +23,8 @@ ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx
 ktor-server-status-pages = { module = "io.ktor:ktor-server-status-pages", version.ref = "ktor" }
 ktor-server-thymeleaf = { module = "io.ktor:ktor-server-thymeleaf", version.ref = "ktor" }
 ktor-server-test-host = { module = "io.ktor:ktor-server-test-host", version.ref = "ktor" }
+ktor-server-auth = { module = "io.ktor:ktor-server-auth", version.ref = "ktor" }
+ktor-server-auth-jwt = { module = "io.ktor:ktor-server-auth-jwt", version.ref = "ktor" }
 
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed-version" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed-version" }
@@ -36,6 +39,7 @@ junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.re
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "jupiter-version" }
 
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
