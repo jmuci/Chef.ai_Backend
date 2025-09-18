@@ -7,3 +7,15 @@ ktor:
  #   port: 8082
  # - Change port while developing to run a dev instance along
  # with a docker-compose started postgres DB
+
+jwt:
+  secret: "your-secret-key-change-this-in-production"
+  issuer: "http://0.0.0.0:8080"
+  audience: "chefai-backend"
+  realm: "ChefAI"
+
+# WARNING - For prod use env variables:
+# Look at https://ktor.io/docs/rsa-keys-generation.html#defining-the-private-key for key gen
+#  secret: "${JWT_SECRET}"  # Use environment variable
+#  export JWT_SECRET="your-production-secret-key"
+#  export JWT_ISSUER="https://your-domain.com"
