@@ -14,13 +14,19 @@ interface RecipesRepository {
 
     suspend fun allRecipes(): List<Recipe>
 
+    suspend fun recipesByUserId(userId: String): List<Recipe>
+
+    suspend fun publicRecipes(): List<Recipe>
+
     suspend fun recipesByLabel(label: Label): List<Recipe>
 
     suspend fun recipeByTitle(title: String): Recipe?
 
     suspend fun recipeById(id: String): Recipe?
 
-    suspend fun addRecipe(recipeRequest: CreateRecipeRequest): String
+    suspend fun recipeByIdAndUserId(id: String, userId: String): Recipe?
 
-    suspend fun removeRecipe(uuid: String): Boolean
+    suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: String): String
+
+    suspend fun removeRecipe(uuid: String, userId: String): Boolean
 }
