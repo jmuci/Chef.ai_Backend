@@ -1,13 +1,17 @@
 package com.tenmilelabs.presentation.routes
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
+import com.tenmilelabs.application.dto.ErrorResponse
 import com.tenmilelabs.domain.model.Label
+import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.RecipesService
+import com.tenmilelabs.infrastructure.auth.userId
 import com.tenmilelabs.infrastructure.database.FilterFields
 import com.tenmilelabs.infrastructure.database.RecipesRepository
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.http.content.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.statuspages.*
@@ -21,7 +25,11 @@ import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
 private const val ACCEPT_APP_JSON = "application/json"
 private const val ACCEPT_WILDCARD = "*/*"
 
-fun Application.configureRouting(recipeRepository: RecipesRepository, recipesService: RecipesService) {
+fun Application.configureRouting(
+    recipeRepository: RecipesRepository,
+    recipesService: RecipesService,
+    authService: AuthService
+) {
     // Install plugins related to routing
     install(ContentNegotiation) {
         json()
@@ -50,25 +58,31 @@ fun Application.configureRouting(recipeRepository: RecipesRepository, recipesSer
         staticResources("/recipes-ui", "recipes-ui")
         staticResources("/", "static")
 
-        route("/recipes") {
+        // Public authentication routes
+        authRoutes(authService)
 
-            get {
-                handleGetAllRecipes(recipesService)
-            }
-            get("/byName") {
-                findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipeRepository)
-            }
-            get("/byId") {
-                findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
-            }
-            get("/byLabel") {
-                handleGetRecipesByLabel(call, application.log, recipesService)
-            }
-            post {
-                handlePostNewRecipe(call, application.log, recipesService)
-            }
-            delete {
-                handleDeleteRecipe(call, log, recipeRepository)
+        // Protected routes - require authentication
+        authenticate("auth-jwt") {
+            route("/recipes") {
+
+                get {
+                    handleGetAllRecipes(recipesService, call)
+                }
+                get("/byName") {
+                    findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipeRepository)
+                }
+                get("/byId") {
+                    findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
+                }
+                get("/byLabel") {
+                    handleGetRecipesByLabel(call, application.log, recipesService)
+                }
+                post {
+                    handlePostNewRecipe(call, application.log, recipesService)
+                }
+                delete {
+                    handleDeleteRecipe(call, log, recipesService)
+                }
             }
         }
 
@@ -81,20 +95,26 @@ fun Application.configureRouting(recipeRepository: RecipesRepository, recipesSer
 private suspend fun handleDeleteRecipe(
     call: RoutingCall,
     log: Logger,
-    recipeRepository: RecipesRepository
+    recipesService: RecipesService
 ) {
     val id = call.parameters["uuid"]
     if (id == null) {
-        call.respond(HttpStatusCode.BadRequest)
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse("Recipe ID is required"))
         return
     }
 
-    if (recipeRepository.removeRecipe(uuid = id)) {
-        log.info("Successfully removed recipe $id from DB.")
+    val userId = call.userId
+    if (userId == null) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
+        return
+    }
+
+    if (recipesService.deleteRecipe(id, userId)) {
+        log.info("Successfully removed recipe $id from DB by user $userId.")
         call.respond(HttpStatusCode.NoContent)
     } else {
-        log.info("Recipe with $id not found.")
-        call.respond(HttpStatusCode.NotFound)
+        log.info("Recipe with $id not found or user $userId not authorized.")
+        call.respond(HttpStatusCode.NotFound, ErrorResponse("Recipe not found or not authorized"))
     }
 }
 
@@ -133,8 +153,15 @@ private suspend fun handleGetRecipesByLabel(
     }
 }
 
-private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService) {
-    val recipes = recipesService.getAllRecipes()
+private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService, call: RoutingCall) {
+    val userId = call.userId
+    if (userId == null) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
+        return
+    }
+
+    // Get recipes accessible to this user (their own + public ones)
+    val recipes = recipesService.getAccessibleRecipes(userId)
     val accept = call.request.acceptItems().map { it.value }
     if (ACCEPT_APP_JSON in accept || ACCEPT_WILDCARD in accept) {
         call.respond(recipes)
@@ -148,22 +175,28 @@ private suspend fun handlePostNewRecipe(
     log: Logger,
     recipesService: RecipesService
 ) {
+    val userId = call.userId
+    if (userId == null) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
+        return
+    }
+
     try {
         val createRecipeRequest = call.receive<CreateRecipeRequest>()
-        val recipeResponse = recipesService.createRecipe(createRecipeRequest)
+        val recipeResponse = recipesService.createRecipe(createRecipeRequest, userId)
         if (recipeResponse != null) {
-            log.info("Successfully added recipe with params ${createRecipeRequest.title}.first, ID: ${recipeResponse.uuid} ")
+            log.info("Successfully added recipe with params ${createRecipeRequest.title}.first, ID: ${recipeResponse.uuid} by user $userId")
             call.respond(HttpStatusCode.Created, recipeResponse)
         } else {
-            call.respond(HttpStatusCode.BadRequest)
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse("Failed to create recipe"))
             log.warn("Failed to add recipe! Title:  ${createRecipeRequest.title}")
         }
     } catch (ex: IllegalArgumentException) {
         log.warn(ex.message, ex)
-        call.respond(HttpStatusCode.BadRequest)
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid recipe data"))
     } catch (ex: Exception) {
         log.warn(ex.message, ex)
-        call.respond(HttpStatusCode.BadRequest)
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse("Failed to create recipe"))
     }
 }
 
