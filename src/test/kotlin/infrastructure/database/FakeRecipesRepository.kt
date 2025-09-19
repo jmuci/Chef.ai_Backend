@@ -5,8 +5,7 @@ import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 import java.util.*
 
-// Repository Singleton
-object FakeRecipesRepository : RecipesRepository {
+class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
     val testRecipe1 = Recipe(
         uuid = "1",
         title = "Recipe 1",
@@ -16,7 +15,7 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 30,
-        userId = "user1",
+        userId = testUserId,
         isPublic = false
     )
     val testRecipe2 = Recipe(
@@ -28,7 +27,7 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 40,
-        userId = "user1",
+        userId = testUserId,
         isPublic = true
     )
     val testRecipe3 = Recipe(
@@ -64,7 +63,7 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 60,
-        userId = "user1",
+        userId = testUserId,
         isPublic = false
     )
     val testRecipe6 = Recipe(
@@ -76,7 +75,7 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 60,
-        userId = "user1",
+        userId = testUserId,
         isPublic = true
     )
     val testRecipeToBeDeleted1 = Recipe(
@@ -88,7 +87,7 @@ object FakeRecipesRepository : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 70,
-        userId = "user1",
+        userId = testUserId,
         isPublic = false
     )
 
