@@ -33,22 +33,8 @@ class ApplicationTest {
             setBody(registerRequest)
         }
 
-        return if (registerResponse.status == HttpStatusCode.Created) {
-            val authResponse = registerResponse.body<AuthResponse>()
-            authResponse.token
-        } else {
-            // User might already exist, try login
-            val loginRequest = LoginRequest(
-                email = "test@example.com",
-                password = "TestPassword123!"
-            )
-            val loginResponse = post("/auth/login") {
-                contentType(ContentType.Application.Json)
-                setBody(loginRequest)
-            }
-            val authResponse = loginResponse.body<AuthResponse>()
-            authResponse.token
-        }
+        val authResponse = registerResponse.body<AuthResponse>()
+        return authResponse.token
     }
 
     @Test
