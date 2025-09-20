@@ -112,10 +112,17 @@ class AuthService(
      * This ensures constant time response whether user exists or not
      */
     private fun simulatePasswordCheck() {
-        // Perform a dummy BCrypt hash to match the time of a real password check
-        BCrypt.verifyer().verify(
-            "dummy-password".toCharArray(),
-            "$2a$12\$dummyhashtopreventtimingattack1234567890123456789012"
-        )
+        try {
+            // Perform a dummy BCrypt hash to match the time of a real password check
+            // Using a valid pre-computed BCrypt hash of "dummy-password"
+            BCrypt.verifyer().verify(
+                "wrong-password".toCharArray(),
+                "\$2a\$12\$LQDHPwzzPWFERYtY3KfQaeFmIaM5b7YQ7GxJYqG.N7GnXvLqYG5Ai" // Hash of "dummy-password"
+            )
+        } catch (e: Exception) {
+            // If somehow the dummy verification fails, we still want to consume time
+            // Fall back to hashing a dummy password
+            BCrypt.withDefaults().hashToString(12, "dummy-password".toCharArray())
+        }
     }
 }
