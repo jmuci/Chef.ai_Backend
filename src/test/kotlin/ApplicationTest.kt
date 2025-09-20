@@ -348,7 +348,7 @@ class ApplicationTest {
 
         val registerRequest = RegisterRequest(
             email = "duplicate@example.com",
-            username = "user1",
+            username = "user123",
             password = "SecurePassword123!"
         )
 
@@ -362,7 +362,7 @@ class ApplicationTest {
         // Second registration with same email should fail
         val response2 = client.post("/auth/register") {
             contentType(ContentType.Application.Json)
-            setBody(registerRequest.copy(username = "user2"))
+            setBody(registerRequest.copy(username = "user456"))
         }
         assertEquals(HttpStatusCode.BadRequest, response2.status)
     }
