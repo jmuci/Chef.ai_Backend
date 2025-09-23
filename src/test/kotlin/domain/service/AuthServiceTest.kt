@@ -15,6 +15,7 @@ import kotlin.test.assertTrue
 class AuthServiceTest {
 
     private lateinit var userRepository: FakeUserRepository
+    private lateinit var refreshTokenRepository: com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository
     private lateinit var jwtService: JwtService
     private lateinit var authService: AuthService
     private val logger = KtorSimpleLogger("AuthServiceTest")
@@ -22,12 +23,13 @@ class AuthServiceTest {
     @BeforeEach
     fun setup() {
         userRepository = FakeUserRepository()
+        refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()
         jwtService = JwtService(
             secret = "test-secret-key-for-jwt-tokens",
             issuer = "http://test.com",
             audience = "test-audience"
         )
-        authService = AuthService(userRepository, jwtService, logger)
+        authService = AuthService(userRepository, refreshTokenRepository, jwtService, logger)
     }
 
     // Registration Tests

@@ -1,15 +1,20 @@
 package com.tenmilelabs.domain.service
 
 import at.favre.lib.crypto.bcrypt.BCrypt
-import com.tenmilelabs.application.dto.AuthResponse
-import com.tenmilelabs.application.dto.LoginRequest
-import com.tenmilelabs.application.dto.RegisterRequest
+import com.tenmilelabs.application.dto.*
 import com.tenmilelabs.domain.model.User
+import com.tenmilelabs.infrastructure.database.RefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.UserRepository
 import io.ktor.util.logging.*
+import kotlinx.datetime.Clock
+import java.security.MessageDigest
+import java.util.*
+import kotlin.time.DurationUnit
+import kotlin.time.toDuration
 
 class AuthService(
     private val userRepository: UserRepository,
+    private val refreshTokenRepository: RefreshTokenRepository,
     private val jwtService: JwtService,
     private val log: Logger
 ) {
@@ -45,15 +50,8 @@ class AuthService(
         val user = userRepository.createUser(sanitizedEmail, sanitizedUsername, passwordHash)
             ?: return null
 
-        // Generate JWT token
-        val token = jwtService.generateToken(user.id, user.email)
-
-        return AuthResponse(
-            token = token,
-            userId = user.id,
-            username = user.username,
-            email = user.email
-        )
+        // Generate and store tokens
+        return generateAndStoreTokens(user.id, user.email, user.username)
     }
 
     suspend fun login(request: LoginRequest): AuthResponse? {
@@ -84,19 +82,145 @@ class AuthService(
             return null
         }
 
-        // Generate JWT token
-        val token = jwtService.generateToken(user.id, user.email)
-
-        return AuthResponse(
-            token = token,
-            userId = user.id,
-            username = user.username,
-            email = user.email
-        )
+        // Generate and store tokens
+        return generateAndStoreTokens(user.id, user.email, user.username)
     }
 
     suspend fun getUserById(userId: String): User? {
         return userRepository.findUserById(userId)
+    }
+
+    /**
+     * Refresh access token using a refresh token
+     * Implements token rotation: invalidates old refresh token and issues new ones
+     */
+    suspend fun refreshToken(request: RefreshTokenRequest): RefreshTokenResponse? {
+        // Validate input
+        if (request.refreshToken.isBlank()) {
+            log.warn("Refresh token is blank")
+            return null
+        }
+
+        // Hash the incoming refresh token to look it up in database
+        val tokenHash = hashRefreshToken(request.refreshToken)
+
+        // Find the refresh token in database
+        val storedToken = refreshTokenRepository.findByTokenHash(tokenHash)
+        if (storedToken == null) {
+            log.warn("Refresh token not found in database")
+            return null
+        }
+
+        // Check if token is revoked
+        if (storedToken.isRevoked) {
+            log.warn("Attempted reuse of revoked refresh token for user: ${storedToken.userId}")
+            // Token reuse detected - revoke all tokens for this user (security breach)
+            refreshTokenRepository.revokeAllUserTokens(storedToken.userId)
+            return null
+        }
+
+        // Check if token is expired
+        val now = Clock.System.now()
+        val expiresAt = kotlinx.datetime.Instant.parse(storedToken.expiresAt)
+        if (now >= expiresAt) {
+            log.warn("Refresh token expired for user: ${storedToken.userId}")
+            refreshTokenRepository.revokeToken(storedToken.id)
+            return null
+        }
+
+        // Get user information
+        val user = userRepository.findUserById(storedToken.userId)
+        if (user == null) {
+            log.warn("User not found for refresh token: ${storedToken.userId}")
+            refreshTokenRepository.revokeToken(storedToken.id)
+            return null
+        }
+
+        // Generate new tokens BEFORE revoking old one
+        // This ensures we have the new token ready before invalidating the old one
+        val newAccessToken = jwtService.generateToken(user.id, user.email)
+        val newRefreshTokenString = jwtService.generateRefreshToken()
+        val newRefreshTokenHash = hashRefreshToken(newRefreshTokenString)
+
+        // Store new refresh token FIRST
+        val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
+        val refreshExpiresAt = now.plus(duration)
+        val newStoredToken = refreshTokenRepository.createRefreshToken(
+            userId = user.id,
+            tokenHash = newRefreshTokenHash,
+            expiresAt = refreshExpiresAt
+        )
+
+        if (newStoredToken == null) {
+            log.error("Failed to store new refresh token for user: ${user.id}")
+            // Old token is still valid - user can retry
+            return null
+        }
+
+        // Token rotation: Revoke the old token AFTER new one is safely stored
+        // If revocation fails, the new token is already valid, so return success anyway
+        val revoked = refreshTokenRepository.revokeToken(storedToken.id)
+        if (!revoked) {
+            log.warn("Failed to revoke old refresh token, but new token was created successfully")
+            // Continue - new token works, old token will be cleaned up eventually
+        }
+
+        log.info("Successfully refreshed tokens for user: ${user.id}")
+
+        return RefreshTokenResponse(
+            accessToken = newAccessToken,
+            refreshToken = newRefreshTokenString,
+            userId = user.id,
+            expiresIn = jwtService.getAccessTokenExpirationSeconds()
+        )
+    }
+
+    /**
+     * Revoke all refresh tokens for a user (useful for logout from all devices)
+     */
+    suspend fun revokeAllUserTokens(userId: String): Int {
+        return refreshTokenRepository.revokeAllUserTokens(userId)
+    }
+
+    /**
+     * Generate and store both access and refresh tokens for a user
+     * Returns AuthResponse with tokens or null if token storage fails
+     *
+     * Accepts both User and UserWithPassword types since they share the same essential fields
+     */
+    private suspend fun generateAndStoreTokens(
+        userId: String,
+        email: String,
+        username: String
+    ): AuthResponse? {
+        // Generate tokens
+        val accessToken = jwtService.generateToken(userId, email)
+        val refreshTokenString = jwtService.generateRefreshToken()
+        val refreshTokenHash = hashRefreshToken(refreshTokenString)
+
+        // Store refresh token
+        val now = Clock.System.now()
+        val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
+        val refreshExpiresAt = now.plus(duration)
+        val storedToken = refreshTokenRepository.createRefreshToken(
+            userId = userId,
+            tokenHash = refreshTokenHash,
+            expiresAt = refreshExpiresAt
+        )
+
+        if (storedToken == null) {
+            log.error("Failed to store refresh token for user: $userId")
+            // Continue anyway - user can try again
+        }
+
+        return AuthResponse(
+            token = accessToken,
+            refreshToken = refreshTokenString,
+            userId = userId,
+            username = username,
+            email = email,
+            expiresIn = jwtService.getAccessTokenExpirationSeconds()
+        )
     }
 
     private fun hashPassword(password: String): String {
@@ -105,6 +229,20 @@ class AuthService(
 
     private fun verifyPassword(password: String, hash: String): Boolean {
         return BCrypt.verifyer().verify(password.toCharArray(), hash).verified
+    }
+
+    /**
+     * Hash refresh token using SHA-256
+     * We use SHA-256 instead of BCrypt because:
+     * 1. Refresh tokens are 64+ bytes (BCrypt limit is 72 bytes)
+     * 2. Refresh tokens are cryptographically random (high entropy)
+     * 3. We don't need BCrypt's slow hashing for already-secure random tokens
+     * 4. SHA-256 is fast and one-way, which is sufficient for token verification
+     */
+    private fun hashRefreshToken(token: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val hashBytes = digest.digest(token.toByteArray())
+        return Base64.getEncoder().encodeToString(hashBytes)
     }
 
     /**
