@@ -4,11 +4,7 @@ import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.auth.configureJwtAuth
-import com.tenmilelabs.infrastructure.database.PostgresRecipesRepository
-import com.tenmilelabs.infrastructure.database.PostgresUserRepository
-import com.tenmilelabs.infrastructure.database.RecipesRepository
-import com.tenmilelabs.infrastructure.database.UserRepository
-import com.tenmilelabs.infrastructure.database.configureDatabases
+import com.tenmilelabs.infrastructure.database.*
 import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
 import io.ktor.server.netty.*
@@ -19,10 +15,12 @@ fun main(args: Array<String>) {
 
 fun Application.module(
     recipeRepository: RecipesRepository = PostgresRecipesRepository(log),
-    userRepository: UserRepository = PostgresUserRepository(log)
+    userRepository: UserRepository = PostgresUserRepository(log),
+    refreshTokenRepository: RefreshTokenRepository = PostgresRefreshTokenRepository(log)
 ) {
     val recipeRepository = recipeRepository
     val userRepository = userRepository
+    val refreshTokenRepository = refreshTokenRepository
 
     // Configure JWT settings
     val jwtSecret = environment.config.propertyOrNull("jwt.secret")?.getString() ?: "secret"
@@ -30,7 +28,7 @@ fun Application.module(
     val jwtAudience = environment.config.propertyOrNull("jwt.audience")?.getString() ?: "jwt-audience"
 
     val jwtService = JwtService(jwtSecret, jwtIssuer, jwtAudience)
-    val authService = AuthService(userRepository, jwtService, log)
+    val authService = AuthService(userRepository, refreshTokenRepository, jwtService, log)
     val recipesService = RecipesService(recipeRepository, log)
 
     // Set up plugins
