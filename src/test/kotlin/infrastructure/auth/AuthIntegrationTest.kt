@@ -22,7 +22,7 @@ class AuthIntegrationTest {
     @Test
     fun `complete authentication flow - register, login, access protected endpoint`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -67,7 +67,7 @@ class AuthIntegrationTest {
     @Test
     fun `JWT token from registration should work for protected endpoints`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -99,7 +99,7 @@ class AuthIntegrationTest {
     @Test
     fun `expired or invalid token should be rejected`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -118,7 +118,7 @@ class AuthIntegrationTest {
     @Test
     fun `missing authorization header should return 401`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -135,7 +135,7 @@ class AuthIntegrationTest {
     @Test
     fun `malformed authorization header should return 401`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -154,7 +154,7 @@ class AuthIntegrationTest {
     @Test
     fun `public endpoints should work without authentication`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -181,7 +181,7 @@ class AuthIntegrationTest {
     @Test
     fun `token should include correct user claims`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -213,7 +213,7 @@ class AuthIntegrationTest {
     @Test
     fun `multiple users can authenticate independently`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -255,7 +255,7 @@ class AuthIntegrationTest {
     @Test
     fun `login after registration should generate new token`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -292,7 +292,7 @@ class AuthIntegrationTest {
     @Test
     fun `allowed special characters in credentials should be handled properly`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -324,7 +324,7 @@ class AuthIntegrationTest {
     @Test
     fun `concurrent requests with same token should all succeed`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -356,7 +356,7 @@ class AuthIntegrationTest {
     @Test
     fun `userId from token should match registered userId`() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
