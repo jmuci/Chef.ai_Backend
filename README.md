@@ -1,5 +1,7 @@
 # chefai
 
+[![Unit Tests Status](https://github.com/jmuci/Chef.ai_Backend/actions/workflows/unit-tests-workflow.yml/badge.svg)](https://github.com/jmuci/Chef.ai_Backend/actions/workflows/unit-tests-workflow.yml)
+
 This project was created using the [Ktor Project Generator](https://start.ktor.io).
 
 Here are some useful links to get you started:
