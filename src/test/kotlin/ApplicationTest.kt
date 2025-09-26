@@ -363,12 +363,12 @@ class ApplicationTest {
         }
         assertEquals(HttpStatusCode.Created, response1.status)
 
-        // Second registration with same email should fail
+        // Second registration with same email should fail with Conflict status
         val response2 = client.post("/auth/register") {
             contentType(ContentType.Application.Json)
             setBody(registerRequest.copy(username = "user456"))
         }
-        assertEquals(HttpStatusCode.BadRequest, response2.status)
+        assertEquals(HttpStatusCode.Conflict, response2.status)
     }
 
     @Test
