@@ -17,6 +17,13 @@ fun Route.authRoutes(authService: AuthService) {
         post("/register") {
             try {
                 val request = call.receive<RegisterRequest>()
+
+                // Basic validation
+                if (request.email.isBlank() || request.username.isBlank() || request.password.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("All fields are required"))
+                    return@post
+                }
+
                 val response = authService.register(request)
                 call.respond(HttpStatusCode.Created, response)
             } catch (ex: ValidationException) {
@@ -29,7 +36,7 @@ fun Route.authRoutes(authService: AuthService) {
                 application.log.error("Internal error during registration", ex)
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Internal server error"))
             } catch (ex: Exception) {
-                application.log.error("Unexpected error during registration", ex)
+                application.log.error("Error during registration", ex)
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request format"))
             }
         }
@@ -76,27 +83,6 @@ fun Route.authRoutes(authService: AuthService) {
                 call.respond(HttpStatusCode.InternalServerError, ErrorResponse("Internal server error"))
             } catch (ex: Exception) {
                 application.log.error("Unexpected error during token refresh", ex)
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request format"))
-            }
-        }
-
-        post("/refresh") {
-            try {
-                val request = call.receive<RefreshTokenRequest>()
-
-                if (request.refreshToken.isBlank()) {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Refresh token is required"))
-                    return@post
-                }
-
-                val response = authService.refreshToken(request)
-                if (response != null) {
-                    call.respond(HttpStatusCode.OK, response)
-                } else {
-                    call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid or expired refresh token"))
-                }
-            } catch (ex: Exception) {
-                application.log.error("Error during token refresh", ex)
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request format"))
             }
         }

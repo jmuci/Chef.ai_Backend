@@ -1,17 +1,16 @@
-# Use postgres/example user/password credentials
 services:
   db:
     image: postgres:16
     restart: always
-    container_name: postgres_db
+    container_name: smoketest_postgres_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: chefai_db
     ports:
-      - "5432:5432"
+      - "5555:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./src/main/resources/sql/fresh_install.sql:/docker-entrypoint-initdb.d/fresh_install.sql:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -d chefai_db -U postgres" ]
       interval: 1s
@@ -20,16 +19,17 @@ services:
 
   app:
     build: .
-    container_name: chefai_service
-    depends_on:
-      - db
+    container_name: smoketest_chefai
     environment:
       DB_URL: jdbc:postgresql://db:5432/chefai_db
       DB_USER: postgres
       DB_PASSWORD: password
     ports:
-      - "8080:8080"
-    restart: always
-
-volumes:
-  postgres_data:
+      - "8082:8080"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
