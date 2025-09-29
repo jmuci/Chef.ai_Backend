@@ -8,6 +8,7 @@ import io.ktor.util.logging.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -297,9 +298,9 @@ class AuthServiceTest {
         assertNotNull(registerResponse)
 
         // Get user by ID
-        val user = authService.getUserById(registerResponse.userId)
+        val user = authService.getUserById(UUID.fromString(registerResponse.userId))
         assertNotNull(user)
-        assertEquals(registerResponse.userId, user.id)
+        assertEquals(registerResponse.userId, user.id.toString())
         assertEquals("getuser@example.com", user.email)
         assertEquals("getuser", user.username)
     }
@@ -307,7 +308,7 @@ class AuthServiceTest {
     @Test
     fun `getUserById should return null when user does not exist`() = runTest {
         // getUserById still returns null (not changed to throw exception)
-        val user = authService.getUserById("non-existent-id")
+        val user = authService.getUserById(UUID.randomUUID())
         assertEquals(null, user)
     }
 

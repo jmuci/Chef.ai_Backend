@@ -8,7 +8,7 @@ import java.util.*
 interface UserRepository {
     suspend fun createUser(email: String, username: String, passwordHash: String): User?
     suspend fun findUserByEmail(email: String): UserWithPassword?
-    suspend fun findUserById(userId: String): User?
+    suspend fun findUserById(userId: UUID): User?
 }
 
 class PostgresUserRepository(private val log: Logger) : UserRepository {
@@ -36,10 +36,10 @@ class PostgresUserRepository(private val log: Logger) : UserRepository {
             .firstOrNull()
     }
 
-    override suspend fun findUserById(userId: String): User? = suspendTransaction {
+    override suspend fun findUserById(userId: UUID): User? = suspendTransaction {
         try {
             UserDAO
-                .findById(UUID.fromString(userId))
+                .findById(userId)
                 ?.let(::daoToUser)
         } catch (ex: Exception) {
             log.error("Failed to find user by id: $userId", ex)

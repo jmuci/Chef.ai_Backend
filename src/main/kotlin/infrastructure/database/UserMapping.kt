@@ -27,14 +27,14 @@ class UserDAO(id: EntityID<UUID>) : UUIDEntity(id) {
 }
 
 fun daoToUser(dao: UserDAO): User = User(
-    id = dao.id.toString(),
+    id = dao.id.value,
     email = dao.email,
     username = dao.username,
     createdAt = dao.createdAt.toString()
 )
 
 fun daoToUserWithPassword(dao: UserDAO): UserWithPassword = UserWithPassword(
-    id = dao.id.toString(),
+    id = dao.id.value,
     email = dao.email,
     username = dao.username,
     passwordHash = dao.passwordHash,

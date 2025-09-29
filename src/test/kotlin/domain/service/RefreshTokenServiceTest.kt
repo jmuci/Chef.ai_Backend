@@ -132,7 +132,7 @@ class RefreshTokenServiceTest {
         val authResponse = authService.register(registerRequest)
         assertNotNull(authResponse)
 
-        val userId = authResponse.userId
+        val userId = UUID.fromString(authResponse.userId)
         val expiredTokenString = jwtService.generateRefreshToken()
 
         // Manually create an expired token in the repository
@@ -235,7 +235,7 @@ class RefreshTokenServiceTest {
         val userId = authResponse.userId
 
         // Revoke all tokens
-        val revokedCount = authService.revokeAllUserTokens(userId)
+        val revokedCount = authService.revokeAllUserTokens(UUID.fromString(userId))
         assertTrue(revokedCount >= 1, "Should have revoked at least one token")
 
         // Try to use the revoked token - should throw TokenReuseDetectedException

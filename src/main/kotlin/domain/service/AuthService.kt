@@ -2,13 +2,7 @@ package com.tenmilelabs.domain.service
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.tenmilelabs.application.dto.*
-import com.tenmilelabs.domain.exception.AuthInternalException
-import com.tenmilelabs.domain.exception.InvalidCredentialsException
-import com.tenmilelabs.domain.exception.InvalidRefreshTokenException
-import com.tenmilelabs.domain.exception.TokenReuseDetectedException
-import com.tenmilelabs.domain.exception.UserAlreadyExistsException
-import com.tenmilelabs.domain.exception.UserNotFoundException
-import com.tenmilelabs.domain.exception.ValidationException
+import com.tenmilelabs.domain.exception.*
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.infrastructure.database.RefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.UserRepository
@@ -58,7 +52,7 @@ class AuthService(
             ?: throw AuthInternalException("Failed to create user")
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id, user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
     }
 
     suspend fun login(request: LoginRequest): AuthResponse {
@@ -90,10 +84,10 @@ class AuthService(
         }
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id, user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
     }
 
-    suspend fun getUserById(userId: String): User? {
+    suspend fun getUserById(userId: UUID): User? {
         return userRepository.findUserById(userId)
     }
 
@@ -149,14 +143,14 @@ class AuthService(
 
         // Generate new tokens BEFORE revoking old one
         // This ensures we have the new token ready before invalidating the old one
-        val newAccessToken = jwtService.generateToken(user.id, user.email)
+        val newAccessToken = jwtService.generateToken(user.id.toString(), user.email)
         val newRefreshTokenString = jwtService.generateRefreshToken()
         val newRefreshTokenHash = hashRefreshToken(newRefreshTokenString)
 
         // Store new refresh token FIRST
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
-        val newStoredToken = refreshTokenRepository.createRefreshToken(
+        refreshTokenRepository.createRefreshToken(
             userId = user.id,
             tokenHash = newRefreshTokenHash,
             expiresAt = refreshExpiresAt
@@ -175,7 +169,7 @@ class AuthService(
         return RefreshTokenResponse(
             accessToken = newAccessToken,
             refreshToken = newRefreshTokenString,
-            userId = user.id,
+            userId = user.id.toString(),
             expiresIn = jwtService.getAccessTokenExpirationSeconds()
         )
     }
@@ -183,7 +177,7 @@ class AuthService(
     /**
      * Revoke all refresh tokens for a user (useful for logout from all devices)
      */
-    suspend fun revokeAllUserTokens(userId: String): Int {
+    suspend fun revokeAllUserTokens(userId: UUID): Int {
         return refreshTokenRepository.revokeAllUserTokens(userId)
     }
 
@@ -208,8 +202,8 @@ class AuthService(
         val now = Clock.System.now()
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
-        val storedToken = refreshTokenRepository.createRefreshToken(
-            userId = userId,
+        refreshTokenRepository.createRefreshToken(
+            userId = UUID.fromString(userId),
             tokenHash = refreshTokenHash,
             expiresAt = refreshExpiresAt
         ) ?: throw AuthInternalException("Failed to store refresh token for user: $userId")

@@ -21,6 +21,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.thymeleaf.*
 import io.ktor.util.logging.*
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
+import java.util.UUID
 
 private const val ACCEPT_APP_JSON = "application/json"
 private const val ACCEPT_WILDCARD = "*/*"
@@ -103,7 +104,7 @@ private suspend fun handleDeleteRecipe(
         return
     }
 
-    val userId = call.userId
+    val userId = UUID.fromString(call.userId)
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
@@ -154,7 +155,7 @@ private suspend fun handleGetRecipesByLabel(
 }
 
 private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService, call: RoutingCall) {
-    val userId = call.userId
+    val userId = UUID.fromString(call.userId)
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
@@ -175,7 +176,7 @@ private suspend fun handlePostNewRecipe(
     log: Logger,
     recipesService: RecipesService
 ) {
-    val userId = call.userId
+    val userId = UUID.fromString(call.userId)
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
