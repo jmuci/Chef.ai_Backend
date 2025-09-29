@@ -1,8 +1,12 @@
 package com.tenmilelabs
 
-import com.tenmilelabs.application.dto.*
+import com.tenmilelabs.application.dto.AuthResponse
+import com.tenmilelabs.application.dto.CreateRecipeRequest
+import com.tenmilelabs.application.dto.LoginRequest
+import com.tenmilelabs.application.dto.RegisterRequest
 import com.tenmilelabs.application.service.module
 import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
+import com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -12,7 +16,6 @@ import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.testing.*
-import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 import kotlin.test.assertContains
 import kotlin.test.assertEquals
@@ -128,7 +131,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeDeletedById() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
