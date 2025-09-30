@@ -1,0 +1,25 @@
+name: Smoke Test (Docker Compose)
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  smoke-test:
+    name: Run Smoke Test Script
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run smoke test with Docker Compose
+        run: |
+          chmod +x ./smoke-test.sh
+          docker compose -f docker-compose.smoketest.yaml down -v || true
+          ./smoke-test.sh
