@@ -2,6 +2,7 @@ package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.domain.model.UserWithPassword
+import com.tenmilelabs.domain.repository.UserRepository
 import com.tenmilelabs.infrastructure.database.dao.UserDAO
 import com.tenmilelabs.infrastructure.database.mappers.daoToUser
 import com.tenmilelabs.infrastructure.database.mappers.daoToUserWithPassword
@@ -10,11 +11,6 @@ import com.tenmilelabs.infrastructure.database.tables.UserTable
 import io.ktor.util.logging.*
 import java.util.*
 
-interface UserRepository {
-    suspend fun createUser(email: String, username: String, passwordHash: String): User?
-    suspend fun findUserByEmail(email: String): UserWithPassword?
-    suspend fun findUserById(userId: UUID): User?
-}
 
 class PostgresUserRepository(private val log: Logger) : UserRepository {
 

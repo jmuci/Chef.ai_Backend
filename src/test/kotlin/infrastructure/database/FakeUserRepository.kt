@@ -2,7 +2,7 @@ package com.tenmilelabs.infrastructure.database
 
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.domain.model.UserWithPassword
-import com.tenmilelabs.infrastructure.database.repositoryImpl.UserRepository
+import com.tenmilelabs.domain.repository.UserRepository
 import kotlinx.datetime.Clock
 import java.util.*
 

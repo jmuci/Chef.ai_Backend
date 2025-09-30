@@ -10,7 +10,7 @@ import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipesRep
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresUserRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
-import com.tenmilelabs.infrastructure.database.repositoryImpl.UserRepository
+import com.tenmilelabs.domain.repository.UserRepository
 import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
 import io.ktor.server.netty.*

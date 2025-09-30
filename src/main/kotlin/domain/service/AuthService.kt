@@ -5,7 +5,7 @@ import com.tenmilelabs.application.dto.*
 import com.tenmilelabs.domain.exception.*
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
-import com.tenmilelabs.infrastructure.database.repositoryImpl.UserRepository
+import com.tenmilelabs.domain.repository.UserRepository
 import io.ktor.util.logging.*
 import kotlinx.datetime.Clock
 import java.security.MessageDigest
