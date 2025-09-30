@@ -1,6 +1,7 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.infrastructure.database.mappers
 
 import com.tenmilelabs.domain.model.RefreshToken
+import com.tenmilelabs.infrastructure.database.dao.RefreshTokenDAO
 
 fun daoToRefreshToken(dao: RefreshTokenDAO): RefreshToken = RefreshToken(
     id = dao.id.toString(),

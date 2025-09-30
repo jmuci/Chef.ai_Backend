@@ -1,4 +1,4 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.domain.repository
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.domain.model.Label

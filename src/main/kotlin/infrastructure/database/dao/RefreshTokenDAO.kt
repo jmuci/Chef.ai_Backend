@@ -1,5 +1,6 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.infrastructure.database.dao
 
+import com.tenmilelabs.infrastructure.database.tables.RefreshTokenTable
 import org.jetbrains.exposed.dao.UUIDEntity
 import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.dao.id.EntityID

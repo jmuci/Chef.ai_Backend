@@ -1,10 +1,16 @@
 package com.tenmilelabs.application.service
 
+import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.auth.configureJwtAuth
 import com.tenmilelabs.infrastructure.database.*
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipesRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRefreshTokenRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresUserRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.UserRepository
 import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
 import io.ktor.server.netty.*

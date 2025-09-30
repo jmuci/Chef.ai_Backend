@@ -3,6 +3,7 @@ package com.tenmilelabs.infrastructure.database
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
+import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository.Companion.TEST_USER_ID
 import java.util.*
 

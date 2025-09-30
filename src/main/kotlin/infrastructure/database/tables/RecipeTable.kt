@@ -1,4 +1,4 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.infrastructure.database.tables
 
 import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.kotlin.datetime.CurrentTimestamp

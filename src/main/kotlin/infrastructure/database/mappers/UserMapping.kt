@@ -1,7 +1,8 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.infrastructure.database.mappers
 
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.domain.model.UserWithPassword
+import com.tenmilelabs.infrastructure.database.dao.UserDAO
 
 fun daoToUser(dao: UserDAO): User = User(
     id = dao.id.value,

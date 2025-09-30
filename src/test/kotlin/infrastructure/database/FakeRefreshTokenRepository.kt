@@ -1,6 +1,7 @@
 package com.tenmilelabs.infrastructure.database
 
 import com.tenmilelabs.domain.model.RefreshToken
+import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import java.util.*
