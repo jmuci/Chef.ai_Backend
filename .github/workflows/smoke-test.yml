@@ -20,6 +20,6 @@ jobs:
 
       - name: Run smoke test with Docker Compose
         run: |
-          chmod +x ./smoke-test.sh
+          chmod +x ./src/test/system/smoke-test.sh
           docker compose -f docker-compose.smoketest.yaml down -v || true
-          ./smoke-test.sh
+          ./src/test/system/smoke-test.sh

@@ -22,7 +22,7 @@ COPY --from=builder /app/build/libs/*-all.jar app.jar
 RUN apt-get update && apt-get install -y postgresql-client
 
 # Script to wait for DB to be ready
-COPY wait-for-db.sh /wait-for-db.sh
+COPY src/test/sytem/wait-for-db.sh /wait-for-db.sh
 
 
 # Run
