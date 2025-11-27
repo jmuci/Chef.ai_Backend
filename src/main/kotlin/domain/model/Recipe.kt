@@ -28,6 +28,8 @@ data class Recipe(
     val imageUrl: String,
     val imageUrlThumbnail: String,
     val createdAt: String = "",
+    val userId: String = "", // Owner of the recipe
+    val isPublic: Boolean = false // Whether recipe is publicly accessible
 )
 
 data class RecipeList(

@@ -11,12 +11,34 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
 
     suspend fun getAllRecipes(): List<Recipe> = recipesRepository.allRecipes()
 
+    suspend fun getRecipesByUserId(userId: String): List<Recipe> =
+        recipesRepository.recipesByUserId(userId)
+
+    suspend fun getPublicRecipes(): List<Recipe> =
+        recipesRepository.publicRecipes()
+
+    suspend fun getAccessibleRecipes(userId: String): List<Recipe> {
+        // Get user's own recipes and public recipes
+        val userRecipes = recipesRepository.recipesByUserId(userId)
+        val publicRecipes = recipesRepository.publicRecipes()
+        return (userRecipes + publicRecipes).distinctBy { it.uuid }
+    }
+
     suspend fun getRecipesByLabel(label: Label): List<Recipe> =
         recipesRepository.recipesByLabel(label = label)
 
-    suspend fun createRecipe(request: CreateRecipeRequest): RecipeResponse? {
+    suspend fun getRecipeById(id: String, userId: String): Recipe? {
+        val recipe = recipesRepository.recipeById(id)
+        return if (recipe != null && (recipe.userId == userId || recipe.isPublic)) {
+            recipe
+        } else {
+            null
+        }
+    }
+
+    suspend fun createRecipe(request: CreateRecipeRequest, userId: String): RecipeResponse? {
         try {
-            return RecipeResponse(recipesRepository.addRecipe(request))
+            return RecipeResponse(recipesRepository.addRecipe(request, userId))
         } catch (ex: IllegalArgumentException) {
             log.error(
                 "400: Failed to create recipe for $request. Some parameter is missing or malformed! ${request.label} ${request.prepTimeMins}",
@@ -24,5 +46,9 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
             )
         }
         return null
+    }
+
+    suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
+        return recipesRepository.removeRecipe(recipeId, userId)
     }
 }

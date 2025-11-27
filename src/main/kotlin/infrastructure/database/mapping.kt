@@ -23,7 +23,8 @@ object RecipeTable : UUIDTable("recipe", "uuid") {
     val imageUrl = text("image_url")
     val imageUrlThumbnail = text("image_url_thumbnail")
     val createdAt = timestamp("created_at").defaultExpression(CurrentTimestamp)
-
+    val userId = varchar("user_id", 36) // UUID as string
+    val isPublic = bool("is_public").default(false)
 }
 
 class RecipeDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
@@ -38,6 +39,8 @@ class RecipeDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
     var imageUrl by RecipeTable.imageUrl
     var imageUrlThumbnail by RecipeTable.imageUrlThumbnail
     var createdAt by RecipeTable.createdAt
+    var userId by RecipeTable.userId
+    var isPublic by RecipeTable.isPublic
 }
 
 suspend fun <T> suspendTransaction(block: Transaction.() -> T): T =
@@ -55,4 +58,6 @@ fun daoToModel(dao: RecipeDAO): Recipe =
         dao.imageUrl,
         dao.imageUrlThumbnail,
         dao.createdAt.toString(),
+        dao.userId,
+        dao.isPublic
     )
