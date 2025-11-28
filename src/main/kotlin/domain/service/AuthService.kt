@@ -15,30 +15,34 @@ class AuthService(
 ) {
 
     suspend fun register(request: RegisterRequest): AuthResponse? {
-        // Validate email format
-        if (!isValidEmail(request.email)) {
-            log.warn("Invalid email format: ${request.email}")
+        // Validate and sanitize inputs
+        val validation = InputValidator.validateRegistrationInput(
+            request.email,
+            request.username,
+            request.password
+        )
+
+        if (!validation.isValid) {
+            log.warn("Registration validation failed: ${validation.errorMessage}")
             return null
         }
 
-        // Validate password strength
-        if (!isValidPassword(request.password)) {
-            log.warn("Password does not meet requirements")
-            return null
-        }
+        // Sanitize inputs
+        val sanitizedEmail = InputValidator.sanitizeEmail(request.email)
+        val sanitizedUsername = InputValidator.sanitizeUsername(request.username)
 
         // Check if user already exists
-        val existingUser = userRepository.findUserByEmail(request.email)
+        val existingUser = userRepository.findUserByEmail(sanitizedEmail)
         if (existingUser != null) {
-            log.warn("User already exists with email: ${request.email}")
+            log.warn("User already exists with email: $sanitizedEmail")
             return null
         }
 
         // Hash password
         val passwordHash = hashPassword(request.password)
 
-        // Create user
-        val user = userRepository.createUser(request.email, request.username, passwordHash)
+        // Create user with sanitized inputs
+        val user = userRepository.createUser(sanitizedEmail, sanitizedUsername, passwordHash)
             ?: return null
 
         // Generate JWT token
@@ -53,16 +57,30 @@ class AuthService(
     }
 
     suspend fun login(request: LoginRequest): AuthResponse? {
+        // Validate inputs
+        val validation = InputValidator.validateLoginInput(request.email, request.password)
+        if (!validation.isValid) {
+            log.warn("Login validation failed: ${validation.errorMessage}")
+            // Use constant-time delay to prevent timing attacks
+            simulatePasswordCheck()
+            return null
+        }
+
+        // Sanitize email
+        val sanitizedEmail = InputValidator.sanitizeEmail(request.email)
+
         // Find user by email
-        val user = userRepository.findUserByEmail(request.email)
+        val user = userRepository.findUserByEmail(sanitizedEmail)
         if (user == null) {
-            log.warn("User not found with email: ${request.email}")
+            log.warn("User not found with email: $sanitizedEmail")
+            // Use constant-time delay to prevent timing attacks
+            simulatePasswordCheck()
             return null
         }
 
         // Verify password
         if (!verifyPassword(request.password, user.passwordHash)) {
-            log.warn("Invalid password for user: ${request.email}")
+            log.warn("Invalid password for user: $sanitizedEmail")
             return null
         }
 
@@ -89,15 +107,22 @@ class AuthService(
         return BCrypt.verifyer().verify(password.toCharArray(), hash).verified
     }
 
-    private fun isValidEmail(email: String): Boolean {
-        val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
-        return email.matches(emailRegex)
-    }
-
-    private fun isValidPassword(password: String): Boolean {
-        // At least 8 characters, contains letter and number
-        return password.length >= 8 &&
-                password.any { it.isLetter() } &&
-                password.any { it.isDigit() }
+    /**
+     * Simulate password check to prevent timing attacks
+     * This ensures constant time response whether user exists or not
+     */
+    private fun simulatePasswordCheck() {
+        try {
+            // Perform a dummy BCrypt hash to match the time of a real password check
+            // Using a valid pre-computed BCrypt hash of "dummy-password"
+            BCrypt.verifyer().verify(
+                "wrong-password".toCharArray(),
+                "\$2a\$12\$LQDHPwzzPWFERYtY3KfQaeFmIaM5b7YQ7GxJYqG.N7GnXvLqYG5Ai" // Hash of "dummy-password"
+            )
+        } catch (e: Exception) {
+            // If somehow the dummy verification fails, we still want to consume time
+            // Fall back to hashing a dummy password
+            BCrypt.withDefaults().hashToString(12, "dummy-password".toCharArray())
+        }
     }
 }

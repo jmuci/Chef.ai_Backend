@@ -25,4 +25,13 @@ class JwtService(
             .withExpiresAt(Date(System.currentTimeMillis() + expirationMs))
             .sign(Algorithm.HMAC256(secret))
     }
+
+    fun verifyToken(token: String): String? {
+        return try {
+            val decodedJWT = verifier.verify(token)
+            decodedJWT.getClaim("userId").asString()
+        } catch (e: Exception) {
+            null
+        }
+    }
 }
