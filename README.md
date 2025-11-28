@@ -22,6 +22,16 @@ Here's a list of features included in this project:
 | [kotlinx.serialization](https://start.ktor.io/p/kotlinx-serialization) | Handles JSON serialization using kotlinx.serialization library                                   |
 | [Thymeleaf](https://ktor.io/docs/server-thymeleaf.html)                | Thymeleaf is a modern server-side Java template engine for both web and standalone environments. 
 
+## Verifications 
+
+Unit tests run on PRs in Github
+
+### End to End Smoke Test
+
+```bash
+./smoke-test.sh
+```
+
 ## Building & Running
 
 To build or run the project, use one of the following tasks:

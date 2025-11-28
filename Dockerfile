@@ -18,6 +18,18 @@ WORKDIR /app
 # Copy fat jar
 COPY --from=builder /app/build/libs/*-all.jar app.jar
 
+# Utility used to check that
+RUN apt-get update && apt-get install -y postgresql-client
+
+# Script to wait for DB to be ready
+COPY wait-for-db.sh /wait-for-db.sh
+
+
 # Run
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+#ENTRYPOINT ["java", "-jar", "app.jar"]
