@@ -40,7 +40,11 @@ class ApplicationTest {
     @Test
     fun testRoot() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()
+            )
         }
         client.get("/").apply {
             assertEquals(HttpStatusCode.OK, status)
@@ -51,7 +55,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundByLabel() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -74,7 +78,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundByName() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -99,7 +103,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundById() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -124,7 +128,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeDeletedById() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -152,7 +156,7 @@ class ApplicationTest {
     @Test
     fun invalidLabelProduces400() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -171,7 +175,7 @@ class ApplicationTest {
     @Test
     fun unusedLabelProduces404() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -191,7 +195,7 @@ class ApplicationTest {
     @Test
     fun newRecipesCanBeAdded() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -236,7 +240,7 @@ class ApplicationTest {
     @Test
     fun postCreateRecipeRequest_withWrongLabel() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -273,7 +277,7 @@ class ApplicationTest {
     @Test
     fun newRecipesFailToBeAddedWithInvalidLabel() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -308,7 +312,7 @@ class ApplicationTest {
     @Test
     fun userCanRegister() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -338,7 +342,7 @@ class ApplicationTest {
     @Test
     fun userCannotRegisterWithDuplicateEmail() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -370,7 +374,7 @@ class ApplicationTest {
     @Test
     fun userCanLogin() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -410,7 +414,7 @@ class ApplicationTest {
     @Test
     fun userCannotLoginWithWrongPassword() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -445,7 +449,7 @@ class ApplicationTest {
     @Test
     fun unauthorizedRequestReturns401() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -461,7 +465,7 @@ class ApplicationTest {
     @Test
     fun invalidTokenReturns401() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {

@@ -63,9 +63,11 @@ class TimingAttackTest {
     @Test
     fun `login with non-existent user should not throw exception`() = runTest {
         val userRepository = com.tenmilelabs.infrastructure.database.FakeUserRepository()
+        val refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()
         val jwtService = JwtService("test-secret", "test-issuer", "test-audience")
         val authService = AuthService(
             userRepository,
+            refreshTokenRepository,
             jwtService,
             io.ktor.util.logging.KtorSimpleLogger("TimingAttackTest")
         )

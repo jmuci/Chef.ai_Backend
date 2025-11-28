@@ -40,7 +40,7 @@ class ApplicationJsonPathTest {
     @Test
     fun recipesCanBeFound() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -61,7 +61,7 @@ class ApplicationJsonPathTest {
     @Test
     fun recipesCanBeFoundByLabel() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository())
+            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
 
         val client = createClient {

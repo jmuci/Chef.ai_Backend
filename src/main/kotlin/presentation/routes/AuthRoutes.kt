@@ -2,6 +2,7 @@ package com.tenmilelabs.presentation.routes
 
 import com.tenmilelabs.application.dto.ErrorResponse
 import com.tenmilelabs.application.dto.LoginRequest
+import com.tenmilelabs.application.dto.RefreshTokenRequest
 import com.tenmilelabs.application.dto.RegisterRequest
 import com.tenmilelabs.domain.service.AuthService
 import io.ktor.http.*
@@ -54,6 +55,27 @@ fun Route.authRoutes(authService: AuthService) {
                 }
             } catch (ex: Exception) {
                 application.log.error("Error during login", ex)
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request format"))
+            }
+        }
+
+        post("/refresh") {
+            try {
+                val request = call.receive<RefreshTokenRequest>()
+
+                if (request.refreshToken.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("Refresh token is required"))
+                    return@post
+                }
+
+                val response = authService.refreshToken(request)
+                if (response != null) {
+                    call.respond(HttpStatusCode.OK, response)
+                } else {
+                    call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid or expired refresh token"))
+                }
+            } catch (ex: Exception) {
+                application.log.error("Error during token refresh", ex)
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid request format"))
             }
         }
