@@ -23,7 +23,7 @@ object RecipeTable : UUIDTable("recipe", "uuid") {
     val imageUrl = text("image_url")
     val imageUrlThumbnail = text("image_url_thumbnail")
     val createdAt = timestamp("created_at").defaultExpression(CurrentTimestamp)
-    val userId = varchar("user_id", 36) // UUID as string
+    val userId = uuid("user_id")
     val isPublic = bool("is_public").default(false)
 }
 
@@ -58,6 +58,6 @@ fun daoToModel(dao: RecipeDAO): Recipe =
         dao.imageUrl,
         dao.imageUrlThumbnail,
         dao.createdAt.toString(),
-        dao.userId,
+        dao.userId.toString(),
         dao.isPublic
     )

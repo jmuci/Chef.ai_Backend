@@ -2,6 +2,7 @@ package com.tenmilelabs.domain.service
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.tenmilelabs.application.dto.*
+import com.tenmilelabs.domain.exception.*
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.infrastructure.database.RefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.UserRepository
@@ -19,7 +20,7 @@ class AuthService(
     private val log: Logger
 ) {
 
-    suspend fun register(request: RegisterRequest): AuthResponse? {
+    suspend fun register(request: RegisterRequest): AuthResponse {
         // Validate and sanitize inputs
         val validation = InputValidator.validateRegistrationInput(
             request.email,
@@ -29,7 +30,7 @@ class AuthService(
 
         if (!validation.isValid) {
             log.warn("Registration validation failed: ${validation.errorMessage}")
-            return null
+            throw ValidationException(validation.errorMessage ?: "Invalid input")
         }
 
         // Sanitize inputs
@@ -40,7 +41,7 @@ class AuthService(
         val existingUser = userRepository.findUserByEmail(sanitizedEmail)
         if (existingUser != null) {
             log.warn("User already exists with email: $sanitizedEmail")
-            return null
+            throw UserAlreadyExistsException("User with email $sanitizedEmail already exists")
         }
 
         // Hash password
@@ -48,20 +49,20 @@ class AuthService(
 
         // Create user with sanitized inputs
         val user = userRepository.createUser(sanitizedEmail, sanitizedUsername, passwordHash)
-            ?: return null
+            ?: throw AuthInternalException("Failed to create user")
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id, user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
     }
 
-    suspend fun login(request: LoginRequest): AuthResponse? {
+    suspend fun login(request: LoginRequest): AuthResponse {
         // Validate inputs
         val validation = InputValidator.validateLoginInput(request.email, request.password)
         if (!validation.isValid) {
             log.warn("Login validation failed: ${validation.errorMessage}")
             // Use constant-time delay to prevent timing attacks
             simulatePasswordCheck()
-            return null
+            throw ValidationException(validation.errorMessage ?: "Invalid input")
         }
 
         // Sanitize email
@@ -73,32 +74,36 @@ class AuthService(
             log.warn("User not found with email: $sanitizedEmail")
             // Use constant-time delay to prevent timing attacks
             simulatePasswordCheck()
-            return null
+            throw InvalidCredentialsException("Invalid email or password")
         }
 
         // Verify password
         if (!verifyPassword(request.password, user.passwordHash)) {
             log.warn("Invalid password for user: $sanitizedEmail")
-            return null
+            throw InvalidCredentialsException("Invalid email or password")
         }
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id, user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
     }
 
-    suspend fun getUserById(userId: String): User? {
+    suspend fun getUserById(userId: UUID): User? {
         return userRepository.findUserById(userId)
     }
 
     /**
      * Refresh access token using a refresh token
      * Implements token rotation: invalidates old refresh token and issues new ones
+     * Throws InvalidRefreshTokenException for invalid/expired tokens
+     * Throws TokenReuseDetectedException if token reuse is detected
+     * Throws UserNotFoundException if user no longer exists
+     * Throws AuthInternalException for internal failures
      */
-    suspend fun refreshToken(request: RefreshTokenRequest): RefreshTokenResponse? {
+    suspend fun refreshToken(request: RefreshTokenRequest): RefreshTokenResponse {
         // Validate input
         if (request.refreshToken.isBlank()) {
             log.warn("Refresh token is blank")
-            return null
+            throw InvalidRefreshTokenException("Refresh token cannot be blank")
         }
 
         // Hash the incoming refresh token to look it up in database
@@ -106,17 +111,17 @@ class AuthService(
 
         // Find the refresh token in database
         val storedToken = refreshTokenRepository.findByTokenHash(tokenHash)
-        if (storedToken == null) {
-            log.warn("Refresh token not found in database")
-            return null
-        }
+            ?: run {
+                log.warn("Refresh token not found in database")
+                throw InvalidRefreshTokenException("Invalid refresh token")
+            }
 
-        // Check if token is revoked
+        // Check if token is revoked (token reuse detected)
         if (storedToken.isRevoked) {
             log.warn("Attempted reuse of revoked refresh token for user: ${storedToken.userId}")
             // Token reuse detected - revoke all tokens for this user (security breach)
             refreshTokenRepository.revokeAllUserTokens(storedToken.userId)
-            return null
+            throw TokenReuseDetectedException("Token reuse detected. All sessions have been terminated for security.")
         }
 
         // Check if token is expired
@@ -125,37 +130,31 @@ class AuthService(
         if (now >= expiresAt) {
             log.warn("Refresh token expired for user: ${storedToken.userId}")
             refreshTokenRepository.revokeToken(storedToken.id)
-            return null
+            throw InvalidRefreshTokenException("Refresh token has expired")
         }
 
         // Get user information
         val user = userRepository.findUserById(storedToken.userId)
-        if (user == null) {
-            log.warn("User not found for refresh token: ${storedToken.userId}")
-            refreshTokenRepository.revokeToken(storedToken.id)
-            return null
-        }
+            ?: run {
+                log.warn("User not found for refresh token: ${storedToken.userId}")
+                refreshTokenRepository.revokeToken(storedToken.id)
+                throw UserNotFoundException("User not found")
+            }
 
         // Generate new tokens BEFORE revoking old one
         // This ensures we have the new token ready before invalidating the old one
-        val newAccessToken = jwtService.generateToken(user.id, user.email)
+        val newAccessToken = jwtService.generateToken(user.id.toString(), user.email)
         val newRefreshTokenString = jwtService.generateRefreshToken()
         val newRefreshTokenHash = hashRefreshToken(newRefreshTokenString)
 
         // Store new refresh token FIRST
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
-        val newStoredToken = refreshTokenRepository.createRefreshToken(
+        refreshTokenRepository.createRefreshToken(
             userId = user.id,
             tokenHash = newRefreshTokenHash,
             expiresAt = refreshExpiresAt
-        )
-
-        if (newStoredToken == null) {
-            log.error("Failed to store new refresh token for user: ${user.id}")
-            // Old token is still valid - user can retry
-            return null
-        }
+        ) ?: throw AuthInternalException("Failed to store new refresh token for user: ${user.id}")
 
         // Token rotation: Revoke the old token AFTER new one is safely stored
         // If revocation fails, the new token is already valid, so return success anyway
@@ -170,7 +169,7 @@ class AuthService(
         return RefreshTokenResponse(
             accessToken = newAccessToken,
             refreshToken = newRefreshTokenString,
-            userId = user.id,
+            userId = user.id.toString(),
             expiresIn = jwtService.getAccessTokenExpirationSeconds()
         )
     }
@@ -178,13 +177,14 @@ class AuthService(
     /**
      * Revoke all refresh tokens for a user (useful for logout from all devices)
      */
-    suspend fun revokeAllUserTokens(userId: String): Int {
+    suspend fun revokeAllUserTokens(userId: UUID): Int {
         return refreshTokenRepository.revokeAllUserTokens(userId)
     }
 
     /**
      * Generate and store both access and refresh tokens for a user
-     * Returns AuthResponse with tokens or null if token storage fails
+     * Returns AuthResponse with tokens
+     * Throws AuthInternalException if token storage fails
      *
      * Accepts both User and UserWithPassword types since they share the same essential fields
      */
@@ -192,7 +192,7 @@ class AuthService(
         userId: String,
         email: String,
         username: String
-    ): AuthResponse? {
+    ): AuthResponse {
         // Generate tokens
         val accessToken = jwtService.generateToken(userId, email)
         val refreshTokenString = jwtService.generateRefreshToken()
@@ -202,16 +202,11 @@ class AuthService(
         val now = Clock.System.now()
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
-        val storedToken = refreshTokenRepository.createRefreshToken(
-            userId = userId,
+        refreshTokenRepository.createRefreshToken(
+            userId = UUID.fromString(userId),
             tokenHash = refreshTokenHash,
             expiresAt = refreshExpiresAt
-        )
-
-        if (storedToken == null) {
-            log.error("Failed to store refresh token for user: $userId")
-            // Continue anyway - user can try again
-        }
+        ) ?: throw AuthInternalException("Failed to store refresh token for user: $userId")
 
         return AuthResponse(
             token = accessToken,

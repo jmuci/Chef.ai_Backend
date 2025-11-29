@@ -6,11 +6,11 @@ import kotlinx.datetime.Clock
 import java.util.*
 
 class FakeUserRepository : UserRepository {
-    private val users = mutableMapOf<String, UserWithPassword>()
+    private val users = mutableMapOf<UUID, UserWithPassword>()
 
     companion object {
         // Fixed user ID for test@example.com to match FakeRecipesRepository's "user1"
-        const val TEST_USER_ID = "user1"
+        val TEST_USER_ID: UUID = UUID.fromString("f81d4fae-7dec-11d0-a765-00a0c91e6bf6")
     }
 
     override suspend fun createUser(email: String, username: String, passwordHash: String): User? {
@@ -20,7 +20,7 @@ class FakeUserRepository : UserRepository {
         }
 
         // Use fixed ID for test user, random for others
-        val userId = if (email == "test@example.com") TEST_USER_ID else UUID.randomUUID().toString()
+        val userId = if (email == "test@example.com") TEST_USER_ID else UUID.randomUUID()
         val now = Clock.System.now().toString()
         val userWithPassword = UserWithPassword(
             id = userId,
@@ -44,7 +44,7 @@ class FakeUserRepository : UserRepository {
         return users.values.find { it.email == email }
     }
 
-    override suspend fun findUserById(userId: String): User? {
+    override suspend fun findUserById(userId: UUID): User? {
         val userWithPassword = users[userId] ?: return null
         return User(
             id = userWithPassword.id,

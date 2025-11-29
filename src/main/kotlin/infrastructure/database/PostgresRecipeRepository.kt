@@ -19,7 +19,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
         }
     }
 
-    override suspend fun recipesByUserId(userId: String): List<Recipe> = suspendTransaction {
+    override suspend fun recipesByUserId(userId: UUID): List<Recipe> = suspendTransaction {
         RecipeDAO
             .find { RecipeTable.userId eq userId }
             .map(::daoToModel)
@@ -51,7 +51,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
             ?.let(::daoToModel)
     }
 
-    override suspend fun recipeByIdAndUserId(id: String, userId: String): Recipe? = suspendTransaction {
+    override suspend fun recipeByIdAndUserId(id: String, userId: UUID): Recipe? = suspendTransaction {
         RecipeDAO
             .find { (RecipeTable.id eq UUID.fromString(id)) and (RecipeTable.userId eq userId) }
             .limit(1)
@@ -59,7 +59,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
             .firstOrNull()
     }
 
-    override suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: String): String = suspendTransaction {
+    override suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: UUID): String = suspendTransaction {
         val recipeDAO = RecipeDAO.new {
             title = recipeRequest.title
             description = recipeRequest.description
@@ -75,7 +75,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
         recipeDAO.id.toString()
     }
 
-    override suspend fun removeRecipe(uuid: String, userId: String): Boolean = suspendTransaction {
+    override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean = suspendTransaction {
         val rowsDeleted = RecipeTable.deleteWhere {
             (RecipeTable.id eq UUID.fromString(uuid)) and (RecipeTable.userId eq userId)
         }

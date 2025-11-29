@@ -6,12 +6,10 @@ import java.sql.Connection
 import java.sql.DriverManager
 
 fun configureDatabases() {
-    Database.connect(
-        "jdbc:postgresql://localhost:5432/chefai_db",
-        // previously: "jdbc:postgresql://db:5432/chefai_db", when running in docker, might not be neeeded anymore
-        user = "postgres",
-        password = "password"
-    )
+    val url = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/chefai_db"
+    val user = System.getenv("DB_USER") ?: "postgres"
+    val password = System.getenv("DB_PASSWORD") ?: "password"
+    Database.connect(url, user = user, password = password)
 }
 
 /**

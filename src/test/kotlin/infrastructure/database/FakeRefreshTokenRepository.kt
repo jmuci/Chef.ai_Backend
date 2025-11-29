@@ -8,7 +8,7 @@ import java.util.*
 class FakeRefreshTokenRepository : RefreshTokenRepository {
     private val tokens = mutableMapOf<String, RefreshToken>()
 
-    override suspend fun createRefreshToken(userId: String, tokenHash: String, expiresAt: Instant): RefreshToken? {
+    override suspend fun createRefreshToken(userId: UUID, tokenHash: String, expiresAt: Instant): RefreshToken {
         val tokenId = UUID.randomUUID().toString()
         val now = Clock.System.now()
         val token = RefreshToken(
@@ -41,7 +41,7 @@ class FakeRefreshTokenRepository : RefreshTokenRepository {
         }
     }
 
-    override suspend fun revokeAllUserTokens(userId: String): Int {
+    override suspend fun revokeAllUserTokens(userId: UUID): Int {
         val now = Clock.System.now().toString()
         var count = 0
         tokens.values.filter { it.userId == userId && !it.isRevoked }.forEach { token ->

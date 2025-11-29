@@ -1,13 +1,14 @@
 package com.tenmilelabs.domain.model
 
 import kotlinx.serialization.Serializable
+import java.util.UUID
 
 /**
  * Domain model for refresh token
  */
 data class RefreshToken(
     val id: String,
-    val userId: String,
+    val userId: UUID,
     val tokenHash: String,
     val expiresAt: String,
     val createdAt: String,

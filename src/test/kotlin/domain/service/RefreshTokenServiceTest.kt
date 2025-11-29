@@ -12,9 +12,10 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.security.MessageDigest
 import java.util.*
+import com.tenmilelabs.domain.exception.*
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -72,19 +73,19 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    fun `refresh token with invalid token returns null`() = runTest {
+    fun `refresh token with invalid token throws exception`() = runTest {
         val refreshRequest = RefreshTokenRequest("invalid-token")
-        val refreshResponse = authService.refreshToken(refreshRequest)
-
-        assertNull(refreshResponse)
+        assertFailsWith<InvalidRefreshTokenException> {
+            authService.refreshToken(refreshRequest)
+        }
     }
 
     @Test
-    fun `refresh token with blank token returns null`() = runTest {
+    fun `refresh token with blank token throws exception`() = runTest {
         val refreshRequest = RefreshTokenRequest("")
-        val refreshResponse = authService.refreshToken(refreshRequest)
-
-        assertNull(refreshResponse)
+        assertFailsWith<InvalidRefreshTokenException> {
+            authService.refreshToken(refreshRequest)
+        }
     }
 
     @Test
@@ -107,15 +108,17 @@ class RefreshTokenServiceTest {
 
         val newRefreshToken = refreshResponse1.refreshToken
 
-        // Try to reuse the original token - should fail
+        // Try to reuse the original token - should throw TokenReuseDetectedException
         val refreshRequest2 = RefreshTokenRequest(originalRefreshToken)
-        val refreshResponse2 = authService.refreshToken(refreshRequest2)
-        assertNull(refreshResponse2, "Reused token should be rejected")
+        assertFailsWith<TokenReuseDetectedException>("Reused token should be rejected") {
+            authService.refreshToken(refreshRequest2)
+        }
 
         // Even the new token should now be revoked (security breach detected)
         val refreshRequest3 = RefreshTokenRequest(newRefreshToken)
-        val refreshResponse3 = authService.refreshToken(refreshRequest3)
-        assertNull(refreshResponse3, "All tokens should be revoked after reuse detection")
+        assertFailsWith<TokenReuseDetectedException>("All tokens should be revoked after reuse detection") {
+            authService.refreshToken(refreshRequest3)
+        }
     }
 
     @Test
@@ -129,7 +132,7 @@ class RefreshTokenServiceTest {
         val authResponse = authService.register(registerRequest)
         assertNotNull(authResponse)
 
-        val userId = authResponse.userId
+        val userId = UUID.fromString(authResponse.userId)
         val expiredTokenString = jwtService.generateRefreshToken()
 
         // Manually create an expired token in the repository
@@ -146,10 +149,11 @@ class RefreshTokenServiceTest {
             expiresAt = pastTime
         )
 
-        // Try to use the expired token - should fail
+        // Try to use the expired token - should throw exception
         val refreshRequest = RefreshTokenRequest(expiredTokenString)
-        val refreshResponse = authService.refreshToken(refreshRequest)
-        assertNull(refreshResponse, "Expired token should be rejected")
+        assertFailsWith<InvalidRefreshTokenException>("Expired token should be rejected") {
+            authService.refreshToken(refreshRequest)
+        }
     }
 
     @Test
@@ -171,10 +175,11 @@ class RefreshTokenServiceTest {
         // "Delete" the user
         userRepository.clear()
 
-        // Try to refresh - should fail
+        // Try to refresh - should throw UserNotFoundException
         val refreshRequest = RefreshTokenRequest(refreshToken)
-        val refreshResponse = authService.refreshToken(refreshRequest)
-        assertNull(refreshResponse, "Token for deleted user should be rejected")
+        assertFailsWith<UserNotFoundException>("Token for deleted user should be rejected") {
+            authService.refreshToken(refreshRequest)
+        }
     }
 
     @Test
@@ -230,13 +235,15 @@ class RefreshTokenServiceTest {
         val userId = authResponse.userId
 
         // Revoke all tokens
-        val revokedCount = authService.revokeAllUserTokens(userId)
+        val revokedCount = authService.revokeAllUserTokens(UUID.fromString(userId))
         assertTrue(revokedCount >= 1, "Should have revoked at least one token")
 
-        // Try to use the original token - should fail
+        // Try to use the revoked token - should throw TokenReuseDetectedException
+        // (because revoked tokens trigger the reuse detection logic)
         val refreshRequest = RefreshTokenRequest(authResponse.refreshToken)
-        val refreshResponse = authService.refreshToken(refreshRequest)
-        assertNull(refreshResponse, "Revoked token should not work")
+        assertFailsWith<TokenReuseDetectedException>("Revoked token should trigger reuse detection") {
+            authService.refreshToken(refreshRequest)
+        }
     }
 
     @Test

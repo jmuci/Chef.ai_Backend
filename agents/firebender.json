@@ -18,7 +18,8 @@
             "Use Result/Either for error handling.",
             "Inject dependencies, never instantiate.",
             "No secrets or credentials in code.",
-            "Services must be stateless; state stored only in DB or caches."
+            "Services must be stateless; state stored only in DB or caches.",
+            "Never return nullable types. Throw typed exceptions and have the caller handle them "
           ]
         }
       ]

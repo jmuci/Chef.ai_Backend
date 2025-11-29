@@ -10,16 +10,16 @@ import org.jetbrains.exposed.sql.deleteWhere
 import java.util.*
 
 interface RefreshTokenRepository {
-    suspend fun createRefreshToken(userId: String, tokenHash: String, expiresAt: Instant): RefreshToken?
+    suspend fun createRefreshToken(userId: UUID, tokenHash: String, expiresAt: Instant): RefreshToken?
     suspend fun findByTokenHash(tokenHash: String): RefreshToken?
     suspend fun revokeToken(tokenId: String): Boolean
-    suspend fun revokeAllUserTokens(userId: String): Int
+    suspend fun revokeAllUserTokens(userId: UUID): Int
     suspend fun deleteExpiredTokens(): Int
 }
 
 class PostgresRefreshTokenRepository(private val log: Logger) : RefreshTokenRepository {
 
-    override suspend fun createRefreshToken(userId: String, tokenHash: String, expiresAt: Instant): RefreshToken? =
+    override suspend fun createRefreshToken(userId: UUID, tokenHash: String, expiresAt: Instant): RefreshToken? =
         suspendTransaction {
             try {
                 val tokenDAO = RefreshTokenDAO.new {
@@ -63,7 +63,7 @@ class PostgresRefreshTokenRepository(private val log: Logger) : RefreshTokenRepo
         }
     }
 
-    override suspend fun revokeAllUserTokens(userId: String): Int = suspendTransaction {
+    override suspend fun revokeAllUserTokens(userId: UUID): Int = suspendTransaction {
         try {
             val now = Clock.System.now()
             val tokens = RefreshTokenDAO.find {

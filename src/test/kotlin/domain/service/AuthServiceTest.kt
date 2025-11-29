@@ -2,14 +2,16 @@ package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.LoginRequest
 import com.tenmilelabs.application.dto.RegisterRequest
+import com.tenmilelabs.domain.exception.*
 import com.tenmilelabs.infrastructure.database.FakeUserRepository
 import io.ktor.util.logging.*
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AuthServiceTest {
@@ -63,9 +65,10 @@ class AuthServiceTest {
         val response1 = authService.register(request)
         assertNotNull(response1)
 
-        // Second registration with same email
-        val response2 = authService.register(request.copy(username = "user2"))
-        assertNull(response2)
+        // Second registration with same email - should throw exception
+        assertFailsWith<UserAlreadyExistsException> {
+            authService.register(request.copy(username = "user2"))
+        }
     }
 
     @Test
@@ -85,8 +88,9 @@ class AuthServiceTest {
                 username = "testuser",
                 password = "SecurePass123"
             )
-            val response = authService.register(request)
-            assertNull(response, "Email '$email' should have been rejected")
+            assertFailsWith<ValidationException>("Email '$email' should have been rejected") {
+                authService.register(request)
+            }
         }
     }
 
@@ -126,8 +130,9 @@ class AuthServiceTest {
                 username = "user$index",
                 password = password
             )
-            val response = authService.register(request)
-            assertNull(response, "Password '$password' should have been rejected")
+            assertFailsWith<ValidationException>("Password '$password' should have been rejected") {
+                authService.register(request)
+            }
         }
     }
 
@@ -204,14 +209,14 @@ class AuthServiceTest {
         )
         authService.register(registerRequest)
 
-        // Attempt login with wrong password
+        // Attempt login with wrong password - should throw exception
         val loginRequest = LoginRequest(
             email = "wrongpass@example.com",
             password = "WrongPass123"
         )
-        val response = authService.login(loginRequest)
-
-        assertNull(response)
+        assertFailsWith<InvalidCredentialsException> {
+            authService.login(loginRequest)
+        }
     }
 
     @Test
@@ -220,9 +225,9 @@ class AuthServiceTest {
             email = "nonexistent@example.com",
             password = "AnyPassword123"
         )
-        val response = authService.login(loginRequest)
-
-        assertNull(response)
+        assertFailsWith<InvalidCredentialsException> {
+            authService.login(loginRequest)
+        }
     }
 
     @Test
@@ -293,17 +298,18 @@ class AuthServiceTest {
         assertNotNull(registerResponse)
 
         // Get user by ID
-        val user = authService.getUserById(registerResponse.userId)
+        val user = authService.getUserById(UUID.fromString(registerResponse.userId))
         assertNotNull(user)
-        assertEquals(registerResponse.userId, user.id)
+        assertEquals(registerResponse.userId, user.id.toString())
         assertEquals("getuser@example.com", user.email)
         assertEquals("getuser", user.username)
     }
 
     @Test
     fun `getUserById should return null when user does not exist`() = runTest {
-        val user = authService.getUserById("non-existent-id")
-        assertNull(user)
+        // getUserById still returns null (not changed to throw exception)
+        val user = authService.getUserById(UUID.randomUUID())
+        assertEquals(null, user)
     }
 
     // Edge Cases and Security Tests
@@ -316,8 +322,9 @@ class AuthServiceTest {
             username = "",
             password = "SecurePass123"
         )
-        val response = authService.register(request)
-        assertNull(response, "Empty username should be rejected")
+        assertFailsWith<ValidationException>("Empty username should be rejected") {
+            authService.register(request)
+        }
     }
 
     @Test
@@ -329,8 +336,9 @@ class AuthServiceTest {
             username = longUsername,
             password = "SecurePass123"
         )
-        val response = authService.register(request)
-        assertNull(response, "Username longer than 100 characters should be rejected")
+        assertFailsWith<ValidationException>("Username longer than 100 characters should be rejected") {
+            authService.register(request)
+        }
     }
 
     @Test
@@ -390,8 +398,9 @@ class AuthServiceTest {
             username = "user!@#$%^&*()",
             password = "SecurePass123"
         )
-        val response = authService.register(request)
-        assertNull(response, "Username with special characters should be rejected for security")
+        assertFailsWith<ValidationException>("Username with special characters should be rejected for security") {
+            authService.register(request)
+        }
     }
 
     @Test
@@ -421,9 +430,11 @@ class AuthServiceTest {
         )
 
         val response1 = authService.register(request1)
-        val response2 = authService.register(request2)
-
         assertNotNull(response1)
-        assertNull(response2, "Same email in different case should be rejected as duplicate")
+
+        // Second registration with same email (different case) should throw exception
+        assertFailsWith<UserAlreadyExistsException>("Same email in different case should be rejected as duplicate") {
+            authService.register(request2)
+        }
     }
 }

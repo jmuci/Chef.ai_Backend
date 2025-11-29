@@ -9,7 +9,7 @@ import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 import java.util.*
 
 object RefreshTokenTable : UUIDTable("refresh_tokens", "id") {
-    val userId = varchar("user_id", 255).index()
+    val userId = uuid("user_id").index()
     val tokenHash = varchar("token_hash", 255).uniqueIndex() // Unique index - each token hash should be unique
     val expiresAt = timestamp("expires_at").index() // Index for efficient cleanup of expired tokens
     val createdAt = timestamp("created_at").clientDefault { kotlinx.datetime.Clock.System.now() }

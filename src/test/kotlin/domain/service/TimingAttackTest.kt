@@ -1,10 +1,11 @@
 package com.tenmilelabs.domain.service
 
 import at.favre.lib.crypto.bcrypt.BCrypt
+import com.tenmilelabs.domain.exception.InvalidCredentialsException
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TimingAttackTest {
@@ -61,7 +62,7 @@ class TimingAttackTest {
     }
 
     @Test
-    fun `login with non-existent user should not throw exception`() = runTest {
+    fun `login with non-existent user throws InvalidCredentialsException`() = runTest {
         val userRepository = com.tenmilelabs.infrastructure.database.FakeUserRepository()
         val refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()
         val jwtService = JwtService("test-secret", "test-issuer", "test-audience")
@@ -72,18 +73,16 @@ class TimingAttackTest {
             io.ktor.util.logging.KtorSimpleLogger("TimingAttackTest")
         )
 
-        // Try to login with non-existent user
+        // Try to login with non-existent user - should throw exception
         val request = com.tenmilelabs.application.dto.LoginRequest(
             email = "nonexistent@example.com",
             password = "anypassword123"
         )
 
-        try {
-            val result = authService.login(request)
-            assertNull(result, "Login with non-existent user should return null")
-            println("SUCCESS: Login with non-existent user returns null (no exception)")
-        } catch (e: Exception) {
-            throw AssertionError("Login should not throw exceptions, but got: ${e.javaClass.simpleName}: ${e.message}", e)
+        // The timing attack protection is still in place - simulatePasswordCheck() is called
+        // before throwing the exception, ensuring constant-time response
+        assertFailsWith<InvalidCredentialsException>("Login with non-existent user should throw InvalidCredentialsException") {
+            authService.login(request)
         }
     }
 }

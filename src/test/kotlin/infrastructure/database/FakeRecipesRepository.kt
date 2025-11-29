@@ -3,9 +3,11 @@ package com.tenmilelabs.infrastructure.database
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
+import com.tenmilelabs.infrastructure.database.FakeUserRepository.Companion.TEST_USER_ID
 import java.util.*
 
-class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
+class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository {
+
     val testRecipe1 = Recipe(
         uuid = "1",
         title = "Recipe 1",
@@ -15,7 +17,7 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 30,
-        userId = testUserId,
+        userId = testUserId.toString(),
         isPublic = false
     )
     val testRecipe2 = Recipe(
@@ -27,7 +29,7 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 40,
-        userId = testUserId,
+        userId = testUserId.toString(),
         isPublic = true
     )
     val testRecipe3 = Recipe(
@@ -63,7 +65,7 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 60,
-        userId = testUserId,
+        userId = testUserId.toString(),
         isPublic = false
     )
     val testRecipe6 = Recipe(
@@ -75,7 +77,7 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 60,
-        userId = testUserId,
+        userId = testUserId.toString(),
         isPublic = true
     )
     val testRecipeToBeDeleted1 = Recipe(
@@ -87,7 +89,7 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
         imageUrl = "http://example.com/image.jpg",
         imageUrlThumbnail = "http://example.com/thumb.jpg",
         prepTimeMins = 70,
-        userId = testUserId,
+        userId = testUserId.toString(),
         isPublic = false
     )
 
@@ -95,8 +97,8 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
 
     override suspend fun allRecipes(): List<Recipe> = recipes
 
-    override suspend fun recipesByUserId(userId: String): List<Recipe> =
-        recipes.filter { it.userId == userId }
+    override suspend fun recipesByUserId(userId: UUID): List<Recipe> =
+        recipes.filter { it.userId == userId.toString() }
 
     override suspend fun publicRecipes(): List<Recipe> =
         recipes.filter { it.isPublic }
@@ -107,10 +109,10 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
 
     override suspend fun recipeById(id: String) = recipes.find { it.uuid == id }
 
-    override suspend fun recipeByIdAndUserId(id: String, userId: String): Recipe? =
-        recipes.find { it.uuid == id && it.userId == userId }
+    override suspend fun recipeByIdAndUserId(id: String, userId: UUID): Recipe? =
+        recipes.find { it.uuid == id && it.userId == userId.toString() }
 
-    override suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: String): String {
+    override suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: UUID): String {
         if (recipeByTitle(recipeRequest.title) != null) {
             throw IllegalStateException("Cannot duplicate recipe titles!")
         }
@@ -123,13 +125,13 @@ class FakeRecipesRepository(testUserId: String = "user1") : RecipesRepository {
             imageUrl = recipeRequest.imageUrl,
             imageUrlThumbnail = recipeRequest.imageUrlThumbnail,
             prepTimeMins = Integer.valueOf(recipeRequest.prepTimeMins),
-            userId = userId,
+            userId = userId.toString(),
             isPublic = false
         )
         recipes.add(recipe)
         return recipe.uuid
     }
 
-    override suspend fun removeRecipe(uuid: String, userId: String): Boolean =
-        recipes.removeIf { it.uuid == uuid && it.userId == userId }
+    override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean =
+        recipes.removeIf { it.uuid == uuid && it.userId == userId.toString() }
 }
