@@ -6,8 +6,8 @@ import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.auth.userId
-import com.tenmilelabs.infrastructure.database.FilterFields
-import com.tenmilelabs.infrastructure.database.RecipesRepository
+import com.tenmilelabs.domain.repository.FilterFields
+import com.tenmilelabs.domain.repository.RecipesRepository
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*

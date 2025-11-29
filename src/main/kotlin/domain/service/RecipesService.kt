@@ -4,7 +4,7 @@ import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.dto.RecipeResponse
 import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
-import com.tenmilelabs.infrastructure.database.RecipesRepository
+import com.tenmilelabs.domain.repository.RecipesRepository
 import io.ktor.util.logging.*
 import java.util.UUID
 

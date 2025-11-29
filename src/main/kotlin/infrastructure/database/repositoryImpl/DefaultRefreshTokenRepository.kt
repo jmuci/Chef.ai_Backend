@@ -1,6 +1,10 @@
-package com.tenmilelabs.infrastructure.database
+package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.domain.model.RefreshToken
+import com.tenmilelabs.infrastructure.database.dao.RefreshTokenDAO
+import com.tenmilelabs.infrastructure.database.mappers.daoToRefreshToken
+import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
+import com.tenmilelabs.infrastructure.database.tables.RefreshTokenTable
 import io.ktor.util.logging.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -18,7 +22,6 @@ interface RefreshTokenRepository {
 }
 
 class PostgresRefreshTokenRepository(private val log: Logger) : RefreshTokenRepository {
-
     override suspend fun createRefreshToken(userId: UUID, tokenHash: String, expiresAt: Instant): RefreshToken? =
         suspendTransaction {
             try {
