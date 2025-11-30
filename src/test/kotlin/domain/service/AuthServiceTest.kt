@@ -302,7 +302,7 @@ class AuthServiceTest {
         assertNotNull(user)
         assertEquals(registerResponse.userId, user.id.toString())
         assertEquals("getuser@example.com", user.email)
-        assertEquals("getuser", user.username)
+        assertEquals("getuser", user.displayName)
     }
 
     @Test

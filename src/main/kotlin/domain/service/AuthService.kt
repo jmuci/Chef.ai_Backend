@@ -52,7 +52,7 @@ class AuthService(
             ?: throw AuthInternalException("Failed to create user")
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.displayName)
     }
 
     suspend fun login(request: LoginRequest): AuthResponse {
@@ -84,7 +84,7 @@ class AuthService(
         }
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
+        return generateAndStoreTokens(user.id.toString(), user.email, user.displayName)
     }
 
     suspend fun getUserById(userId: UUID): User? {
