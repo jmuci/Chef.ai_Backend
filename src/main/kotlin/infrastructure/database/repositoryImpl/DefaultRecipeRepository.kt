@@ -1,8 +1,6 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
-
 import com.tenmilelabs.application.dto.CreateRecipeRequest
-import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.infrastructure.database.dao.RecipeDAO
@@ -10,6 +8,7 @@ import com.tenmilelabs.infrastructure.database.mappers.daoToModel
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import io.ktor.util.logging.*
+import kotlinx.datetime.Clock
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
@@ -26,19 +25,13 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
 
     override suspend fun recipesByUserId(userId: UUID): List<Recipe> = suspendTransaction {
         RecipeDAO
-            .find { RecipeTable.userId eq userId }
+            .find { RecipeTable.creatorId eq userId }
             .map(::daoToModel)
     }
 
     override suspend fun publicRecipes(): List<Recipe> = suspendTransaction {
         RecipeDAO
-            .find { RecipeTable.isPublic eq true }
-            .map(::daoToModel)
-    }
-
-    override suspend fun recipesByLabel(label: Label): List<Recipe> = suspendTransaction {
-        RecipeDAO
-            .find { (RecipeTable.label eq label.toString()) }
+            .find { RecipeTable.privacy eq "public" }
             .map(::daoToModel)
     }
 
@@ -58,7 +51,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
 
     override suspend fun recipeByIdAndUserId(id: String, userId: UUID): Recipe? = suspendTransaction {
         RecipeDAO
-            .find { (RecipeTable.id eq UUID.fromString(id)) and (RecipeTable.userId eq userId) }
+            .find { (RecipeTable.id eq UUID.fromString(id)) and (RecipeTable.creatorId eq userId) }
             .limit(1)
             .map(::daoToModel)
             .firstOrNull()
@@ -68,21 +61,25 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
         val recipeDAO = RecipeDAO.new {
             title = recipeRequest.title
             description = recipeRequest.description
-            label = recipeRequest.label
-            prepTimeMins = Integer.valueOf(recipeRequest.prepTimeMins)
             imageUrl = recipeRequest.imageUrl
-            recipeUrl = recipeRequest.imageUrl
             imageUrlThumbnail = recipeRequest.imageUrlThumbnail
-            this.userId = userId
-            isPublic = false // Default to private
+            prepTimeMinutes = recipeRequest.prepTimeMinutes
+            cookTimeMinutes = recipeRequest.cookTimeMinutes
+            servings = recipeRequest.servings
+            creatorId = userId
+            recipeExternalUrl = recipeRequest.recipeExternalUrl
+            privacy = recipeRequest.privacy
+            updatedAt = System.currentTimeMillis()
+            deletedAt = null
+            syncState = "created"
+            serverUpdatedAt = Clock.System.now()
         }
-        //daoToModel(RecipeDAO.findById(recipeDAO.id)  ?: error("Inserted recipe with id=${recipeDAO.id} not found"))
         recipeDAO.id.toString()
     }
 
     override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean = suspendTransaction {
         val rowsDeleted = RecipeTable.deleteWhere {
-            (RecipeTable.id eq UUID.fromString(uuid)) and (RecipeTable.userId eq userId)
+            (RecipeTable.id eq UUID.fromString(uuid)) and (RecipeTable.creatorId eq userId)
         }
         rowsDeleted == 1
     }

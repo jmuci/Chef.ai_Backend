@@ -1,18 +1,21 @@
 package com.tenmilelabs.infrastructure.database.tables
 
 import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.CurrentTimestamp
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 
-object RecipeTable : UUIDTable("recipe", "uuid") {
-    val title = varchar("title", 200)
-    val label = varchar("label", 20) //TODO there should be a table for labels
+object RecipeTable : UUIDTable("recipes", "uuid") {
+    val title = text("title")
     val description = text("description")
-    val prepTimeMins = integer("prep_time_mins")
-    val recipeUrl = text("recipe_url")
-    val imageUrl = text("image_url")
-    val imageUrlThumbnail = text("image_url_thumbnail")
-    val createdAt = timestamp("created_at").defaultExpression(CurrentTimestamp)
-    val userId = uuid("user_id")
-    val isPublic = bool("is_public").default(false)
+    val imageUrl = text("imageUrl")
+    val imageUrlThumbnail = text("imageUrlThumbnail")
+    val prepTimeMinutes = integer("prepTimeMinutes")
+    val cookTimeMinutes = integer("cookTimeMinutes")
+    val servings = integer("servings")
+    val creatorId = uuid("creatorId")
+    val recipeExternalUrl = text("recipeExternalUrl").nullable()
+    val privacy = text("privacy")
+    val updatedAt = long("updatedAt")
+    val deletedAt = long("deletedAt").nullable()
+    val syncState = text("syncState")
+    val serverUpdatedAt = timestamp("serverUpdatedAt")
 }

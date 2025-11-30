@@ -26,7 +26,7 @@ class FakeUserRepository : UserRepository {
         val userWithPassword = UserWithPassword(
             id = userId,
             email = email,
-            username = username,
+            displayName = username,
             passwordHash = passwordHash,
             createdAt = now
         )
@@ -36,8 +36,10 @@ class FakeUserRepository : UserRepository {
         return User(
             id = userId,
             email = email,
-            username = username,
-            createdAt = now
+            displayName = username,
+            updatedAt = now,
+            avatarUrl = "",
+            createdAt = now,
         )
     }
 
@@ -50,7 +52,9 @@ class FakeUserRepository : UserRepository {
         return User(
             id = userWithPassword.id,
             email = userWithPassword.email,
-            username = userWithPassword.username,
+            displayName = userWithPassword.displayName,
+            updatedAt = userWithPassword.createdAt,
+            avatarUrl = "",
             createdAt = userWithPassword.createdAt
         )
     }
