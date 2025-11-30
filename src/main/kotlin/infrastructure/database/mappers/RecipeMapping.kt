@@ -1,6 +1,5 @@
 package com.tenmilelabs.infrastructure.database.mappers
 
-import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 import com.tenmilelabs.infrastructure.database.dao.RecipeDAO
 import kotlinx.coroutines.Dispatchers
@@ -11,17 +10,20 @@ suspend fun <T> suspendTransaction(block: Transaction.() -> T): T =
     newSuspendedTransaction(Dispatchers.IO, statement = block)
 
 fun daoToModel(dao: RecipeDAO): Recipe =
-    // TODO handle IllegalArgumentException
     Recipe(
-        dao.id.toString(),
-        dao.title,
-        Label.valueOf(dao.label),
-        dao.description,
-        dao.prepTimeMins,
-        dao.recipeUrl,
-        dao.imageUrl,
-        dao.imageUrlThumbnail,
-        dao.createdAt.toString(),
-        dao.userId.toString(),
-        dao.isPublic
+        uuid = dao.id.toString(),
+        title = dao.title,
+        description = dao.description,
+        imageUrl = dao.imageUrl,
+        imageUrlThumbnail = dao.imageUrlThumbnail,
+        prepTimeMinutes = dao.prepTimeMinutes,
+        cookTimeMinutes = dao.cookTimeMinutes,
+        servings = dao.servings,
+        creatorId = dao.creatorId.toString(),
+        recipeExternalUrl = dao.recipeExternalUrl,
+        privacy = enumValueOf(dao.privacy),
+        updatedAt = dao.updatedAt,
+        deletedAt = dao.deletedAt,
+        syncState = dao.syncState,
+        serverUpdatedAt = dao.serverUpdatedAt.toString()
     )

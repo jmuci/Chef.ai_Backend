@@ -10,13 +10,17 @@ class RecipeDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
     companion object : UUIDEntityClass<RecipeDAO>(RecipeTable)
 
     var title by RecipeTable.title
-    var label by RecipeTable.label
     var description by RecipeTable.description
-    var prepTimeMins by RecipeTable.prepTimeMins
-    var recipeUrl by RecipeTable.recipeUrl
     var imageUrl by RecipeTable.imageUrl
     var imageUrlThumbnail by RecipeTable.imageUrlThumbnail
-    var createdAt by RecipeTable.createdAt
-    var userId by RecipeTable.userId
-    var isPublic by RecipeTable.isPublic
+    var prepTimeMinutes by RecipeTable.prepTimeMinutes
+    var cookTimeMinutes by RecipeTable.cookTimeMinutes
+    var servings by RecipeTable.servings
+    var creatorId by RecipeTable.creatorId
+    var recipeExternalUrl by RecipeTable.recipeExternalUrl
+    var privacy by RecipeTable.privacy
+    var updatedAt by RecipeTable.updatedAt
+    var deletedAt by RecipeTable.deletedAt
+    var syncState by RecipeTable.syncState
+    var serverUpdatedAt by RecipeTable.serverUpdatedAt
 }
