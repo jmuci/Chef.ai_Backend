@@ -47,6 +47,23 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     deletedAt = null,
                     syncState = "created",
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
+                ),
+                Recipe(
+                    uuid = "3",
+                    title = "Recipe 3",
+                    description = "Another test recipe",
+                    imageUrl = "http://example.com/image3.jpg",
+                    imageUrlThumbnail = "http://example.com/thumb3.jpg",
+                    prepTimeMinutes = 40,
+                    cookTimeMinutes = 20,
+                    servings = 4,
+                    creatorId = UUID.randomUUID().toString(),
+                    recipeExternalUrl = "http://recipe.url2",
+                    privacy = Privacy.PRIVATE,
+                    updatedAt = 123456789,
+                    deletedAt = null,
+                    syncState = "created",
+                    serverUpdatedAt = "2023-01-01T00:00:00Z"
                 )
             )
         )
