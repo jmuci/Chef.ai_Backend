@@ -56,29 +56,6 @@ class ApplicationTest {
     }
 
     @Test
-    fun recipesCanBeFoundByLabel() = testApplication {
-        application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
-        }
-
-        val client = createClient {
-            install(ContentNegotiation) {
-                json()
-            }
-        }
-        val token = client.getAuthToken()
-
-        val response = client.get("/recipes/byLabel?label=Vegetarian") {
-            bearerAuth(token)
-        }
-        val body = response.bodyAsText()
-
-        assertEquals(HttpStatusCode.OK, response.status)
-        assertContains(body, "Recipe 3")
-        assertContains(body, "Description 3")
-    }
-
-    @Test
     fun recipesCanBeFoundByName() = testApplication {
         application {
             module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
@@ -157,45 +134,6 @@ class ApplicationTest {
     }
 
     @Test
-    fun invalidLabelProduces400() = testApplication {
-        application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
-        }
-
-        val client = createClient {
-            install(ContentNegotiation) {
-                json()
-            }
-        }
-        val token = client.getAuthToken()
-
-        val response = client.get("/recipes/byLabel?label=FooBAr") {
-            bearerAuth(token)
-        }
-        assertEquals(HttpStatusCode.BadRequest, response.status)
-    }
-
-    @Test
-    fun unusedLabelProduces404() = testApplication {
-        application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
-        }
-
-        val client = createClient {
-            install(ContentNegotiation) {
-                json()
-            }
-        }
-        val token = client.getAuthToken()
-
-        val response = client.get("/recipes/byLabel/Pescatarian") {
-            bearerAuth(token)
-        }
-        assertEquals(HttpStatusCode.NotFound, response.status)
-    }
-
-
-    @Test
     fun newRecipesCanBeAdded() = testApplication {
         application {
             module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
@@ -219,11 +157,14 @@ class ApplicationTest {
             setBody(
                 CreateRecipeRequest(
                     "swimming peaches",
-                    "French",
                     "Go to the beach",
-                    "45",
                     "https://example.com",
-                    "https://example.com"
+                    "https://example.com",
+                    45,
+                    24,
+                    4,
+                    "https://example.com",
+                    "PUBLIC"
                 )
             )
         }
@@ -241,7 +182,7 @@ class ApplicationTest {
     }
 
     @Test
-    fun postCreateRecipeRequest_withWrongLabel() = testApplication {
+    fun postCreateRecipeRequest_withWrongPrivacy() = testApplication {
         application {
             module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
@@ -264,11 +205,14 @@ class ApplicationTest {
             setBody(
                 CreateRecipeRequest(
                     "swimming peaches",
-                    "NotExists",
                     "Go to the beach",
-                    "45",
                     "https://example.com",
-                    "https://example.com"
+                    "https://example.com",
+                    45,
+                    24,
+                    4,
+                    "https://example.com",
+                    "INVALID"
                 )
             )
         }
@@ -276,9 +220,8 @@ class ApplicationTest {
         assertEquals(HttpStatusCode.BadRequest, response1.status)
     }
 
-
     @Test
-    fun newRecipesFailToBeAddedWithInvalidLabel() = testApplication {
+    fun newRecipesFailToBeAddedWithInvalidPrivacy() = testApplication {
         application {
             module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
         }
@@ -300,10 +243,12 @@ class ApplicationTest {
                 listOf(
                     "title" to "swimming peaches",
                     "description" to "Go to the beach",
-                    "label" to "Invalid",
-                    "prepTimeMins" to "45",
-                    "recipeUrl" to "https://example.com",
-                    "imageUrl" to "https://example.com"
+                    "privacy" to "INVALID",
+                    "prepTimeMinutes" to "45",
+                    "cookTimeMinutes" to "24",
+                    "servings" to "4",
+                    "imageUrl" to "https://example.com",
+                    "recipeUrl" to "https://example.com"
                 ).formUrlEncode()
             )
         }
