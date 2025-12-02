@@ -2,9 +2,6 @@ package com.tenmilelabs.infrastructure.database.tables
 
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.CustomFunction
-import org.jetbrains.exposed.sql.Expression
-import org.jetbrains.exposed.sql.kotlin.datetime.KotlinInstantColumnType
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 
 object RefreshTokenTable : UUIDTable("refresh_tokens", "uuid") {

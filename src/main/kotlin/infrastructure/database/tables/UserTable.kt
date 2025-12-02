@@ -2,9 +2,7 @@ package com.tenmilelabs.infrastructure.database.tables
 
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.dao.id.UUIDTable
-import org.jetbrains.exposed.sql.kotlin.datetime.CurrentTimestampWithTimeZone
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
-import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
 
 
 object UserTable : UUIDTable("users", "uuid") {
