@@ -6,11 +6,13 @@ import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import java.util.UUID
 
-class UserDAO(id: EntityID<UUID>) : UUIDEntity(id) {
+class UserDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
     companion object : UUIDEntityClass<UserDAO>(UserTable)
-
+    var username by UserTable.user_name
+    var displayName by UserTable.display_name
     var email by UserTable.email
-    var username by UserTable.username
-    var passwordHash by UserTable.passwordHash
-    var createdAt by UserTable.createdAt
+    var passwordHash by UserTable.password_hash
+    var avatarUrl by UserTable.avatar_url
+    var createdAt by UserTable.created_at
+    var updatedAt by UserTable.updated_at
 }

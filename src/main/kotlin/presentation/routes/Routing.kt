@@ -2,12 +2,11 @@ package com.tenmilelabs.presentation.routes
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.dto.ErrorResponse
-import com.tenmilelabs.domain.model.Label
+import com.tenmilelabs.domain.repository.FilterFields
+import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.infrastructure.auth.userId
-import com.tenmilelabs.domain.repository.FilterFields
-import com.tenmilelabs.domain.repository.RecipesRepository
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -21,7 +20,7 @@ import io.ktor.server.routing.*
 import io.ktor.server.thymeleaf.*
 import io.ktor.util.logging.*
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
-import java.util.UUID
+import java.util.*
 
 private const val ACCEPT_APP_JSON = "application/json"
 private const val ACCEPT_WILDCARD = "*/*"
@@ -59,6 +58,9 @@ fun Application.configureRouting(
         staticResources("/recipes-ui", "recipes-ui")
         staticResources("/", "static")
 
+        get("/health") { // Docker health check
+            call.respondText("OK")
+        }
         // Public authentication routes
         authRoutes(authService)
 
@@ -74,9 +76,6 @@ fun Application.configureRouting(
                 }
                 get("/byId") {
                     findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
-                }
-                get("/byLabel") {
-                    handleGetRecipesByLabel(call, application.log, recipesService)
                 }
                 post {
                     handlePostNewRecipe(call, application.log, recipesService)
@@ -116,41 +115,6 @@ private suspend fun handleDeleteRecipe(
     } else {
         log.info("Recipe with $id not found or user $userId not authorized.")
         call.respond(HttpStatusCode.NotFound, ErrorResponse("Recipe not found or not authorized"))
-    }
-}
-
-private suspend fun handleGetRecipesByLabel(
-    call: RoutingCall,
-    log: Logger,
-    recipesService: RecipesService
-) {
-    val labelAsText = call.request.queryParameters["label"]
-    if (labelAsText == null) {
-        log.warn("no label provided")
-        call.respond(HttpStatusCode.BadRequest)
-        return
-    }
-    try {
-        val label = Label.valueOf(labelAsText)
-        val recipes = recipesService.getRecipesByLabel(label)
-        if (recipes.isEmpty()) {
-            log.warn("no recipes found for $label")
-            call.respond(HttpStatusCode.NotFound)
-            return
-        }
-        val data = mapOf(
-            "label" to label,
-            "recipes" to recipes
-        )
-        val accept = call.request.acceptItems().map { it.value }
-        if (ACCEPT_APP_JSON in accept || ACCEPT_WILDCARD in accept) {
-            call.respond(recipes)
-        } else {
-            call.respond(ThymeleafContent("recipes-by-label", data))
-        }
-    } catch (ex: IllegalArgumentException) {
-        log.warn(ex.message, ex)
-        call.respond(HttpStatusCode.BadRequest)
     }
 }
 

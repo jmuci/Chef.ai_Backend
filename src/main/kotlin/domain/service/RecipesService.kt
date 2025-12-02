@@ -2,11 +2,11 @@ package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.dto.RecipeResponse
-import com.tenmilelabs.domain.model.Label
+import com.tenmilelabs.domain.model.Privacy
 import com.tenmilelabs.domain.model.Recipe
 import com.tenmilelabs.domain.repository.RecipesRepository
 import io.ktor.util.logging.*
-import java.util.UUID
+import java.util.*
 
 class RecipesService(private val recipesRepository: RecipesRepository, private val log: Logger) {
 
@@ -25,12 +25,10 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
         return (userRecipes + publicRecipes).distinctBy { it.uuid }
     }
 
-    suspend fun getRecipesByLabel(label: Label): List<Recipe> =
-        recipesRepository.recipesByLabel(label = label)
 
     suspend fun getRecipeById(id: String, userId: UUID): Recipe? {
         val recipe = recipesRepository.recipeById(id)
-        return if (recipe != null && (recipe.userId == userId.toString() || recipe.isPublic)) {
+        return if (recipe != null && (recipe.creatorId == userId.toString() || recipe.privacy == Privacy.PUBLIC)) {
             recipe
         } else {
             null
@@ -42,7 +40,7 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
             return RecipeResponse(recipesRepository.addRecipe(request, userId))
         } catch (ex: IllegalArgumentException) {
             log.error(
-                "400: Failed to create recipe for $request. Some parameter is missing or malformed! ${request.label} ${request.prepTimeMins}",
+                "400: Failed to create recipe for $request. Some parameter is missing or malformed!",
                 ex
             )
         }

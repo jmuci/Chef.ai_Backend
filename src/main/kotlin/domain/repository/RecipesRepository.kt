@@ -1,7 +1,6 @@
 package com.tenmilelabs.domain.repository
 
 import com.tenmilelabs.application.dto.CreateRecipeRequest
-import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.domain.model.Recipe
 import java.util.UUID
 
@@ -18,8 +17,6 @@ interface RecipesRepository {
     suspend fun recipesByUserId(userId: UUID): List<Recipe>
 
     suspend fun publicRecipes(): List<Recipe>
-
-    suspend fun recipesByLabel(label: Label): List<Recipe>
 
     suspend fun recipeByTitle(title: String): Recipe?
 

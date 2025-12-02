@@ -52,7 +52,7 @@ class AuthService(
             ?: throw AuthInternalException("Failed to create user")
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
+        return generateAndStoreTokens(user.uuid.toString(), user.email, user.username)
     }
 
     suspend fun login(request: LoginRequest): AuthResponse {
@@ -84,7 +84,7 @@ class AuthService(
         }
 
         // Generate and store tokens
-        return generateAndStoreTokens(user.id.toString(), user.email, user.username)
+        return generateAndStoreTokens(user.uuid.toString(), user.email, user.username)
     }
 
     suspend fun getUserById(userId: UUID): User? {
@@ -143,7 +143,7 @@ class AuthService(
 
         // Generate new tokens BEFORE revoking old one
         // This ensures we have the new token ready before invalidating the old one
-        val newAccessToken = jwtService.generateToken(user.id.toString(), user.email)
+        val newAccessToken = jwtService.generateToken(user.uuid.toString(), user.email)
         val newRefreshTokenString = jwtService.generateRefreshToken()
         val newRefreshTokenHash = hashRefreshToken(newRefreshTokenString)
 
@@ -151,10 +151,10 @@ class AuthService(
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
         refreshTokenRepository.createRefreshToken(
-            userId = user.id,
+            userId = user.uuid,
             tokenHash = newRefreshTokenHash,
             expiresAt = refreshExpiresAt
-        ) ?: throw AuthInternalException("Failed to store new refresh token for user: ${user.id}")
+        ) ?: throw AuthInternalException("Failed to store new refresh token for user: ${user.uuid}")
 
         // Token rotation: Revoke the old token AFTER new one is safely stored
         // If revocation fails, the new token is already valid, so return success anyway
@@ -164,12 +164,12 @@ class AuthService(
             // Continue - new token works, old token will be cleaned up eventually
         }
 
-        log.info("Successfully refreshed tokens for user: ${user.id}")
+        log.info("Successfully refreshed tokens for user: ${user.uuid}")
 
         return RefreshTokenResponse(
             accessToken = newAccessToken,
             refreshToken = newRefreshTokenString,
-            userId = user.id.toString(),
+            userId = user.uuid.toString(),
             expiresIn = jwtService.getAccessTokenExpirationSeconds()
         )
     }

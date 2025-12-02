@@ -2,34 +2,27 @@ package com.tenmilelabs.domain.model
 
 import kotlinx.serialization.Serializable
 
-enum class Label() {
-    Vegetarian,
-    Vegan,
-    Pescatarian,
-    Mediterranean,
-    LowCarb,
-    Spanish,
-    American,
-    French,
-    Italian,
-    Caribbean,
-    NewAmerican,
+enum class Privacy {
+    PUBLIC,
+    PRIVATE
 }
 
 @Serializable
 data class Recipe(
     val uuid: String,
     val title: String,
-    val label: Label, //TODO there should be a table for labels
     val description: String,
-
-    val prepTimeMins: Int,
-    val recipeUrl: String,
     val imageUrl: String,
     val imageUrlThumbnail: String,
-    val createdAt: String = "",
-    val userId: String = "", // Owner of the recipe
-    val isPublic: Boolean = false // Whether recipe is publicly accessible
+    val prepTimeMinutes: Int,
+    val cookTimeMinutes: Int,
+    val servings: Int,
+    val creatorId: String,
+    val recipeExternalUrl: String? = null,
+    val privacy: Privacy,
+    val updatedAt: Long,
+    val deletedAt: Long? = null,
+    val serverUpdatedAt: String // Timestamp as ISO string
 )
 
 data class RecipeList(
@@ -39,7 +32,7 @@ data class RecipeList(
 // TODO Move to some API package for recipes endpoint
 fun Recipe.recipeAsRow() = """
     <tr>
-        <td>$title</td><td>$description</td><td>$label</td><td>$recipeUrl</td>
+        <td>$title</td><td>$description</td><td>$imageUrlThumbnail</td><td>$recipeExternalUrl</td>
     </tr>
     """.trimIndent()
 

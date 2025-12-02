@@ -64,7 +64,40 @@ if [ -z "$LOGIN_TOKEN" ] || [ "$LOGIN_TOKEN" == "null" ]; then
   exit 1
 fi
 
-# 4. Get recipes as an authenticated user
+# 4. Create a recipe
+RECIPE_RESPONSE=$(mktemp)
+RECIPE_HTTP_CODE=$(curl -s -o "$RECIPE_RESPONSE" -w "%{http_code}" --fail \
+  -X POST http://localhost:8082/recipes \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $LOGIN_TOKEN" \
+  -d '{
+        "title": "Test Recipe",
+        "description": "A quick smoketest recipe.",
+        "imageUrl": "http://example.com/img.png",
+        "imageUrlThumbnail": "http://example.com/thumb.png",
+        "prepTimeMinutes": 5,
+        "cookTimeMinutes": 5,
+        "servings": 1,
+        "privacy": "PUBLIC",
+        "recipeExternalUrl": null
+      }' \
+) || {
+    echo "Recipe creation curl failed with HTTP code: $RECIPE_HTTP_CODE"
+    cat "$RECIPE_RESPONSE"
+    exit 1
+}
+
+if [[ "$RECIPE_HTTP_CODE" != "201" ]]; then
+  echo "Recipe creation failed (HTTP $RECIPE_HTTP_CODE):"
+  cat "$RECIPE_RESPONSE"
+  exit 1
+fi
+
+echo "Created recipe response:"
+cat "$RECIPE_RESPONSE"
+echo
+
+# 5. Get recipes as an authenticated user
 echo "Getting recipes..."
 RECIPES=$(curl -s -X GET http://localhost:8082/recipes \
   -H "Authorization: Bearer $LOGIN_TOKEN")

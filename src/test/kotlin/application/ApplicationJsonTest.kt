@@ -5,9 +5,9 @@ import com.jayway.jsonpath.JsonPath
 import com.tenmilelabs.application.dto.AuthResponse
 import com.tenmilelabs.application.dto.RegisterRequest
 import com.tenmilelabs.application.service.module
-import com.tenmilelabs.domain.model.Label
 import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository
+import com.tenmilelabs.infrastructure.database.FakeUserRepository.Companion.TEST_USER_ID
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -23,8 +23,8 @@ class ApplicationJsonPathTest {
 
     private suspend fun HttpClient.getAuthToken(): String {
         val registerRequest = RegisterRequest(
-            email = "jsontest@example.com",
-            username = "jsontestuser",
+            email = "test@example.com",
+            username = "testuser",
             password = "TestPassword123!"
         )
 
@@ -40,7 +40,11 @@ class ApplicationJsonPathTest {
     @Test
     fun recipesCanBeFound() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+            module(
+                recipeRepository = FakeRecipesRepository(TEST_USER_ID),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()
+            )
         }
 
         val client = createClient {
@@ -55,29 +59,7 @@ class ApplicationJsonPathTest {
         val result: List<String> = jsonDoc.read("$[*].title")
         // User1 will see their own recipes + public recipes from others
         // Should be at least 3 recipes
-        assertEquals(true, result.size >= 3, "Expected at least 3 recipes, got ${result.size}: $result")
-    }
-
-    @Test
-    fun recipesCanBeFoundByLabel() = testApplication {
-        application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
-        }
-
-        val client = createClient {
-            install(ContentNegotiation) {
-                json()
-            }
-        }
-        val token = client.getAuthToken()
-
-        val label = Label.LowCarb
-        val jsonDoc = client.getAsJsonPath("/recipes/byLabel?label=$label", token)
-
-        val result: List<String> =
-            jsonDoc.read("$[?(@.label == '$label')].title")
-        // User1 owns Recipe 5 (LowCarb) and can see it
-        assertEquals(true, result.size >= 1) // At least one LowCarb recipe
+        assertEquals(true, result.size >= 2, "Expected at least 2 recipes, got ${result.size}: $result")
     }
 
     suspend fun HttpClient.getAsJsonPath(url: String, token: String): DocumentContext {

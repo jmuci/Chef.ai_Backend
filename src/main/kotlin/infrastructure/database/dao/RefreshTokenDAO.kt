@@ -6,7 +6,7 @@ import org.jetbrains.exposed.dao.UUIDEntityClass
 import org.jetbrains.exposed.dao.id.EntityID
 import java.util.*
 
-class RefreshTokenDAO(id: EntityID<UUID>) : UUIDEntity(id) {
+class RefreshTokenDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
     companion object : UUIDEntityClass<RefreshTokenDAO>(RefreshTokenTable)
 
     var userId by RefreshTokenTable.userId
