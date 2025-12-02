@@ -58,6 +58,9 @@ fun Application.configureRouting(
         staticResources("/recipes-ui", "recipes-ui")
         staticResources("/", "static")
 
+        get("/health") { // Docker health check
+            call.respondText("OK")
+        }
         // Public authentication routes
         authRoutes(authService)
 

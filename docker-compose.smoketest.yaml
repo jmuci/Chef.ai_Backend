@@ -30,6 +30,6 @@ services:
       - db
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 15
+      interval: 1s
+      timeout: 2s
+      retries: 10
