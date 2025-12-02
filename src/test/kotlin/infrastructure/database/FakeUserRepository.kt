@@ -39,6 +39,7 @@ class FakeUserRepository : UserRepository {
             username = username,
             updatedAt = now,
             avatarUrl = "",
+            displayName = "Test User",
             createdAt = now,
         )
     }
@@ -55,6 +56,7 @@ class FakeUserRepository : UserRepository {
             username = userWithPassword.username,
             updatedAt = userWithPassword.createdAt,
             avatarUrl = "",
+            displayName = "Test User",
             createdAt = userWithPassword.createdAt
         )
     }
