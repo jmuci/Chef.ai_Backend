@@ -24,9 +24,9 @@ class FakeUserRepository : UserRepository {
         val userId = if (email == "test@example.com") TEST_USER_ID else UUID.randomUUID()
         val now = Clock.System.now().toString()
         val userWithPassword = UserWithPassword(
-            id = userId,
+            uuid = userId,
             email = email,
-            displayName = username,
+            username = username,
             passwordHash = passwordHash,
             createdAt = now
         )
@@ -34,9 +34,9 @@ class FakeUserRepository : UserRepository {
         users[userId] = userWithPassword
 
         return User(
-            id = userId,
+            uuid = userId,
             email = email,
-            displayName = username,
+            username = username,
             updatedAt = now,
             avatarUrl = "",
             createdAt = now,
@@ -50,9 +50,9 @@ class FakeUserRepository : UserRepository {
     override suspend fun findUserById(userId: UUID): User? {
         val userWithPassword = users[userId] ?: return null
         return User(
-            id = userWithPassword.id,
+            uuid = userWithPassword.uuid,
             email = userWithPassword.email,
-            displayName = userWithPassword.displayName,
+            username = userWithPassword.username,
             updatedAt = userWithPassword.createdAt,
             avatarUrl = "",
             createdAt = userWithPassword.createdAt

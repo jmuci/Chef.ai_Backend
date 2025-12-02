@@ -21,6 +21,5 @@ class RecipeDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
     var recipeExternalUrl by RecipeTable.recipe_external_url
     var updatedAt by RecipeTable.updated_at
     var deletedAt by RecipeTable.deleted_at
-    var syncState by RecipeTable.sync_state
     var serverUpdatedAt by RecipeTable.server_updated_at
 }

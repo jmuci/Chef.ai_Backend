@@ -19,7 +19,7 @@ class PostgresUserRepository(private val log: Logger) : UserRepository {
             try {
                 val userDAO = UserDAO.new {
                     this.email = email
-                    this.displayName = username
+                    this.username = username
                     this.passwordHash = passwordHash
                 }
                 daoToUser(userDAO)

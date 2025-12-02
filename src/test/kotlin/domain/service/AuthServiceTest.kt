@@ -300,9 +300,9 @@ class AuthServiceTest {
         // Get user by ID
         val user = authService.getUserById(UUID.fromString(registerResponse.userId))
         assertNotNull(user)
-        assertEquals(registerResponse.userId, user.id.toString())
+        assertEquals(registerResponse.userId, user.uuid.toString())
         assertEquals("getuser@example.com", user.email)
-        assertEquals("getuser", user.displayName)
+        assertEquals("getuser", user.username)
     }
 
     @Test

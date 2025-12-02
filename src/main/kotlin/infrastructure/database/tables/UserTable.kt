@@ -2,16 +2,17 @@ package com.tenmilelabs.infrastructure.database.tables
 
 import kotlinx.datetime.Clock
 import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.sql.kotlin.datetime.CurrentTimestampWithTimeZone
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
+import org.jetbrains.exposed.sql.kotlin.datetime.timestampWithTimeZone
+
 
 object UserTable : UUIDTable("users", "uuid") {
-    val display_name = text("display_name")
+    val user_name = text("user_name") // TODO email as username
+    val display_name = text("display_name").default("")
     val email = text("email").uniqueIndex()
-    val avatar_url = text("avatar_url")
+    val avatar_url = text("avatar_url").default("")
     val password_hash = varchar("password_hash", 255)
     val created_at = timestamp("created_at").clientDefault { Clock.System.now() }
     val updated_at = timestamp("updated_at").clientDefault { Clock.System.now() }
-    val deleted_at = long("deleted_at").nullable()
-    val sync_state = text("sync_state")
-    val server_updated_at = timestamp("server_updated_at")
 }

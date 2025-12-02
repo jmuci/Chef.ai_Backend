@@ -24,6 +24,5 @@ fun daoToModel(dao: RecipeDAO): Recipe =
         privacy = enumValueOf(dao.privacy),
         updatedAt = dao.updatedAt,
         deletedAt = dao.deletedAt,
-        syncState = dao.syncState,
         serverUpdatedAt = dao.serverUpdatedAt.toString()
     )

@@ -9,6 +9,5 @@ object RecipeStepTable : UUIDTable("recipe_steps", "uuid") {
     val instruction = text("instruction")
     val updated_at = long("updated_at")
     val deleted_at = long("deleted_at").nullable()
-    val sync_state = text("sync_state")
     val server_updated_at = timestamp("server_updated_at")
 }

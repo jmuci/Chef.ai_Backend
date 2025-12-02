@@ -14,6 +14,5 @@ class RecipeStepDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     var instruction by RecipeStepTable.instruction
     var updatedAt by RecipeStepTable.updated_at
     var deletedAt by RecipeStepTable.deleted_at
-    var syncState by RecipeStepTable.sync_state
     var serverUpdatedAt by RecipeStepTable.server_updated_at
 }

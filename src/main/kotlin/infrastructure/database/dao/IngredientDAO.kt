@@ -14,6 +14,5 @@ class IngredientDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     var sourcePrimaryId by IngredientTable.source_primary_id
     var updatedAt by IngredientTable.updated_at
     var deletedAt by IngredientTable.deleted_at
-    var syncState by IngredientTable.sync_state
     var serverUpdatedAt by IngredientTable.server_updated_at
 }

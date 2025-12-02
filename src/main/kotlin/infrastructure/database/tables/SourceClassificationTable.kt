@@ -8,6 +8,5 @@ object SourceClassificationTable : UUIDTable("source_classifications", "uuid") {
     val subcategory = text("subcategory").nullable()
     val updated_at = long("updated_at")
     val deleted_at = long("deleted_at").nullable()
-    val sync_state = text("sync_state")
     val server_updated_at = timestamp("server_updated_at")
 }

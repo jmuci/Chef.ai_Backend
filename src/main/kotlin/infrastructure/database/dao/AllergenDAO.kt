@@ -12,6 +12,5 @@ class AllergenDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     var displayName by AllergenTable.display_name
     var updatedAt by AllergenTable.updated_at
     var deletedAt by AllergenTable.deleted_at
-    var syncState by AllergenTable.sync_state
     var serverUpdatedAt by AllergenTable.server_updated_at
 }

@@ -28,7 +28,6 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     privacy = Privacy.PUBLIC,
                     updatedAt = 123456789,
                     deletedAt = null,
-                    syncState = "created",
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
                 ),
                 Recipe(
@@ -45,7 +44,6 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     privacy = Privacy.PRIVATE,
                     updatedAt = 123456789,
                     deletedAt = null,
-                    syncState = "created",
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
                 ),
                 Recipe(
@@ -62,7 +60,6 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     privacy = Privacy.PRIVATE,
                     updatedAt = 123456789,
                     deletedAt = null,
-                    syncState = "created",
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
                 )
             )
@@ -105,7 +102,6 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
             privacy = enumValueOf(recipeRequest.privacy),
             updatedAt = System.currentTimeMillis(),
             deletedAt = null,
-            syncState = "created",
             serverUpdatedAt = "2023-01-01T00:00:00Z"
         )
         recipes.add(recipe)

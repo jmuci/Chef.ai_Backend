@@ -22,7 +22,6 @@ data class Recipe(
     val privacy: Privacy,
     val updatedAt: Long,
     val deletedAt: Long? = null,
-    val syncState: String,
     val serverUpdatedAt: String // Timestamp as ISO string
 )
 

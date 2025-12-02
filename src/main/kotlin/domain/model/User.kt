@@ -7,8 +7,9 @@ import java.util.UUID
 @Serializable
 data class User(
     @Contextual
-    val id: UUID,
+    val uuid: UUID,
     val email: String,
+    val username: String,
     val displayName: String,
     val avatarUrl: String,
     val createdAt: String,
@@ -17,9 +18,9 @@ data class User(
 
 // Internal representation with password hash (not serialized/exposed)
 data class UserWithPassword(
-    val id: UUID,
+    val uuid: UUID,
     val email: String,
-    val displayName: String,
+    val username: String,
     val passwordHash: String,
     val createdAt: String
 )

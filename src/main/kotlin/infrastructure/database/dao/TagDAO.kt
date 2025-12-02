@@ -12,6 +12,5 @@ class TagDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     var displayName by TagTable.display_name
     var updatedAt by TagTable.updated_at
     var deletedAt by TagTable.deleted_at
-    var syncState by TagTable.sync_state
     var serverUpdatedAt by TagTable.server_updated_at
 }

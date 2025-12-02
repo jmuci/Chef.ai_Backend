@@ -71,7 +71,6 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
             privacy = recipeRequest.privacy
             updatedAt = System.currentTimeMillis()
             deletedAt = null
-            syncState = "created"
             serverUpdatedAt = Clock.System.now()
         }
         recipeDAO.id.toString()

@@ -16,6 +16,5 @@ object RecipeTable : UUIDTable("recipes", "uuid") {
     val privacy = text("privacy")
     val updated_at = long("updated_at")
     val deleted_at = long("deleted_at").nullable()
-    val sync_state = text("sync_state")
     val server_updated_at = timestamp("server_updated_at")
 }
