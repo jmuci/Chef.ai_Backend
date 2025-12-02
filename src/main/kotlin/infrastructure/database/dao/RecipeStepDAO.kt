@@ -9,11 +9,11 @@ import java.util.UUID
 class RecipeStepDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<RecipeStepDAO>(RecipeStepTable)
 
-    var recipeId by RecipeStepTable.recipeId // TODO use referencedOn for normal references ?
-    var orderIndex by RecipeStepTable.orderIndex
+    var recipeId by RecipeStepTable.recipe_id
+    var orderIndex by RecipeStepTable.order_index
     var instruction by RecipeStepTable.instruction
-    var updatedAt by RecipeStepTable.updatedAt
-    var deletedAt by RecipeStepTable.deletedAt
-    var syncState by RecipeStepTable.syncState
-    var serverUpdatedAt by RecipeStepTable.serverUpdatedAt
+    var updatedAt by RecipeStepTable.updated_at
+    var deletedAt by RecipeStepTable.deleted_at
+    var syncState by RecipeStepTable.sync_state
+    var serverUpdatedAt by RecipeStepTable.server_updated_at
 }

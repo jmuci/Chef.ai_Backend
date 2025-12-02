@@ -9,9 +9,9 @@ import java.util.UUID
 class LabelDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<LabelDAO>(LabelTable)
 
-    var displayName by LabelTable.displayName
-    var updatedAt by LabelTable.updatedAt
-    var deletedAt by LabelTable.deletedAt
-    var syncState by LabelTable.syncState
-    var serverUpdatedAt by LabelTable.serverUpdatedAt
+    var displayName by LabelTable.display_name
+    var updatedAt by LabelTable.updated_at
+    var deletedAt by LabelTable.deleted_at
+    var syncState by LabelTable.sync_state
+    var serverUpdatedAt by LabelTable.server_updated_at
 }

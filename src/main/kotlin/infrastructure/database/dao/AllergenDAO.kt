@@ -9,9 +9,9 @@ import java.util.UUID
 class AllergenDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<AllergenDAO>(AllergenTable)
 
-    var displayName by AllergenTable.displayName
-    var updatedAt by AllergenTable.updatedAt
-    var deletedAt by AllergenTable.deletedAt
-    var syncState by AllergenTable.syncState
-    var serverUpdatedAt by AllergenTable.serverUpdatedAt
+    var displayName by AllergenTable.display_name
+    var updatedAt by AllergenTable.updated_at
+    var deletedAt by AllergenTable.deleted_at
+    var syncState by AllergenTable.sync_state
+    var serverUpdatedAt by AllergenTable.server_updated_at
 }

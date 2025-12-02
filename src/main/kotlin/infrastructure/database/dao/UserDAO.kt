@@ -9,13 +9,13 @@ import java.util.UUID
 class UserDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<UserDAO>(UserTable)
 
-    var displayName by UserTable.displayName
+    var displayName by UserTable.display_name
     var email by UserTable.email
-    var avatarUrl by UserTable.avatarUrl
-    var passwordHash by UserTable.passwordHash
-    var createdAt by UserTable.createdAt
-    var updatedAt by UserTable.updatedAt
-    var deletedAt by UserTable.deletedAt
-    var syncState by UserTable.syncState
-    var serverUpdatedAt by UserTable.serverUpdatedAt
+    var passwordHash by UserTable.password_hash
+    var avatarUrl by UserTable.avatar_url
+    var createdAt by UserTable.created_at
+    var updatedAt by UserTable.updated_at
+    var deletedAt by UserTable.deleted_at
+    var syncState by UserTable.sync_state
+    var serverUpdatedAt by UserTable.server_updated_at
 }

@@ -6,8 +6,8 @@ import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 object SourceClassificationTable : UUIDTable("source_classifications", "uuid") {
     val category = text("category")
     val subcategory = text("subcategory").nullable()
-    val updatedAt = long("updatedAt")
-    val deletedAt = long("deletedAt").nullable()
-    val syncState = text("syncState")
-    val serverUpdatedAt = timestamp("serverUpdatedAt")
+    val updated_at = long("updated_at")
+    val deleted_at = long("deleted_at").nullable()
+    val sync_state = text("sync_state")
+    val server_updated_at = timestamp("server_updated_at")
 }

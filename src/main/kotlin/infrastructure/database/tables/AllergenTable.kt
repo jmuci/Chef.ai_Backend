@@ -4,9 +4,9 @@ import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 
 object AllergenTable : UUIDTable("allergens", "uuid") {
-    val displayName = text("displayName")
-    val updatedAt = long("updatedAt")
-    val deletedAt = long("deletedAt").nullable()
-    val syncState = text("syncState")
-    val serverUpdatedAt = timestamp("serverUpdatedAt")
+    val display_name = text("display_name")
+    val updated_at = long("updated_at")
+    val deleted_at = long("deleted_at").nullable()
+    val sync_state = text("sync_state")
+    val server_updated_at = timestamp("server_updated_at")
 }

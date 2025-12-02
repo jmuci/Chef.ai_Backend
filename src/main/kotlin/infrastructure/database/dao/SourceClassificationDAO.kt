@@ -11,8 +11,8 @@ class SourceClassificationDAO(id: EntityID<UUID>) : UUIDEntity(id) {
 
     var category by SourceClassificationTable.category
     var subcategory by SourceClassificationTable.subcategory
-    var updatedAt by SourceClassificationTable.updatedAt
-    var deletedAt by SourceClassificationTable.deletedAt
-    var syncState by SourceClassificationTable.syncState
-    var serverUpdatedAt by SourceClassificationTable.serverUpdatedAt
+    var updatedAt by SourceClassificationTable.updated_at
+    var deletedAt by SourceClassificationTable.deleted_at
+    var syncState by SourceClassificationTable.sync_state
+    var serverUpdatedAt by SourceClassificationTable.server_updated_at
 }

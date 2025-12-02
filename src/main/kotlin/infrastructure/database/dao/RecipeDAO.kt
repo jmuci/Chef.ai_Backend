@@ -11,16 +11,16 @@ class RecipeDAO(uuid: EntityID<UUID>) : UUIDEntity(uuid) {
 
     var title by RecipeTable.title
     var description by RecipeTable.description
-    var imageUrl by RecipeTable.imageUrl
-    var imageUrlThumbnail by RecipeTable.imageUrlThumbnail
-    var prepTimeMinutes by RecipeTable.prepTimeMinutes
-    var cookTimeMinutes by RecipeTable.cookTimeMinutes
+    var imageUrl by RecipeTable.image_url
+    var imageUrlThumbnail by RecipeTable.image_url_thumbnail
+    var prepTimeMinutes by RecipeTable.prep_time_minutes
+    var cookTimeMinutes by RecipeTable.cook_time_minutes
     var servings by RecipeTable.servings
-    var creatorId by RecipeTable.creatorId
-    var recipeExternalUrl by RecipeTable.recipeExternalUrl
     var privacy by RecipeTable.privacy
-    var updatedAt by RecipeTable.updatedAt
-    var deletedAt by RecipeTable.deletedAt
-    var syncState by RecipeTable.syncState
-    var serverUpdatedAt by RecipeTable.serverUpdatedAt
+    var creatorId by RecipeTable.creator_id
+    var recipeExternalUrl by RecipeTable.recipe_external_url
+    var updatedAt by RecipeTable.updated_at
+    var deletedAt by RecipeTable.deleted_at
+    var syncState by RecipeTable.sync_state
+    var serverUpdatedAt by RecipeTable.server_updated_at
 }

@@ -9,11 +9,11 @@ import java.util.UUID
 class IngredientDAO(id: EntityID<UUID>) : UUIDEntity(id) {
     companion object : UUIDEntityClass<IngredientDAO>(IngredientTable)
 
-    var displayName by IngredientTable.displayName
-    var allergenId by IngredientTable.allergenId
-    var sourcePrimaryId by IngredientTable.sourcePrimaryId
-    var updatedAt by IngredientTable.updatedAt
-    var deletedAt by IngredientTable.deletedAt
-    var syncState by IngredientTable.syncState
-    var serverUpdatedAt by IngredientTable.serverUpdatedAt
+    var displayName by IngredientTable.display_name
+    var allergenId by IngredientTable.allergen_id
+    var sourcePrimaryId by IngredientTable.source_primary_id
+    var updatedAt by IngredientTable.updated_at
+    var deletedAt by IngredientTable.deleted_at
+    var syncState by IngredientTable.sync_state
+    var serverUpdatedAt by IngredientTable.server_updated_at
 }

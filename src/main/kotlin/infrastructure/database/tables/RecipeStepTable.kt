@@ -4,11 +4,11 @@ import org.jetbrains.exposed.dao.id.UUIDTable
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 
 object RecipeStepTable : UUIDTable("recipe_steps", "uuid") {
-    val recipeId = reference("recipeId", RecipeTable)
-    val orderIndex = integer("orderIndex")
+    val recipe_id = reference("recipe_id", RecipeTable)
+    val order_index = integer("order_index")
     val instruction = text("instruction")
-    val updatedAt = long("updatedAt")
-    val deletedAt = long("deletedAt").nullable()
-    val syncState = text("syncState")
-    val serverUpdatedAt = timestamp("serverUpdatedAt")
+    val updated_at = long("updated_at")
+    val deleted_at = long("deleted_at").nullable()
+    val sync_state = text("sync_state")
+    val server_updated_at = timestamp("server_updated_at")
 }

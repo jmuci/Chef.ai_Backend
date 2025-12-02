@@ -1,44 +1,73 @@
 -- ChefAI Complete Database Schema (Aligned with Client Schema v2)
 -- This script creates the entire database schema from scratch based on client requirements
 
--- ============================================================================
+-- =========================================================================
 -- STEP 1: DROP EXISTING TABLES (if starting fresh)
--- ============================================================================
--- Uncomment if you want to start completely fresh
--- DROP TABLE IF EXISTS refresh_tokens CASCADE;
--- DROP TABLE IF EXISTS recipe CASCADE;
--- DROP TABLE IF EXISTS users CASCADE;
+-- =========================================================================
+--- DROP TABLE IF EXISTS refresh_tokens CASCADE;
+--- DROP TABLE IF EXISTS recipes CASCADE;
+--- DROP TABLE IF EXISTS users CASCADE;
+--- DROP TABLE IF EXISTS allergens CASCADE;
+--- DROP TABLE IF EXISTS source_classifications CASCADE;
+--- DROP TABLE IF EXISTS labels CASCADE;
+--- DROP TABLE IF EXISTS tags CASCADE;
+--- DROP TABLE IF EXISTS recipe_ingredients CASCADE;
+--- DROP TABLE IF EXISTS recipe_labels CASCADE;
+--- DROP TABLE IF EXISTS recipe_tags CASCADE;
+--- DROP TABLE IF EXISTS recipe_steps CASCADE;
 
--- ============================================================================
+--- DROP DATABASE chefai_db
+--- CREATE DATABASE chefai_db
+-- =========================================================================
 -- STEP 2: CREATE TABLES
--- ============================================================================
+-- =========================================================================
 -- ===============================
 -- USERS
 -- ===============================
 CREATE TABLE IF NOT EXISTS users (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    displayName TEXT NOT NULL,
+    display_name TEXT NOT NULL,
     email TEXT NOT NULL,
-    avatarUrl TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL
+    password_hash TEXT NOT NULL,
+    avatar_url TEXT NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_users_syncstate_updatedat ON users(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_users_sync_state_updated_at ON users(sync_state, updated_at);
+
+-- ===============================
+-- REFRESH_TOKENS
+-- ===============================
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at BIGINT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    CONSTRAINT fk_refresh_tokens_user FOREIGN KEY (user_id) REFERENCES users(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
+);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_sync_state_updated_at ON refresh_tokens(sync_state, updated_at);
 
 -- ===============================
 -- ALLERGENS
 -- ===============================
 CREATE TABLE IF NOT EXISTS allergens (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    displayName TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL
+    display_name TEXT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_allergens_syncstate_updatedat ON allergens(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_allergens_sync_state_updated_at ON allergens(sync_state, updated_at);
 
 -- ===============================
 -- SOURCE_CLASSIFICATIONS
@@ -47,57 +76,57 @@ CREATE TABLE IF NOT EXISTS source_classifications (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     category TEXT NOT NULL,
     subcategory TEXT,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_source_classifications_syncstate_updatedat ON source_classifications(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_source_classifications_sync_state_updated_at ON source_classifications(sync_state, updated_at);
 
 -- ===============================
 -- INGREDIENTS
 -- ===============================
 CREATE TABLE IF NOT EXISTS ingredients (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    displayName TEXT NOT NULL,
-    allergenId UUID,
-    sourcePrimaryId UUID,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    CONSTRAINT fk_ingredients_allergen FOREIGN KEY (allergenId) REFERENCES allergens(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION,
-    CONSTRAINT fk_ingredients_source_primary FOREIGN KEY (sourcePrimaryId) REFERENCES source_classifications(uuid) ON DELETE SET NULL ON UPDATE NO ACTION
+    display_name TEXT NOT NULL,
+    allergen_id UUID,
+    source_primary_id UUID,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    CONSTRAINT fk_ingredients_allergen FOREIGN KEY (allergen_id) REFERENCES allergens(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION,
+    CONSTRAINT fk_ingredients_source_primary FOREIGN KEY (source_primary_id) REFERENCES source_classifications(uuid) ON DELETE SET NULL ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_ingredients_allergenid ON ingredients(allergenId);
-CREATE INDEX IF NOT EXISTS idx_ingredients_sourceprimaryid ON ingredients(sourcePrimaryId);
-CREATE INDEX IF NOT EXISTS idx_ingredients_syncstate_updatedat ON ingredients(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_ingredients_allergen_id ON ingredients(allergen_id);
+CREATE INDEX IF NOT EXISTS idx_ingredients_source_primary_id ON ingredients(source_primary_id);
+CREATE INDEX IF NOT EXISTS idx_ingredients_sync_state_updated_at ON ingredients(sync_state, updated_at);
 
 -- ===============================
 -- LABELS
 -- ===============================
 CREATE TABLE IF NOT EXISTS labels (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    displayName TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL
+    display_name TEXT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_labels_syncstate_updatedat ON labels(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_labels_sync_state_updated_at ON labels(sync_state, updated_at);
 
 -- ===============================
 -- TAGS
 -- ===============================
 CREATE TABLE IF NOT EXISTS tags (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    displayName TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL
+    display_name TEXT NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_tags_syncstate_updatedat ON tags(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_tags_sync_state_updated_at ON tags(sync_state, updated_at);
 
 -- ===============================
 -- RECIPES
@@ -106,99 +135,97 @@ CREATE TABLE IF NOT EXISTS recipes (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     description TEXT NOT NULL,
-    imageUrl TEXT NOT NULL,
-    imageUrlThumbnail TEXT NOT NULL,
-    prepTimeMinutes INTEGER NOT NULL,
-    cookTimeMinutes INTEGER NOT NULL,
+    image_url TEXT NOT NULL,
+    image_url_thumbnail TEXT NOT NULL,
+    prep_time_minutes INTEGER NOT NULL,
+    cook_time_minutes INTEGER NOT NULL,
     servings INTEGER NOT NULL,
-    creatorId UUID NOT NULL,
-    recipeExternalUrl TEXT,
+    creator_id UUID NOT NULL,
+    recipe_external_url TEXT,
     privacy TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    CONSTRAINT fk_recipes_creator FOREIGN KEY (creatorId) REFERENCES users(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    CONSTRAINT fk_recipes_creator FOREIGN KEY (creator_id) REFERENCES users(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_recipes_creatorid ON recipes(creatorId);
-CREATE INDEX IF NOT EXISTS idx_recipes_syncstate_updatedat ON recipes(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_recipes_creator_id ON recipes(creator_id);
+CREATE INDEX IF NOT EXISTS idx_recipes_sync_state_updated_at ON recipes(sync_state, updated_at);
+
 
 -- ===============================
 -- RECIPE_INGREDIENTS (Many-to-many)
 -- ===============================
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
-    recipeId UUID NOT NULL,
-    ingredientId UUID NOT NULL,
+    recipe_id UUID NOT NULL,
+    ingredient_id UUID NOT NULL,
     quantity DOUBLE PRECISION NOT NULL,
     unit TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    PRIMARY KEY (recipeId, ingredientId),
-    CONSTRAINT fk_recipe_ingredients_recipe FOREIGN KEY (recipeId) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
-    CONSTRAINT fk_recipe_ingredients_ingredient FOREIGN KEY (ingredientId) REFERENCES ingredients(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION 
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (recipe_id, ingredient_id),
+    CONSTRAINT fk_recipe_ingredients_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
+    CONSTRAINT fk_recipe_ingredients_ingredient FOREIGN KEY (ingredient_id) REFERENCES ingredients(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipeid ON recipe_ingredients(recipeId);
-CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredientid ON recipe_ingredients(ingredientId);
-CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_syncstate_updatedat ON recipe_ingredients(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient_id ON recipe_ingredients(ingredient_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_sync_state_updated_at ON recipe_ingredients(sync_state, updated_at);
 
 -- ===============================
 -- RECIPE_LABELS (Many-to-many)
 -- ===============================
 CREATE TABLE IF NOT EXISTS recipe_labels (
-    recipeId UUID NOT NULL,
-    labelId UUID NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    PRIMARY KEY (recipeId, labelId),
-    CONSTRAINT fk_recipe_labels_recipe FOREIGN KEY (recipeId) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
-    CONSTRAINT fk_recipe_labels_label FOREIGN KEY (labelId) REFERENCES labels(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION
+    recipe_id UUID NOT NULL,
+    label_id UUID NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (recipe_id, label_id),
+    CONSTRAINT fk_recipe_labels_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
+    CONSTRAINT fk_recipe_labels_label FOREIGN KEY (label_id) REFERENCES labels(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_recipe_labels_labelid ON recipe_labels(labelId);
-CREATE INDEX IF NOT EXISTS idx_recipe_labels_syncstate_updatedat ON recipe_labels(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_recipe_labels_label_id ON recipe_labels(label_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_labels_sync_state_updated_at ON recipe_labels(sync_state, updated_at);
 
 -- ===============================
 -- RECIPE_TAGS (Many-to-many)
 -- ===============================
 CREATE TABLE IF NOT EXISTS recipe_tags (
-    recipeId UUID NOT NULL,
-    tagId UUID NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    PRIMARY KEY (recipeId, tagId),
-    CONSTRAINT fk_recipe_tags_recipe FOREIGN KEY (recipeId) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
-    CONSTRAINT fk_recipe_tags_tag FOREIGN KEY (tagId) REFERENCES tags(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION
+    recipe_id UUID NOT NULL,
+    tag_id UUID NOT NULL,
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    PRIMARY KEY (recipe_id, tag_id),
+    CONSTRAINT fk_recipe_tags_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION,
+    CONSTRAINT fk_recipe_tags_tag FOREIGN KEY (tag_id) REFERENCES tags(uuid) ON DELETE RESTRICT ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_recipe_tags_tagid ON recipe_tags(tagId);
-CREATE INDEX IF NOT EXISTS idx_recipe_tags_syncstate_updatedat ON recipe_tags(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_recipe_tags_tag_id ON recipe_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_tags_sync_state_updated_at ON recipe_tags(sync_state, updated_at);
 
 -- ===============================
 -- RECIPE_STEPS
 -- ===============================
 CREATE TABLE IF NOT EXISTS recipe_steps (
     uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    recipeId UUID NOT NULL,
-    orderIndex INTEGER NOT NULL,
+    recipe_id UUID NOT NULL,
+    order_index INTEGER NOT NULL,
     instruction TEXT NOT NULL,
-    updatedAt BIGINT NOT NULL,
-    deletedAt BIGINT,
-    syncState TEXT NOT NULL,
-    serverUpdatedAt TIMESTAMP NOT NULL,
-    CONSTRAINT fk_recipe_steps_recipe FOREIGN KEY (recipeId) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
+    updated_at BIGINT NOT NULL,
+    deleted_at BIGINT,
+    sync_state TEXT NOT NULL,
+    server_updated_at TIMESTAMP NOT NULL,
+    CONSTRAINT fk_recipe_steps_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
 );
-CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipeid ON recipe_steps(recipeId);
-CREATE INDEX IF NOT EXISTS idx_recipe_steps_syncstate_updatedat ON recipe_steps(syncState, updatedAt);
+CREATE INDEX IF NOT EXISTS idx_recipe_steps_recipe_id ON recipe_steps(recipe_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_steps_sync_state_updated_at ON recipe_steps(sync_state, updated_at);
 
 -- ============================================================================
 -- STEP 3: CLEANUP: Remove legacy tables not found in client schema
-DROP TABLE IF EXISTS refresh_tokens CASCADE;
-DROP TABLE IF EXISTS recipe CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
 -- End of new schema based on client v2
 
 -- ============================================================================
@@ -276,13 +303,13 @@ DROP TABLE IF EXISTS users CASCADE;
 -- ============================================================================
 
 -- Show all tables
-SELECT tablename 
-FROM pg_tables 
+SELECT tablename
+FROM pg_tables
 WHERE schemaname = 'public'
 ORDER BY tablename;
 
 -- Show all indexes
-SELECT 
+SELECT
     schemaname,
     tablename,
     indexname,
@@ -309,6 +336,8 @@ ORDER BY tc.table_name;
 
 -- Count records
 SELECT 'users' as table_name, COUNT(*) as count FROM users
+UNION ALL
+SELECT 'refresh_tokens', COUNT(*) FROM refresh_tokens
 UNION ALL
 SELECT 'allergens', COUNT(*) FROM allergens
 UNION ALL
