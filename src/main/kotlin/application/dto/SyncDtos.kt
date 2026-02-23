@@ -82,7 +82,9 @@ enum class SyncErrors(val message: String) {
     CREATOR_MISMATCH("creatorId does not match authenticated user"),
     INVALID_PRIVACY("privacy must be PUBLIC or PRIVATE"),
     INVALID_INGREDIENT("ingredientId is invalid"),
-    INGREDIENT_NOT_FOUND("ingredientId does not exist")
+    INGREDIENT_NOT_FOUND("ingredientId does not exist"),
+    INVALID_TAG("tagId is invalid"),
+    INVALID_LABEL("labelId is invalid")
 }
 
 @Serializable

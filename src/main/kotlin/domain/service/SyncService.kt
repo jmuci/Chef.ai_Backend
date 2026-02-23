@@ -58,6 +58,10 @@ class SyncService(
                 return@forEach
             }
 
+            if (!validateTagAndLabelIds(recipe, errors)) {
+                return@forEach
+            }
+
             val existing = syncRepository.getRecipe(recipeUuid)
             if (existing != null && existing.serverUpdatedAtMillis > recipe.updatedAt) {
                 conflicts += ConflictEntity(
@@ -141,6 +145,40 @@ class SyncService(
                 return false
             }
         }
+        return true
+    }
+
+    /**
+     * Validates tag/label UUID formats.
+     *
+     * Unknown but well-formed IDs are allowed and ignored later by repository upsert.
+     */
+    private fun validateTagAndLabelIds(
+        recipe: SyncRecipe,
+        errors: MutableList<SyncError>
+    ): Boolean {
+        for (tagId in recipe.tagIds) {
+            val isValid = parseUuid(tagId) {
+                errors += SyncError(
+                    recipe.uuid,
+                    SyncErrors.INVALID_TAG,
+                    SyncErrors.INVALID_TAG.message
+                )
+            } != null
+            if (!isValid) return false
+        }
+
+        for (labelId in recipe.labelIds) {
+            val isValid = parseUuid(labelId) {
+                errors += SyncError(
+                    recipe.uuid,
+                    SyncErrors.INVALID_LABEL,
+                    SyncErrors.INVALID_LABEL.message
+                )
+            } != null
+            if (!isValid) return false
+        }
+
         return true
     }
 

@@ -104,6 +104,25 @@ class SyncServiceTest {
         assertFalse(response.recipes.any { it.uuid == privateForeign.uuid })
     }
 
+    @Test
+    fun pushReturnsErrorForMalformedTagId() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipe = sampleRecipe(
+            uuid = UUID.randomUUID(),
+            creatorId = userId,
+            updatedAt = 1000L,
+            ingredientId = ingredientId
+        ).copy(tagIds = listOf("not-a-uuid"))
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(recipe)))
+
+        assertEquals(0, response.accepted.size)
+        assertEquals(1, response.errors.size)
+        assertEquals(SyncErrors.INVALID_TAG, response.errors.first().reason)
+        assertEquals(SyncErrors.INVALID_TAG.message, response.errors.first().message)
+    }
+
     private fun sampleRecipe(
         uuid: UUID,
         creatorId: UUID,
