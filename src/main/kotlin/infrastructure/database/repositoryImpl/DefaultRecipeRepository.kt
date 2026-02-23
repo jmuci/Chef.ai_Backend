@@ -9,9 +9,8 @@ import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import io.ktor.util.logging.*
 import kotlinx.datetime.Clock
-import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.and
-import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.update
 import java.util.*
 
 class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
@@ -31,7 +30,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
 
     override suspend fun publicRecipes(): List<Recipe> = suspendTransaction {
         RecipeDAO
-            .find { RecipeTable.privacy eq "public" }
+            .find { RecipeTable.privacy eq "PUBLIC" }
             .map(::daoToModel)
     }
 
@@ -77,9 +76,13 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
     }
 
     override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean = suspendTransaction {
-        val rowsDeleted = RecipeTable.deleteWhere {
+        val now = Clock.System.now()
+        val rowsUpdated = RecipeTable.update({
             (RecipeTable.id eq UUID.fromString(uuid)) and (RecipeTable.creator_id eq userId)
+        }) {
+            it[deleted_at] = now.toEpochMilliseconds()
+            it[server_updated_at] = now
         }
-        rowsDeleted == 1
+        rowsUpdated == 1
     }
 }
