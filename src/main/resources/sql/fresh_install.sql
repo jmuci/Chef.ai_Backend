@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS recipes (
     CONSTRAINT fk_recipes_creator FOREIGN KEY (creator_id) REFERENCES users(uuid) ON DELETE CASCADE ON UPDATE NO ACTION
 );
 CREATE INDEX IF NOT EXISTS idx_recipes_creator_id ON recipes(creator_id);
+CREATE INDEX IF NOT EXISTS idx_recipes_server_updated_at ON recipes(server_updated_at);
 
 
 -- ===============================
