@@ -34,6 +34,14 @@ Unit tests run on PRs in Github
 ./smoke-test.sh
 ```
 
+## Test Users
+
+| Email          | Password  |
+|----------------|-----------|
+| test1@ex.com   | test123!  |
+| test2@ex.com   | test123!  |
+| test3@ex.com   | test123!  |
+
 ## Building & Running
 
 To build or run the project, use one of the following tasks:
@@ -89,6 +97,7 @@ A quick reference of the most useful psql commands while developing with Postgre
 | Quit psql | `\q` |
 | Show connection info | `\conninfo` |
 
+eg. ``` psql -h localhost -U postgres -d chefai_db ```
 ---
 
 ## 📚 List Databases, Tables, Schemas, Users
