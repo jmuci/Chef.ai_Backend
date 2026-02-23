@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.RecipesService
+import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -28,7 +29,8 @@ private const val ACCEPT_WILDCARD = "*/*"
 fun Application.configureRouting(
     recipeRepository: RecipesRepository,
     recipesService: RecipesService,
-    authService: AuthService
+    authService: AuthService,
+    syncService: SyncService
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -66,6 +68,7 @@ fun Application.configureRouting(
 
         // Protected routes - require authentication
         authenticate("auth-jwt") {
+            syncRoutes(syncService)
             route("/recipes") {
 
                 get {
