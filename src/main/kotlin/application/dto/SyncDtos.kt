@@ -59,16 +59,31 @@ data class AcceptedEntity(
 @Serializable
 data class ConflictEntity(
     val uuid: String,
-    val reason: String,
+    val reason: ConflictReasons,
     val serverVersion: SyncRecipe
 )
 
 @Serializable
+enum class ConflictReasons {
+    SERVER_NEWER
+}
+
+@Serializable
 data class SyncError(
     val uuid: String,
-    val reason: String,
+    val reason: SyncErrors,
     val message: String
 )
+
+@Serializable
+enum class SyncErrors(val message: String) {
+    INVALID_UUID("Recipe UUID is invalid"),
+    INVALID_CREATOR("creatorId is invalid"),
+    CREATOR_MISMATCH("creatorId does not match authenticated user"),
+    INVALID_PRIVACY("privacy must be PUBLIC or PRIVATE"),
+    INVALID_INGREDIENT("ingredientId is invalid"),
+    INGREDIENT_NOT_FOUND("ingredientId does not exist")
+}
 
 @Serializable
 data class SyncPullResponse(
