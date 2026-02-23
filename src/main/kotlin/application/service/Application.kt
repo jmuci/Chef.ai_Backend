@@ -4,10 +4,12 @@ import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.RecipesService
+import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.configureJwtAuth
 import com.tenmilelabs.infrastructure.database.*
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipesRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRefreshTokenRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresSyncRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresUserRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
 import com.tenmilelabs.domain.repository.UserRepository
@@ -36,9 +38,10 @@ fun Application.module(
     val jwtService = JwtService(jwtSecret, jwtIssuer, jwtAudience)
     val authService = AuthService(userRepository, refreshTokenRepository, jwtService, log)
     val recipesService = RecipesService(recipeRepository, log)
+    val syncService = SyncService(PostgresSyncRepository(), log)
 
     // Set up plugins
     configureDatabases()
     configureJwtAuth(jwtService)
-    configureRouting(recipeRepository = recipeRepository, recipesService, authService)
+    configureRouting(recipeRepository = recipeRepository, recipesService, authService, syncService)
 }
