@@ -1,6 +1,7 @@
 package com.tenmilelabs.infrastructure.database.tables
 
 import org.jetbrains.exposed.dao.id.UUIDTable
+import org.jetbrains.exposed.sql.ReferenceOption
 import org.jetbrains.exposed.sql.kotlin.datetime.timestamp
 
 object RecipeTable : UUIDTable("recipes", "uuid") {
@@ -11,7 +12,7 @@ object RecipeTable : UUIDTable("recipes", "uuid") {
     val prep_time_minutes = integer("prep_time_minutes")
     val cook_time_minutes = integer("cook_time_minutes")
     val servings = integer("servings")
-    val creator_id = uuid("creator_id")
+    val creator_id = reference("creator_id", UserTable, onDelete = ReferenceOption.CASCADE)
     val recipe_external_url = text("recipe_external_url").nullable()
     val privacy = text("privacy")
     val updated_at = long("updated_at")

@@ -7,8 +7,10 @@ import com.tenmilelabs.infrastructure.database.dao.RecipeDAO
 import com.tenmilelabs.infrastructure.database.mappers.daoToModel
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
+import com.tenmilelabs.infrastructure.database.tables.UserTable
 import io.ktor.util.logging.*
 import kotlinx.datetime.Clock
+import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.update
 import java.util.*
@@ -65,7 +67,7 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
             prepTimeMinutes = recipeRequest.prepTimeMinutes
             cookTimeMinutes = recipeRequest.cookTimeMinutes
             servings = recipeRequest.servings
-            creatorId = userId
+            creatorId = EntityID(userId, UserTable)
             recipeExternalUrl = recipeRequest.recipeExternalUrl
             privacy = recipeRequest.privacy
             updatedAt = System.currentTimeMillis()
