@@ -11,6 +11,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
@@ -48,7 +49,7 @@ class RecipeMappingTest {
     @Test
     fun `daoToModel maps recipe dao fields`() {
         val creatorUuid = UUID.randomUUID()
-        val now = Clock.System.now()
+        val now = stableInstant()
 
         val mapped = transaction {
             val dao = RecipeDAO.new {
@@ -82,7 +83,7 @@ class RecipeMappingTest {
     fun `toRecipeIngredient maps relation row`() {
         val recipeId = UUID.randomUUID()
         val ingredientId = UUID.randomUUID()
-        val serverUpdatedAt = Clock.System.now()
+        val serverUpdatedAt = stableInstant()
 
         val mapped = transaction {
             insertRecipe(recipeId)
@@ -115,7 +116,7 @@ class RecipeMappingTest {
     fun `toRecipeTag maps relation row`() {
         val recipeId = UUID.randomUUID()
         val tagId = UUID.randomUUID()
-        val serverUpdatedAt = Clock.System.now()
+        val serverUpdatedAt = stableInstant()
 
         val mapped = transaction {
             insertRecipe(recipeId)
@@ -144,7 +145,7 @@ class RecipeMappingTest {
     fun `toRecipeLabel maps relation row`() {
         val recipeId = UUID.randomUUID()
         val labelId = UUID.randomUUID()
-        val serverUpdatedAt = Clock.System.now()
+        val serverUpdatedAt = stableInstant()
 
         val mapped = transaction {
             insertRecipe(recipeId)
@@ -219,4 +220,7 @@ class RecipeMappingTest {
             it[server_updated_at] = Clock.System.now()
         }
     }
+
+    private fun stableInstant(): Instant =
+        Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())
 }
