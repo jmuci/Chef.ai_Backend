@@ -25,6 +25,8 @@ fun Route.syncRoutes(syncService: SyncService) {
                 return@post
             }
 
+            // TODO(security): Replace detailed client-facing error strings with stable error codes + traceId.
+            // Keep full exception details only in server logs to avoid leaking internals.
             try {
                 val request = call.receive<SyncPushRequest>()
                 val response = syncService.pushRecipes(userId, request)
