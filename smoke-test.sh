@@ -3,6 +3,10 @@ set -eu
 
 COMPOSE_FILE="docker-compose.smoketest.yaml"
 
+new_uuid() {
+  uuidgen | tr '[:upper:]' '[:lower:]'
+}
+
 # 1. Start from clean state
 docker compose -f $COMPOSE_FILE down -v || true
 docker compose -f $COMPOSE_FILE up -d --build
@@ -118,8 +122,8 @@ fi
 
 # 6. Push one sync recipe aggregate
 echo "Pushing sync recipe..."
-SYNC_RECIPE_UUID="11111111-1111-1111-1111-111111111111"
-SYNC_STEP_UUID="22222222-2222-2222-2222-222222222222"
+SYNC_RECIPE_UUID=$(new_uuid)
+SYNC_STEP_UUID=$(new_uuid)
 NOW_MS=$(( $(date +%s) * 1000 ))
 
 SYNC_PUSH_PAYLOAD=$(
@@ -160,7 +164,7 @@ SYNC_PUSH_PAYLOAD=$(
 )
 
 SYNC_PUSH_RESPONSE=$(mktemp)
-SYNC_PUSH_HTTP_CODE=$(curl -s -o "$SYNC_PUSH_RESPONSE" -w "%{http_code}" --fail \
+SYNC_PUSH_HTTP_CODE=$(curl -s -o "$SYNC_PUSH_RESPONSE" -w "%{http_code}" \
   -X POST http://localhost:8082/sync/push \
   -H "Authorization: Bearer $LOGIN_TOKEN" \
   -H "Content-Type: application/json" \
@@ -197,7 +201,7 @@ fi
 # 7. Pull sync deltas and validate shape/cursor behavior fields
 echo "Pulling sync deltas..."
 SYNC_PULL_RESPONSE=$(mktemp)
-SYNC_PULL_HTTP_CODE=$(curl -s -o "$SYNC_PULL_RESPONSE" -w "%{http_code}" --fail \
+SYNC_PULL_HTTP_CODE=$(curl -s -o "$SYNC_PULL_RESPONSE" -w "%{http_code}" \
   "http://localhost:8082/sync/pull?since=0&limit=100" \
   -H "Authorization: Bearer $LOGIN_TOKEN" \
 ) || {
