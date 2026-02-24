@@ -3,6 +3,7 @@ package infrastructure.auth
 import com.tenmilelabs.application.dto.AuthResponse
 import com.tenmilelabs.application.dto.RegisterRequest
 import com.tenmilelabs.application.dto.SyncPushRequest
+import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
@@ -24,7 +25,9 @@ import io.ktor.server.testing.testApplication
 import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class SyncRoutesIntegrationTest {
     @Test
@@ -266,6 +269,127 @@ class SyncRoutesIntegrationTest {
         assertEquals(0, body.errors.size)
     }
 
+    @Test
+    fun pullRouteReturnsOnlyAccessibleDeltas() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val auth = client.registerAndGetAuth()
+        val ownRecipe = buildRecipe(UUID.randomUUID(), auth.userId, ingredientId, 1100L, "PRIVATE")
+        val publicForeign = buildRecipe(UUID.randomUUID(), UUID.randomUUID().toString(), ingredientId, 1200L, "PUBLIC")
+        val privateForeign = buildRecipe(UUID.randomUUID(), UUID.randomUUID().toString(), ingredientId, 1300L, "PRIVATE")
+
+        syncRepository.seedRecipe(ownRecipe, 1100L)
+        syncRepository.seedRecipe(publicForeign, 1200L)
+        syncRepository.seedRecipe(privateForeign, 1300L)
+
+        val response = client.get("/sync/pull?since=1000&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPullResponse>()
+        assertEquals(2, body.recipes.size)
+        assertFalse(body.hasMore)
+        val returnedIds = body.recipes.map { it.uuid }.toSet()
+        assertTrue(returnedIds.contains(ownRecipe.uuid))
+        assertTrue(returnedIds.contains(publicForeign.uuid))
+        assertFalse(returnedIds.contains(privateForeign.uuid))
+    }
+
+    @Test
+    fun pullRouteSupportsPaginationCursor() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+
+        val auth = client.registerAndGetAuth()
+        val r1 = buildRecipe(UUID.randomUUID(), auth.userId, ingredientId, 1000L, "PRIVATE")
+        val r2 = buildRecipe(UUID.randomUUID(), auth.userId, ingredientId, 2000L, "PRIVATE")
+        val r3 = buildRecipe(UUID.randomUUID(), auth.userId, ingredientId, 3000L, "PRIVATE")
+        syncRepository.seedRecipe(r1, 1000L)
+        syncRepository.seedRecipe(r2, 2000L)
+        syncRepository.seedRecipe(r3, 3000L)
+
+        val firstPageResponse = client.get("/sync/pull?since=0&limit=2") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+        assertEquals(HttpStatusCode.OK, firstPageResponse.status)
+        val firstPage = firstPageResponse.body<SyncPullResponse>()
+        assertEquals(2, firstPage.recipes.size)
+        assertTrue(firstPage.hasMore)
+        assertEquals(2000L, firstPage.serverTimestamp)
+
+        val secondPageResponse = client.get("/sync/pull?since=${firstPage.serverTimestamp}&limit=2") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+        assertEquals(HttpStatusCode.OK, secondPageResponse.status)
+        val secondPage = secondPageResponse.body<SyncPullResponse>()
+        assertEquals(1, secondPage.recipes.size)
+        assertFalse(secondPage.hasMore)
+        assertEquals(3000L, secondPage.serverTimestamp)
+    }
+
+    @Test
+    fun pullRouteRequiresSinceParameter() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient {
+            install(ContentNegotiation) {
+                json()
+            }
+        }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/sync/pull") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
     private suspend fun HttpClient.registerAndGetAuth(): AuthResponse {
         val registerRequest = RegisterRequest(
             email = "sync-test@example.com",
@@ -285,7 +409,8 @@ class SyncRoutesIntegrationTest {
         recipeId: UUID,
         creatorId: String,
         ingredientId: UUID,
-        updatedAt: Long
+        updatedAt: Long,
+        privacy: String = "PRIVATE"
     ): SyncRecipe = SyncRecipe(
         uuid = recipeId.toString(),
         title = "Carbonara",
@@ -297,7 +422,7 @@ class SyncRoutesIntegrationTest {
         servings = 2,
         creatorId = creatorId,
         recipeExternalUrl = null,
-        privacy = "PRIVATE",
+        privacy = privacy,
         updatedAt = updatedAt,
         deletedAt = null,
         steps = listOf(
