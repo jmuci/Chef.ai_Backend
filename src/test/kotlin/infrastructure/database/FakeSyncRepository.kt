@@ -17,6 +17,23 @@ class FakeSyncRepository : SyncRepository {
         return uuid
     }
 
+    fun seedRecipe(recipe: SyncRecipe, serverUpdatedAtMillis: Long) {
+        recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
+            recipe = recipe,
+            serverUpdatedAtMillis = serverUpdatedAtMillis
+        )
+    }
+
+    fun seedTag(uuid: UUID = UUID.randomUUID()): UUID {
+        knownTagIds += uuid
+        return uuid
+    }
+
+    fun seedLabel(uuid: UUID = UUID.randomUUID()): UUID {
+        knownLabelIds += uuid
+        return uuid
+    }
+
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
 
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
