@@ -55,7 +55,7 @@ class PostgresSyncRepository : SyncRepository {
                 it[prep_time_minutes] = recipe.prepTimeMinutes
                 it[cook_time_minutes] = recipe.cookTimeMinutes
                 it[servings] = recipe.servings
-                it[creator_id] = UUID.fromString(recipe.creatorId)
+                it[creator_id] = EntityID(UUID.fromString(recipe.creatorId), UserTable)
                 it[recipe_external_url] = recipe.recipeExternalUrl
                 it[privacy] = recipe.privacy
                 it[updated_at] = recipe.updatedAt
@@ -72,7 +72,7 @@ class PostgresSyncRepository : SyncRepository {
                 it[prep_time_minutes] = recipe.prepTimeMinutes
                 it[cook_time_minutes] = recipe.cookTimeMinutes
                 it[servings] = recipe.servings
-                it[creator_id] = UUID.fromString(recipe.creatorId)
+                it[creator_id] = EntityID(UUID.fromString(recipe.creatorId), UserTable)
                 it[recipe_external_url] = recipe.recipeExternalUrl
                 it[privacy] = recipe.privacy
                 it[updated_at] = recipe.updatedAt
@@ -170,7 +170,7 @@ class PostgresSyncRepository : SyncRepository {
             .selectAll()
             .where {
                 (RecipeTable.server_updated_at greater sinceInstant) and
-                    ((RecipeTable.creator_id eq userId) or (RecipeTable.privacy eq "PUBLIC"))
+                    ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
             }
             .orderBy(RecipeTable.server_updated_at to SortOrder.ASC)
             .limit(limit)
@@ -256,7 +256,7 @@ class PostgresSyncRepository : SyncRepository {
             prepTimeMinutes = recipeRow[RecipeTable.prep_time_minutes],
             cookTimeMinutes = recipeRow[RecipeTable.cook_time_minutes],
             servings = recipeRow[RecipeTable.servings],
-            creatorId = recipeRow[RecipeTable.creator_id].toString(),
+            creatorId = recipeRow[RecipeTable.creator_id].value.toString(),
             recipeExternalUrl = recipeRow[RecipeTable.recipe_external_url],
             privacy = recipeRow[RecipeTable.privacy],
             updatedAt = recipeRow[RecipeTable.updated_at],

@@ -10,6 +10,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeLabelTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
+import com.tenmilelabs.infrastructure.database.tables.UserTable
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
@@ -38,6 +39,7 @@ class RecipeMappingTest {
                 IngredientTable,
                 TagTable,
                 LabelTable,
+                UserTable,
                 RecipeTable,
                 RecipeIngredientTable,
                 RecipeTagTable,
@@ -52,6 +54,7 @@ class RecipeMappingTest {
         val now = stableInstant()
 
         val mapped = transaction {
+            insertUser(creatorUuid)
             val dao = RecipeDAO.new {
                 title = "Mapped Recipe"
                 description = "Description"
@@ -61,7 +64,7 @@ class RecipeMappingTest {
                 cookTimeMinutes = 20
                 servings = 2
                 privacy = "PUBLIC"
-                this.creatorId = creatorUuid
+                this.creatorId = EntityID(creatorUuid, UserTable)
                 recipeExternalUrl = "https://example.com"
                 updatedAt = 1234L
                 deletedAt = null
@@ -96,7 +99,6 @@ class RecipeMappingTest {
                 it[unit] = "g"
                 it[updatedAt] = 111L
                 it[deletedAt] = null
-                it[syncState] = "SYNCED"
                 it[RecipeIngredientTable.serverUpdatedAt] = serverUpdatedAt
             }
 
@@ -108,7 +110,6 @@ class RecipeMappingTest {
         assertEquals(42.0, mapped.quantity)
         assertEquals("g", mapped.unit)
         assertEquals(111L, mapped.updatedAt)
-        assertEquals("SYNCED", mapped.syncState)
         assertEquals(serverUpdatedAt.toString(), mapped.serverUpdatedAt)
     }
 
@@ -127,7 +128,6 @@ class RecipeMappingTest {
                 it[RecipeTagTable.tagId] = EntityID(tagId, TagTable)
                 it[updatedAt] = 222L
                 it[deletedAt] = null
-                it[syncState] = "SYNCED"
                 it[RecipeTagTable.serverUpdatedAt] = serverUpdatedAt
             }
 
@@ -137,7 +137,6 @@ class RecipeMappingTest {
         assertEquals(recipeId, mapped.recipeId)
         assertEquals(tagId, mapped.tagId)
         assertEquals(222L, mapped.updatedAt)
-        assertEquals("SYNCED", mapped.syncState)
         assertEquals(serverUpdatedAt.toString(), mapped.serverUpdatedAt)
     }
 
@@ -156,7 +155,6 @@ class RecipeMappingTest {
                 it[RecipeLabelTable.labelId] = EntityID(labelId, LabelTable)
                 it[updatedAt] = 333L
                 it[deletedAt] = null
-                it[syncState] = "SYNCED"
                 it[RecipeLabelTable.serverUpdatedAt] = serverUpdatedAt
             }
 
@@ -166,11 +164,13 @@ class RecipeMappingTest {
         assertEquals(recipeId, mapped.recipeId)
         assertEquals(labelId, mapped.labelId)
         assertEquals(333L, mapped.updatedAt)
-        assertEquals("SYNCED", mapped.syncState)
         assertEquals(serverUpdatedAt.toString(), mapped.serverUpdatedAt)
     }
 
     private fun insertRecipe(recipeId: UUID) {
+        val creatorId = UUID.randomUUID()
+        insertUser(creatorId)
+
         RecipeTable.insert {
             it[id] = EntityID(recipeId, RecipeTable)
             it[title] = "Recipe"
@@ -180,7 +180,7 @@ class RecipeMappingTest {
             it[prep_time_minutes] = 10
             it[cook_time_minutes] = 20
             it[servings] = 2
-            it[creator_id] = UUID.randomUUID()
+            it[creator_id] = EntityID(creatorId, UserTable)
             it[recipe_external_url] = null
             it[privacy] = "PRIVATE"
             it[updated_at] = 1L
@@ -218,6 +218,15 @@ class RecipeMappingTest {
             it[updated_at] = 1L
             it[deleted_at] = null
             it[server_updated_at] = Clock.System.now()
+        }
+    }
+
+    private fun insertUser(userId: UUID) {
+        UserTable.insert {
+            it[id] = EntityID(userId, UserTable)
+            it[user_name] = "user_$userId"
+            it[email] = "user_$userId@example.com"
+            it[password_hash] = "hash"
         }
     }
 
