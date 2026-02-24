@@ -40,7 +40,6 @@ data class RecipeIngredient(
     val unit: String,
     val updatedAt: Long,
     val deletedAt: Long?,
-    val syncState: String,
     val serverUpdatedAt: String
 )
 
@@ -51,7 +50,6 @@ fun ResultRow.toRecipeIngredient() = RecipeIngredient(
     unit = this[RecipeIngredientTable.unit],
     updatedAt = this[RecipeIngredientTable.updatedAt],
     deletedAt = this[RecipeIngredientTable.deletedAt],
-    syncState = this[RecipeIngredientTable.syncState],
     serverUpdatedAt = this[RecipeIngredientTable.serverUpdatedAt].toString()
 )
 
@@ -61,7 +59,6 @@ data class RecipeLabel(
     val labelId: UUID,
     val updatedAt: Long,
     val deletedAt: Long?,
-    val syncState: String,
     val serverUpdatedAt: String
 )
 
@@ -70,7 +67,6 @@ fun ResultRow.toRecipeLabel() = RecipeLabel(
     labelId = this[RecipeLabelTable.labelId].value,
     updatedAt = this[RecipeLabelTable.updatedAt],
     deletedAt = this[RecipeLabelTable.deletedAt],
-    syncState = this[RecipeLabelTable.syncState],
     serverUpdatedAt = this[RecipeLabelTable.serverUpdatedAt].toString()
 )
 
@@ -80,7 +76,6 @@ data class RecipeTag(
     val tagId: UUID,
     val updatedAt: Long,
     val deletedAt: Long?,
-    val syncState: String,
     val serverUpdatedAt: String
 )
 
@@ -89,6 +84,5 @@ fun ResultRow.toRecipeTag() = RecipeTag(
     tagId = this[RecipeTagTable.tagId].value,
     updatedAt = this[RecipeTagTable.updatedAt],
     deletedAt = this[RecipeTagTable.deletedAt],
-    syncState = this[RecipeTagTable.syncState],
     serverUpdatedAt = this[RecipeTagTable.serverUpdatedAt].toString()
 )

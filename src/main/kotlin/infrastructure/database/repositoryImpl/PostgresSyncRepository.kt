@@ -107,7 +107,6 @@ class PostgresSyncRepository : SyncRepository {
                 it[unit] = ingredient.unit
                 it[updatedAt] = recipe.updatedAt
                 it[deletedAt] = recipe.deletedAt
-                it[syncState] = "SYNCED"
                 it[RecipeIngredientTable.serverUpdatedAt] = serverUpdatedAt
             }
         }
@@ -129,7 +128,6 @@ class PostgresSyncRepository : SyncRepository {
                 it[RecipeTagTable.tagId] = EntityID(tagId, TagTable)
                 it[updatedAt] = recipe.updatedAt
                 it[deletedAt] = recipe.deletedAt
-                it[syncState] = "SYNCED"
                 it[RecipeTagTable.serverUpdatedAt] = serverUpdatedAt
             }
         }
@@ -151,7 +149,6 @@ class PostgresSyncRepository : SyncRepository {
                 it[RecipeLabelTable.labelId] = EntityID(labelId, LabelTable)
                 it[updatedAt] = recipe.updatedAt
                 it[deletedAt] = recipe.deletedAt
-                it[syncState] = "SYNCED"
                 it[RecipeLabelTable.serverUpdatedAt] = serverUpdatedAt
             }
         }
