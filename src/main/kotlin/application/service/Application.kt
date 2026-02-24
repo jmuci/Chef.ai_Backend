@@ -1,6 +1,7 @@
 package com.tenmilelabs.application.service
 
 import com.tenmilelabs.domain.repository.RecipesRepository
+import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.RecipesService
@@ -24,11 +25,13 @@ fun main(args: Array<String>) {
 fun Application.module(
     recipeRepository: RecipesRepository = PostgresRecipesRepository(log),
     userRepository: UserRepository = PostgresUserRepository(log),
-    refreshTokenRepository: RefreshTokenRepository = PostgresRefreshTokenRepository(log)
+    refreshTokenRepository: RefreshTokenRepository = PostgresRefreshTokenRepository(log),
+    syncRepository: SyncRepository = PostgresSyncRepository()
 ) {
     val recipeRepository = recipeRepository
     val userRepository = userRepository
     val refreshTokenRepository = refreshTokenRepository
+    val syncRepository = syncRepository
 
     // Configure JWT settings
     val jwtSecret = environment.config.propertyOrNull("jwt.secret")?.getString() ?: "secret"
@@ -38,7 +41,7 @@ fun Application.module(
     val jwtService = JwtService(jwtSecret, jwtIssuer, jwtAudience)
     val authService = AuthService(userRepository, refreshTokenRepository, jwtService, log)
     val recipesService = RecipesService(recipeRepository, log)
-    val syncService = SyncService(PostgresSyncRepository(), log)
+    val syncService = SyncService(syncRepository, log)
 
     // Set up plugins
     configureDatabases()

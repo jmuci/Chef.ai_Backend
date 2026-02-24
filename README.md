@@ -34,6 +34,87 @@ Unit tests run on PRs in Github
 ./smoke-test.sh
 ```
 
+### Sync Endpoints Smoke Test
+
+Use this quick flow to validate sync behavior manually in a running environment.
+
+1. Register and capture auth token + userId
+```bash
+curl -s -X POST http://localhost:8080/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email":"sync-smoke@example.com",
+    "username":"sync-smoke",
+    "password":"TestPassword123!"
+  }'
+```
+
+2. Push one aggregate recipe
+```bash
+curl -s -X POST http://localhost:8080/sync/push \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recipes":[
+      {
+        "uuid":"11111111-1111-1111-1111-111111111111",
+        "title":"Sync Smoke Recipe",
+        "description":"Recipe created from smoke test",
+        "imageUrl":"https://example.com/image.jpg",
+        "imageUrlThumbnail":"https://example.com/thumb.jpg",
+        "prepTimeMinutes":10,
+        "cookTimeMinutes":20,
+        "servings":2,
+        "creatorId":"<USER_ID>",
+        "recipeExternalUrl":null,
+        "privacy":"PRIVATE",
+        "updatedAt":1735689600000,
+        "deletedAt":null,
+        "steps":[
+          {
+            "uuid":"22222222-2222-2222-2222-222222222222",
+            "orderIndex":0,
+            "instruction":"Boil water"
+          }
+        ],
+        "ingredients":[
+          {
+            "ingredientId":"<KNOWN_INGREDIENT_UUID>",
+            "quantity":200.0,
+            "unit":"g"
+          }
+        ],
+        "tagIds":[],
+        "labelIds":[]
+      }
+    ]
+  }'
+```
+
+3. Pull deltas
+```bash
+curl -s "http://localhost:8080/sync/pull?since=0&limit=100" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+Expected outcomes:
+- Push returns `200` with arrays for `accepted`, `conflicts`, `errors`.
+- Pull returns `200` with `recipes`, `serverTimestamp`, `hasMore`.
+- Re-run pull with `since=<serverTimestamp>` to verify cursor-based pagination.
+
+### Sync Rollout Checklist
+
+- Ensure DB index exists on `recipes.server_updated_at`.
+- Confirm `DELETE /recipes` now performs soft delete (`deleted_at` + `server_updated_at` update).
+- Run test suites:
+```bash
+./gradlew test --tests "*SyncRoutesIntegrationTest"
+./gradlew test --tests "*SyncServiceTest"
+./gradlew test
+```
+- Validate push mixed response behavior (accepted/conflicts/errors in one response).
+- Validate pull pagination behavior (`limit`, `hasMore`, `serverTimestamp` cursor).
+
 ## Test Users
 
 | Email          | Password  |
@@ -165,4 +246,3 @@ eg. ``` psql -h localhost -U postgres -d chefai_db ```
 | Help for specific SQL command | `\h CREATE TABLE` |
 
 ---
-
