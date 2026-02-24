@@ -232,6 +232,8 @@ if ! jq -e --arg recipeUuid "$SYNC_RECIPE_UUID" '.recipes | any(.uuid == $recipe
   exit 1
 fi
 
-echo "Smoke test PASSED ✅"
-
 docker compose -f $COMPOSE_FILE down -v
+
+GREEN='\033[0;32m'
+RESET='\033[0m'
+printf "\n${GREEN}✔ ✅ ✔ Smoke test PASSED ✔ ✅ ✔${RESET}\n"
