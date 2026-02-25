@@ -16,7 +16,7 @@ jwt:
 
 cleanup:
   softDelete:
-    enabled: false
+    enabled: true
     retentionDays: 90
     intervalHours: 24
     batchSize: 500
