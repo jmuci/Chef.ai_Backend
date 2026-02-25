@@ -66,22 +66,22 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
         )
     }
 
-    override suspend fun allRecipes(): List<Recipe> = recipes
+    override suspend fun allRecipes(): List<Recipe> = recipes.filter { it.deletedAt == null }
 
     override suspend fun recipesByUserId(userId: UUID): List<Recipe> =
-        recipes.filter { it.creatorId == userId.toString() }
+        recipes.filter { it.creatorId == userId.toString() && it.deletedAt == null }
 
     override suspend fun publicRecipes(): List<Recipe> =
-        recipes.filter { it.privacy == Privacy.PUBLIC }
+        recipes.filter { it.privacy == Privacy.PUBLIC && it.deletedAt == null }
 
     override suspend fun recipeByTitle(title: String): Recipe? =
-        recipes.find { it.title == title }
+        recipes.find { it.title == title && it.deletedAt == null }
 
     override suspend fun recipeById(id: String): Recipe? =
-        recipes.find { it.uuid == id }
+        recipes.find { it.uuid == id && it.deletedAt == null }
 
     override suspend fun recipeByIdAndUserId(id: String, userId: UUID): Recipe? =
-        recipes.find { it.uuid == id && it.creatorId == userId.toString() }
+        recipes.find { it.uuid == id && it.creatorId == userId.toString() && it.deletedAt == null }
 
     override suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: UUID): String {
         if (recipeByTitle(recipeRequest.title) != null) {
@@ -108,6 +108,29 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
         return nextId
     }
 
-    override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean =
-        recipes.removeIf { it.uuid == uuid && it.creatorId == userId.toString() }
+    override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean {
+        val recipeIndex = recipes.indexOfFirst {
+            it.uuid == uuid && it.creatorId == userId.toString() && it.deletedAt == null
+        }
+        if (recipeIndex == -1) return false
+
+        recipes[recipeIndex] = recipes[recipeIndex].copy(deletedAt = System.currentTimeMillis())
+        return true
+    }
+
+    override suspend fun purgeSoftDeletedRecipes(olderThanMillis: Long, limit: Int): Int {
+        if (limit <= 0) return 0
+
+        val candidates = recipes
+            .asSequence()
+            .filter { it.deletedAt != null && it.deletedAt <= olderThanMillis }
+            .sortedBy { it.deletedAt }
+            .take(limit)
+            .map { it.uuid }
+            .toSet()
+
+        val before = recipes.size
+        recipes.removeIf { it.uuid in candidates }
+        return before - recipes.size
+    }
 }
