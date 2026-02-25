@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS recipes (
 );
 CREATE INDEX IF NOT EXISTS idx_recipes_creator_id ON recipes(creator_id);
 CREATE INDEX IF NOT EXISTS idx_recipes_server_updated_at ON recipes(server_updated_at);
+CREATE INDEX IF NOT EXISTS idx_recipes_deleted_at_not_null ON recipes(deleted_at) WHERE deleted_at IS NOT NULL;
 
 
 -- ===============================

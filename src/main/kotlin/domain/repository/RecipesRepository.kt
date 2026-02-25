@@ -27,4 +27,6 @@ interface RecipesRepository {
     suspend fun addRecipe(recipeRequest: CreateRecipeRequest, userId: UUID): String
 
     suspend fun removeRecipe(uuid: String, userId: UUID): Boolean
+
+    suspend fun purgeSoftDeletedRecipes(olderThanMillis: Long, limit: Int): Int
 }
