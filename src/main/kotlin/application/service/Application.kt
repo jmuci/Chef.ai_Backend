@@ -34,7 +34,6 @@ fun Application.module(
     val recipeRepository = recipeRepository
     val userRepository = userRepository
     val refreshTokenRepository = refreshTokenRepository
-    val syncRepository = syncRepository
 
     // Configure JWT settings
     val jwtSecret = environment.config.propertyOrNull("jwt.secret")?.getString() ?: "secret"
@@ -44,7 +43,6 @@ fun Application.module(
     val jwtService = JwtService(jwtSecret, jwtIssuer, jwtAudience)
     val authService = AuthService(userRepository, refreshTokenRepository, jwtService, log)
     val recipesService = RecipesService(recipeRepository, log)
-    val syncService = SyncService(PostgresSyncRepository(), log)
     val softDeletePurgeService = SoftDeletePurgeService(recipeRepository, log)
     val syncService = SyncService(syncRepository, log)
 
