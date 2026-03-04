@@ -88,8 +88,19 @@ enum class SyncErrors(val message: String) {
 }
 
 @Serializable
+data class SyncIngredient(
+    val uuid: String,
+    val displayName: String,
+    val allergenId: String?,
+    val sourcePrimaryId: String?,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
 data class SyncPullResponse(
     val recipes: List<SyncRecipe>,
+    val ingredients: List<SyncIngredient>,
     val serverTimestamp: Long,
     val hasMore: Boolean
 )
