@@ -1,4 +1,4 @@
-package com.tenmilelabs.infrastructure.database
+package domain.service
 
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -26,29 +26,13 @@ class FakeSyncRepository : SyncRepository {
     }
 
     fun seedRecipe(recipe: SyncRecipe, serverUpdatedAtMillis: Long) {
-        recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
-            recipe = recipe,
-            serverUpdatedAtMillis = serverUpdatedAtMillis
-        )
-    }
-
-    fun seedTag(uuid: UUID = UUID.randomUUID()): UUID {
-        knownTagIds += uuid
-        return uuid
-    }
-
-    fun seedLabel(uuid: UUID = UUID.randomUUID()): UUID {
-        knownLabelIds += uuid
-        return uuid
+        recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(recipe, serverUpdatedAtMillis)
     }
 
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
 
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
-        recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
-            recipe = recipe,
-            serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
-        )
+        recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(recipe, serverUpdatedAt.toEpochMilliseconds())
     }
 
     override suspend fun findDeltaRecipes(userId: UUID, sinceMillis: Long, limit: Int): List<SyncRecipeRecord> =

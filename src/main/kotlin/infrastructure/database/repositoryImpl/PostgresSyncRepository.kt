@@ -1,5 +1,6 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
+import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
@@ -179,6 +180,37 @@ class PostgresSyncRepository : SyncRepository {
 
     override suspend fun ingredientExists(uuid: UUID): Boolean = suspendTransaction {
         IngredientTable.selectAll().where { IngredientTable.id eq uuid }.limit(1).any()
+    }
+
+    override suspend fun findIngredients(
+        sinceMillis: Long,
+        referencedIds: Set<UUID>
+    ): List<SyncIngredient> = suspendTransaction {
+        val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+        val gapEntityIds = referencedIds.map { EntityID(it, IngredientTable) }
+
+        // Union: delta (changed since cursor) OR gap (referenced by current page,
+        // client may never have seen them even if they predate `since`).
+        IngredientTable
+            .selectAll()
+            .where {
+                if (gapEntityIds.isEmpty()) {
+                    IngredientTable.server_updated_at greater sinceInstant
+                } else {
+                    (IngredientTable.server_updated_at greater sinceInstant) or
+                        (IngredientTable.id inList gapEntityIds)
+                }
+            }
+            .map { row ->
+                SyncIngredient(
+                    uuid = row[IngredientTable.id].value.toString(),
+                    displayName = row[IngredientTable.display_name],
+                    allergenId = row[IngredientTable.allergen_id]?.value?.toString(),
+                    sourcePrimaryId = row[IngredientTable.source_primary_id]?.toString(),
+                    updatedAt = row[IngredientTable.updated_at],
+                    deletedAt = row[IngredientTable.deleted_at]
+                )
+            }
     }
 
     /**

@@ -111,10 +111,17 @@ class SyncService(
         val page = if (hasMore) records.take(limit) else records
         val cursor = page.lastOrNull()?.serverUpdatedAtMillis ?: sinceMillis
 
-        log.info("Sync pull processed for user $userId: returned=${page.size}, hasMore=$hasMore")
+        val referencedIngredientIds = page
+            .flatMap { it.recipe.ingredients }
+            .map { UUID.fromString(it.ingredientId) }
+            .toSet()
+        val ingredients = syncRepository.findIngredients(sinceMillis, referencedIngredientIds)
+
+        log.info("Sync pull processed for user $userId: returned=${page.size}, hasMore=$hasMore, ingredients=${ingredients.size}")
 
         return SyncPullResponse(
             recipes = page.map { it.recipe },
+            ingredients = ingredients,
             serverTimestamp = cursor,
             hasMore = hasMore
         )
