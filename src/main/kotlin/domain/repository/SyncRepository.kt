@@ -19,7 +19,17 @@ interface SyncRepository {
         limit: Int
     ): List<SyncRecipeRecord>
     suspend fun ingredientExists(uuid: UUID): Boolean
-    suspend fun findIngredientsByIds(ids: Set<UUID>): List<SyncIngredient>
+    /**
+     * Returns the union of:
+     *  - all ingredients with server_updated_at > sinceMillis (delta)
+     *  - all ingredients whose uuid is in [referencedIds] (gap coverage)
+     *
+     * This guarantees referential completeness for the client without
+     * requiring per-client state: gap ingredients are only included when
+     * a recipe in the current page references them, so unchanged ingredients
+     * that the client already has are not re-sent on every pull.
+     */
+    suspend fun findIngredients(sinceMillis: Long, referencedIds: Set<UUID>): List<SyncIngredient>
     suspend fun existingTagIds(ids: Set<UUID>): Set<UUID>
     suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID>
 }

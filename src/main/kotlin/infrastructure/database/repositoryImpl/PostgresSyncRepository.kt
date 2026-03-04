@@ -182,12 +182,25 @@ class PostgresSyncRepository : SyncRepository {
         IngredientTable.selectAll().where { IngredientTable.id eq uuid }.limit(1).any()
     }
 
-    override suspend fun findIngredientsByIds(ids: Set<UUID>): List<SyncIngredient> = suspendTransaction {
-        if (ids.isEmpty()) return@suspendTransaction emptyList()
-        val entityIds = ids.map { EntityID(it, IngredientTable) }
+    override suspend fun findIngredients(
+        sinceMillis: Long,
+        referencedIds: Set<UUID>
+    ): List<SyncIngredient> = suspendTransaction {
+        val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+        val gapEntityIds = referencedIds.map { EntityID(it, IngredientTable) }
+
+        // Union: delta (changed since cursor) OR gap (referenced by current page,
+        // client may never have seen them even if they predate `since`).
         IngredientTable
             .selectAll()
-            .where { IngredientTable.id inList entityIds }
+            .where {
+                if (gapEntityIds.isEmpty()) {
+                    IngredientTable.server_updated_at greater sinceInstant
+                } else {
+                    (IngredientTable.server_updated_at greater sinceInstant) or
+                        (IngredientTable.id inList gapEntityIds)
+                }
+            }
             .map { row ->
                 SyncIngredient(
                     uuid = row[IngredientTable.id].value.toString(),

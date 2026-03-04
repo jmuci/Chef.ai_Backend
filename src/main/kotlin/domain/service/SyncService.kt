@@ -115,7 +115,7 @@ class SyncService(
             .flatMap { it.recipe.ingredients }
             .map { UUID.fromString(it.ingredientId) }
             .toSet()
-        val ingredients = syncRepository.findIngredientsByIds(referencedIngredientIds)
+        val ingredients = syncRepository.findIngredients(sinceMillis, referencedIngredientIds)
 
         log.info("Sync pull processed for user $userId: returned=${page.size}, hasMore=$hasMore, ingredients=${ingredients.size}")
 
