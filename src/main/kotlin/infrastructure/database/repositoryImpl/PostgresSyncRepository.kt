@@ -1,5 +1,6 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
+import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
@@ -179,6 +180,24 @@ class PostgresSyncRepository : SyncRepository {
 
     override suspend fun ingredientExists(uuid: UUID): Boolean = suspendTransaction {
         IngredientTable.selectAll().where { IngredientTable.id eq uuid }.limit(1).any()
+    }
+
+    override suspend fun findIngredientsByIds(ids: Set<UUID>): List<SyncIngredient> = suspendTransaction {
+        if (ids.isEmpty()) return@suspendTransaction emptyList()
+        val entityIds = ids.map { EntityID(it, IngredientTable) }
+        IngredientTable
+            .selectAll()
+            .where { IngredientTable.id inList entityIds }
+            .map { row ->
+                SyncIngredient(
+                    uuid = row[IngredientTable.id].value.toString(),
+                    displayName = row[IngredientTable.display_name],
+                    allergenId = row[IngredientTable.allergen_id]?.value?.toString(),
+                    sourcePrimaryId = row[IngredientTable.source_primary_id]?.toString(),
+                    updatedAt = row[IngredientTable.updated_at],
+                    deletedAt = row[IngredientTable.deleted_at]
+                )
+            }
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.tenmilelabs.domain.repository
 
+import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncRecipe
 import kotlinx.datetime.Instant
 import java.util.UUID
@@ -18,6 +19,7 @@ interface SyncRepository {
         limit: Int
     ): List<SyncRecipeRecord>
     suspend fun ingredientExists(uuid: UUID): Boolean
+    suspend fun findIngredientsByIds(ids: Set<UUID>): List<SyncIngredient>
     suspend fun existingTagIds(ids: Set<UUID>): Set<UUID>
     suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID>
 }
