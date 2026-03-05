@@ -47,7 +47,9 @@ data class SyncPushResponse(
     val accepted: List<AcceptedEntity>,
     val conflicts: List<ConflictEntity>,
     val errors: List<SyncError>,
-    val serverTimestamp: Long
+    val serverTimestamp: Long,
+    /** Reference entities required to resolve every [ConflictEntity.serverVersion] locally. */
+    val referenceData: SyncReferenceData
 )
 
 @Serializable
@@ -98,9 +100,60 @@ data class SyncIngredient(
 )
 
 @Serializable
+data class SyncAllergen(
+    val uuid: String,
+    val displayName: String,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
+data class SyncSourceClassification(
+    val uuid: String,
+    val category: String,
+    val subcategory: String?,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
+data class SyncTag(
+    val uuid: String,
+    val displayName: String,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
+data class SyncLabel(
+    val uuid: String,
+    val displayName: String,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+/**
+ * All reference entities needed to satisfy FK constraints when persisting
+ * a set of recipe aggregates. Shared by both the pull response (flat fields)
+ * and the push response ([SyncPushResponse.referenceData]).
+ */
+@Serializable
+data class SyncReferenceData(
+    val ingredients: List<SyncIngredient> = emptyList(),
+    val allergens: List<SyncAllergen> = emptyList(),
+    val sourceClassifications: List<SyncSourceClassification> = emptyList(),
+    val tags: List<SyncTag> = emptyList(),
+    val labels: List<SyncLabel> = emptyList()
+)
+
+@Serializable
 data class SyncPullResponse(
     val recipes: List<SyncRecipe>,
     val ingredients: List<SyncIngredient>,
+    val allergens: List<SyncAllergen>,
+    val sourceClassifications: List<SyncSourceClassification>,
+    val tags: List<SyncTag>,
+    val labels: List<SyncLabel>,
     val serverTimestamp: Long,
     val hasMore: Boolean
 )

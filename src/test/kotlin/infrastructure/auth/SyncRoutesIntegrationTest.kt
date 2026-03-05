@@ -362,6 +362,223 @@ class SyncRoutesIntegrationTest {
         assertEquals(3000L, secondPage.serverTimestamp)
     }
 
+    /**
+     * Example 1 (integration): A tag whose server_updated_at predates `since` must appear in
+     * response.tags when a recipe returned in the page references it. Confirms the gap clause
+     * fires end-to-end through the HTTP layer.
+     */
+    @Test
+    fun pullRouteIncludesGapTagReferencedByReturnedRecipe() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+        val tagId = syncRepository.seedTag(serverUpdatedAt = 500L) // predates since=1000
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val recipe = buildRecipe(UUID.randomUUID(), auth.userId, ingredientId, 2000L)
+            .copy(tagIds = listOf(tagId.toString()))
+        syncRepository.seedRecipe(recipe, serverUpdatedAtMillis = 2000L)
+
+        val response = client.get("/sync/pull?since=1000&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPullResponse>()
+        assertEquals(1, body.recipes.size)
+        assertEquals(1, body.tags.size)
+        assertEquals(tagId.toString(), body.tags.first().uuid)
+    }
+
+    /**
+     * Example 2 (integration): When a push conflict is returned, response.referenceData must
+     * contain the ingredient referenced by the conflict's serverVersion so the client can
+     * resolve it without a separate pull.
+     */
+    @Test
+    fun pushRouteConflictReferenceDataContainsServerVersionIngredient() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val recipeId = UUID.randomUUID()
+        val serverRecipe = buildRecipe(recipeId, auth.userId, ingredientId, updatedAt = 5000L)
+        syncRepository.seedRecipe(serverRecipe, serverUpdatedAtMillis = 5000L)
+
+        val staleClientRecipe = buildRecipe(recipeId, auth.userId, ingredientId, updatedAt = 1000L)
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(SyncPushRequest(recipes = listOf(staleClientRecipe)))
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(1, body.conflicts.size)
+        assertEquals(ConflictReasons.SERVER_NEWER, body.conflicts.first().reason)
+        val referenceIngredientIds = body.referenceData.ingredients.map { it.uuid }.toSet()
+        assertTrue(referenceIngredientIds.contains(ingredientId.toString()))
+    }
+
+    /**
+     * Full sync lifecycle: initial pull → Device A edit accepted → Device B conflict →
+     * Device B resolution accepted → final pull confirms canonical state.
+     *
+     * Verifies the end-to-end protocol a mobile client would follow:
+     * 1. Device B syncs baseline ("Pasta")
+     * 2. Device A pushes a newer version ("Carbonara") — accepted
+     * 3. Device B, unaware of Device A's change, pushes a stale version ("Mac and Cheese") — conflict
+     *    • conflict.serverVersion must contain "Carbonara" (not "Mac and Cheese")
+     *    • referenceData must include all FK dependencies so Device B can apply the fix locally
+     * 4. Device B accepts the server's truth and re-pushes "Carbonara" with a fresh timestamp — accepted
+     * 5. Final pull from Device B's prior cursor confirms "Carbonara" is the canonical recipe
+     */
+    @Test
+    fun fullSyncLifecycleWithConflictAndResolution() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient(serverUpdatedAt = 100L)
+        val tagId = syncRepository.seedTag(serverUpdatedAt = 100L)
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+        val sharedRecipeId = UUID.randomUUID()
+
+        // Seed the initial "Pasta" recipe — shared baseline between both devices.
+        val pastaRecipe = buildRecipe(
+            recipeId = sharedRecipeId,
+            creatorId = auth.userId,
+            ingredientId = ingredientId,
+            updatedAt = 500L,
+            title = "Pasta"
+        ).copy(tagIds = listOf(tagId.toString()))
+        syncRepository.seedRecipe(pastaRecipe, serverUpdatedAtMillis = 500L)
+
+        // ── Step 1: Device B initial pull (since=0) ──────────────────────────────────
+        // Simulates Device B's first sync. Must receive "Pasta" plus all FK dependencies.
+        val deviceBInitialPull = client.get("/sync/pull?since=0&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+        assertEquals(HttpStatusCode.OK, deviceBInitialPull.status)
+        val deviceBBaseline = deviceBInitialPull.body<SyncPullResponse>()
+        assertEquals(1, deviceBBaseline.recipes.size)
+        assertEquals("Pasta", deviceBBaseline.recipes.first().title)
+        assertTrue(deviceBBaseline.ingredients.any { it.uuid == ingredientId.toString() })
+        assertTrue(deviceBBaseline.tags.any { it.uuid == tagId.toString() })
+        val deviceBCursor = deviceBBaseline.serverTimestamp // 500L
+
+        // ── Step 2: Device A pushes "Carbonara" edit ─────────────────────────────────
+        // updatedAt=1000L > server's serverUpdatedAtMillis=500L → accepted.
+        val carbonaraRecipe = buildRecipe(
+            recipeId = sharedRecipeId,
+            creatorId = auth.userId,
+            ingredientId = ingredientId,
+            updatedAt = 1000L,
+            title = "Carbonara"
+        ).copy(tagIds = listOf(tagId.toString()))
+        val deviceAPushResponse = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(SyncPushRequest(recipes = listOf(carbonaraRecipe)))
+        }
+        assertEquals(HttpStatusCode.OK, deviceAPushResponse.status)
+        val deviceAPushBody = deviceAPushResponse.body<SyncPushResponse>()
+        assertEquals(1, deviceAPushBody.accepted.size)
+        assertEquals(0, deviceAPushBody.conflicts.size)
+        val carbonaraServerUpdatedAt = deviceAPushBody.accepted.first().serverUpdatedAt
+
+        // ── Step 3: Device B pushes stale "Mac and Cheese" ───────────────────────────
+        // updatedAt=800L < carbonaraServerUpdatedAt (≈ now) → conflict.
+        val macAndCheeseRecipe = buildRecipe(
+            recipeId = sharedRecipeId,
+            creatorId = auth.userId,
+            ingredientId = ingredientId,
+            updatedAt = 800L,
+            title = "Mac and Cheese"
+        ).copy(tagIds = listOf(tagId.toString()))
+        val deviceBConflictResponse = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(SyncPushRequest(recipes = listOf(macAndCheeseRecipe)))
+        }
+        assertEquals(HttpStatusCode.OK, deviceBConflictResponse.status)
+        val deviceBConflictBody = deviceBConflictResponse.body<SyncPushResponse>()
+        assertEquals(0, deviceBConflictBody.accepted.size)
+        assertEquals(1, deviceBConflictBody.conflicts.size)
+        assertEquals(0, deviceBConflictBody.errors.size)
+
+        val conflict = deviceBConflictBody.conflicts.first()
+        assertEquals(ConflictReasons.SERVER_NEWER, conflict.reason)
+        // The server holds "Carbonara" — not Device B's "Mac and Cheese"
+        assertEquals("Carbonara", conflict.serverVersion.title)
+        // referenceData must include all FK deps so Device B can apply the resolution without a separate pull
+        assertTrue(deviceBConflictBody.referenceData.ingredients.any { it.uuid == ingredientId.toString() })
+        assertTrue(deviceBConflictBody.referenceData.tags.any { it.uuid == tagId.toString() })
+
+        // ── Step 4: Device B resolves conflict ───────────────────────────────────────
+        // Accept the server's "Carbonara" as truth. updatedAt must exceed the server's
+        // previously accepted timestamp to avoid triggering another conflict.
+        val resolvedRecipe = conflict.serverVersion.copy(updatedAt = carbonaraServerUpdatedAt + 1)
+        val deviceBResolutionResponse = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(SyncPushRequest(recipes = listOf(resolvedRecipe)))
+        }
+        assertEquals(HttpStatusCode.OK, deviceBResolutionResponse.status)
+        val deviceBResolutionBody = deviceBResolutionResponse.body<SyncPushResponse>()
+        assertEquals(1, deviceBResolutionBody.accepted.size)
+        assertEquals(0, deviceBResolutionBody.conflicts.size)
+        assertEquals(0, deviceBResolutionBody.errors.size)
+
+        // ── Step 5: Final pull from Device B's prior cursor ──────────────────────────
+        // Device B resumes from the baseline checkpoint. "Carbonara" is the canonical state.
+        val finalPull = client.get("/sync/pull?since=$deviceBCursor&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+        assertEquals(HttpStatusCode.OK, finalPull.status)
+        val finalBody = finalPull.body<SyncPullResponse>()
+        assertEquals(1, finalBody.recipes.size)
+        assertEquals("Carbonara", finalBody.recipes.first().title)
+        assertFalse(finalBody.hasMore)
+    }
+
     @Test
     fun pullRouteRequiresSinceParameter() = testApplication {
         val syncRepository = FakeSyncRepository()
@@ -410,10 +627,11 @@ class SyncRoutesIntegrationTest {
         creatorId: String,
         ingredientId: UUID,
         updatedAt: Long,
-        privacy: String = "PRIVATE"
+        privacy: String = "PRIVATE",
+        title: String = "Carbonara"
     ): SyncRecipe = SyncRecipe(
         uuid = recipeId.toString(),
-        title = "Carbonara",
+        title = title,
         description = "Classic",
         imageUrl = "https://example.com/image.jpg",
         imageUrlThumbnail = "https://example.com/thumb.jpg",

@@ -1,9 +1,14 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
+import com.tenmilelabs.application.dto.SyncAllergen
 import com.tenmilelabs.application.dto.SyncIngredient
+import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
+import com.tenmilelabs.application.dto.SyncReferenceData
+import com.tenmilelabs.application.dto.SyncSourceClassification
+import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
@@ -182,35 +187,147 @@ class PostgresSyncRepository : SyncRepository {
         IngredientTable.selectAll().where { IngredientTable.id eq uuid }.limit(1).any()
     }
 
-    override suspend fun findIngredients(
-        sinceMillis: Long,
-        referencedIds: Set<UUID>
-    ): List<SyncIngredient> = suspendTransaction {
-        val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
-        val gapEntityIds = referencedIds.map { EntityID(it, IngredientTable) }
+    override suspend fun collectReferenceData(
+        sinceMillis: Long?,
+        ingredientIds: Set<UUID>,
+        tagIds: Set<UUID>,
+        labelIds: Set<UUID>
+    ): SyncReferenceData = suspendTransaction {
+        val sinceInstant = sinceMillis?.let { Instant.fromEpochMilliseconds(it) }
 
-        // Union: delta (changed since cursor) OR gap (referenced by current page,
-        // client may never have seen them even if they predate `since`).
-        IngredientTable
-            .selectAll()
-            .where {
-                if (gapEntityIds.isEmpty()) {
+        val ingredients = queryIngredients(sinceInstant, ingredientIds)
+
+        // Derive transitive dependencies from the returned ingredients so that
+        // delta ingredients always bring their own allergen / source-classification rows.
+        val allergenIds = ingredients.mapNotNull { it.allergenId }.map { UUID.fromString(it) }.toSet()
+        val sourceClassificationIds = ingredients.mapNotNull { it.sourcePrimaryId }.map { UUID.fromString(it) }.toSet()
+
+        SyncReferenceData(
+            ingredients = ingredients,
+            allergens = queryAllergens(sinceInstant, allergenIds),
+            sourceClassifications = querySourceClassifications(sinceInstant, sourceClassificationIds),
+            tags = queryTags(sinceInstant, tagIds),
+            labels = queryLabels(sinceInstant, labelIds)
+        )
+    }
+
+    // ── Private query helpers ──────────────────────────────────────────────────
+    // Each helper applies the union pattern inside the where{} lambda where the
+    // Exposed SqlExpressionBuilder operators (greater, inList, or) are in scope.
+    // When sinceInstant is null only the gap (id IN ids) clause is used.
+
+    private fun queryIngredients(sinceInstant: Instant?, ids: Set<UUID>): List<SyncIngredient> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, IngredientTable) }
+        return IngredientTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (IngredientTable.server_updated_at greater sinceInstant) or (IngredientTable.id inList entityIds)
+                sinceInstant != null ->
                     IngredientTable.server_updated_at greater sinceInstant
-                } else {
-                    (IngredientTable.server_updated_at greater sinceInstant) or
-                        (IngredientTable.id inList gapEntityIds)
-                }
+                else ->
+                    IngredientTable.id inList entityIds
             }
-            .map { row ->
-                SyncIngredient(
-                    uuid = row[IngredientTable.id].value.toString(),
-                    displayName = row[IngredientTable.display_name],
-                    allergenId = row[IngredientTable.allergen_id]?.value?.toString(),
-                    sourcePrimaryId = row[IngredientTable.source_primary_id]?.toString(),
-                    updatedAt = row[IngredientTable.updated_at],
-                    deletedAt = row[IngredientTable.deleted_at]
-                )
+        }.map { row ->
+            SyncIngredient(
+                uuid = row[IngredientTable.id].value.toString(),
+                displayName = row[IngredientTable.display_name],
+                allergenId = row[IngredientTable.allergen_id]?.value?.toString(),
+                sourcePrimaryId = row[IngredientTable.source_primary_id]?.toString(),
+                updatedAt = row[IngredientTable.updated_at],
+                deletedAt = row[IngredientTable.deleted_at]
+            )
+        }
+    }
+
+    private fun queryAllergens(sinceInstant: Instant?, ids: Set<UUID>): List<SyncAllergen> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, AllergenTable) }
+        return AllergenTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (AllergenTable.server_updated_at greater sinceInstant) or (AllergenTable.id inList entityIds)
+                sinceInstant != null ->
+                    AllergenTable.server_updated_at greater sinceInstant
+                else ->
+                    AllergenTable.id inList entityIds
             }
+        }.map { row ->
+            SyncAllergen(
+                uuid = row[AllergenTable.id].value.toString(),
+                displayName = row[AllergenTable.display_name],
+                updatedAt = row[AllergenTable.updated_at],
+                deletedAt = row[AllergenTable.deleted_at]
+            )
+        }
+    }
+
+    private fun querySourceClassifications(sinceInstant: Instant?, ids: Set<UUID>): List<SyncSourceClassification> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, SourceClassificationTable) }
+        return SourceClassificationTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (SourceClassificationTable.server_updated_at greater sinceInstant) or
+                        (SourceClassificationTable.id inList entityIds)
+                sinceInstant != null ->
+                    SourceClassificationTable.server_updated_at greater sinceInstant
+                else ->
+                    SourceClassificationTable.id inList entityIds
+            }
+        }.map { row ->
+            SyncSourceClassification(
+                uuid = row[SourceClassificationTable.id].value.toString(),
+                category = row[SourceClassificationTable.category],
+                subcategory = row[SourceClassificationTable.subcategory],
+                updatedAt = row[SourceClassificationTable.updated_at],
+                deletedAt = row[SourceClassificationTable.deleted_at]
+            )
+        }
+    }
+
+    private fun queryTags(sinceInstant: Instant?, ids: Set<UUID>): List<SyncTag> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, TagTable) }
+        return TagTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (TagTable.server_updated_at greater sinceInstant) or (TagTable.id inList entityIds)
+                sinceInstant != null ->
+                    TagTable.server_updated_at greater sinceInstant
+                else ->
+                    TagTable.id inList entityIds
+            }
+        }.map { row ->
+            SyncTag(
+                uuid = row[TagTable.id].value.toString(),
+                displayName = row[TagTable.display_name],
+                updatedAt = row[TagTable.updated_at],
+                deletedAt = row[TagTable.deleted_at]
+            )
+        }
+    }
+
+    private fun queryLabels(sinceInstant: Instant?, ids: Set<UUID>): List<SyncLabel> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, LabelTable) }
+        return LabelTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (LabelTable.server_updated_at greater sinceInstant) or (LabelTable.id inList entityIds)
+                sinceInstant != null ->
+                    LabelTable.server_updated_at greater sinceInstant
+                else ->
+                    LabelTable.id inList entityIds
+            }
+        }.map { row ->
+            SyncLabel(
+                uuid = row[LabelTable.id].value.toString(),
+                displayName = row[LabelTable.display_name],
+                updatedAt = row[LabelTable.updated_at],
+                deletedAt = row[LabelTable.deleted_at]
+            )
+        }
     }
 
     /**

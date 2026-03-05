@@ -1,7 +1,10 @@
 package com.tenmilelabs.infrastructure.database
 
 import com.tenmilelabs.application.dto.SyncIngredient
+import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
+import com.tenmilelabs.application.dto.SyncReferenceData
+import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import kotlinx.datetime.Instant
@@ -10,18 +13,44 @@ import java.util.UUID
 class FakeSyncRepository : SyncRepository {
     private val recipes = mutableMapOf<UUID, SyncRecipeRecord>()
     private val ingredients = mutableMapOf<UUID, SyncIngredient>()
-    private val knownTagIds = mutableSetOf<UUID>()
-    private val knownLabelIds = mutableSetOf<UUID>()
+    private val ingredientServerTs = mutableMapOf<UUID, Long>()
+    private val tags = mutableMapOf<UUID, SyncTag>()
+    private val tagServerTs = mutableMapOf<UUID, Long>()
+    private val labels = mutableMapOf<UUID, SyncLabel>()
+    private val labelServerTs = mutableMapOf<UUID, Long>()
 
-    fun seedIngredient(uuid: UUID = UUID.randomUUID()): UUID {
+    fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
             uuid = uuid.toString(),
             displayName = "Ingredient-${uuid.toString().take(8)}",
             allergenId = null,
             sourcePrimaryId = null,
-            updatedAt = 0L,
+            updatedAt = serverUpdatedAt,
             deletedAt = null
         )
+        ingredientServerTs[uuid] = serverUpdatedAt
+        return uuid
+    }
+
+    fun seedTag(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
+        tags[uuid] = SyncTag(
+            uuid = uuid.toString(),
+            displayName = "Tag-${uuid.toString().take(8)}",
+            updatedAt = serverUpdatedAt,
+            deletedAt = null
+        )
+        tagServerTs[uuid] = serverUpdatedAt
+        return uuid
+    }
+
+    fun seedLabel(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
+        labels[uuid] = SyncLabel(
+            uuid = uuid.toString(),
+            displayName = "Label-${uuid.toString().take(8)}",
+            updatedAt = serverUpdatedAt,
+            deletedAt = null
+        )
+        labelServerTs[uuid] = serverUpdatedAt
         return uuid
     }
 
@@ -30,16 +59,6 @@ class FakeSyncRepository : SyncRepository {
             recipe = recipe,
             serverUpdatedAtMillis = serverUpdatedAtMillis
         )
-    }
-
-    fun seedTag(uuid: UUID = UUID.randomUUID()): UUID {
-        knownTagIds += uuid
-        return uuid
-    }
-
-    fun seedLabel(uuid: UUID = UUID.randomUUID()): UUID {
-        knownLabelIds += uuid
-        return uuid
     }
 
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
@@ -62,15 +81,27 @@ class FakeSyncRepository : SyncRepository {
 
     override suspend fun ingredientExists(uuid: UUID): Boolean = ingredients.containsKey(uuid)
 
-    override suspend fun findIngredients(
-        sinceMillis: Long,
-        referencedIds: Set<UUID>
-    ): List<SyncIngredient> = ingredients
-        .filter { (uuid, ingredient) -> ingredient.updatedAt > sinceMillis || uuid in referencedIds }
-        .values
-        .sortedWith(compareBy<SyncIngredient> { it.updatedAt }.thenBy { it.uuid })
+    override suspend fun collectReferenceData(
+        sinceMillis: Long?,
+        ingredientIds: Set<UUID>,
+        tagIds: Set<UUID>,
+        labelIds: Set<UUID>
+    ): SyncReferenceData {
+        fun <V> Map<UUID, V>.unionFilter(ids: Set<UUID>, serverTs: Map<UUID, Long>): List<V> =
+            filter { (uuid, _) ->
+                (sinceMillis != null && (serverTs[uuid] ?: 0L) > sinceMillis) || uuid in ids
+            }.values.toList()
 
-    override suspend fun existingTagIds(ids: Set<UUID>): Set<UUID> = ids.intersect(knownTagIds)
+        return SyncReferenceData(
+            ingredients = ingredients.unionFilter(ingredientIds, ingredientServerTs),
+            allergens = emptyList(),
+            sourceClassifications = emptyList(),
+            tags = tags.unionFilter(tagIds, tagServerTs),
+            labels = labels.unionFilter(labelIds, labelServerTs)
+        )
+    }
 
-    override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(knownLabelIds)
+    override suspend fun existingTagIds(ids: Set<UUID>): Set<UUID> = ids.intersect(tags.keys)
+
+    override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(labels.keys)
 }

@@ -101,6 +101,97 @@ class SyncServiceTest {
         assertFalse(response.recipes.any { it.uuid == privateForeign.uuid })
     }
 
+    // ── Referential completeness tests ───────────────────────────────────────
+
+    /**
+     * Example 1 (unit): A tag whose server_updated_at predates `since` must still
+     * appear in response.tags when it is referenced by a recipe in the returned page
+     * (gap clause of the union). Without this, recipe_tags.tagId FK insert would fail.
+     */
+    @Test
+    fun pullIncludesGapTagReferencedByReturnedRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val tagId = repo.seedTag(serverUpdatedAt = 500L) // predates since=1000
+
+        val recipe = sampleRecipe(
+            uuid = UUID.randomUUID(),
+            creatorId = userId,
+            updatedAt = 2000L,
+            ingredientId = ingredientId
+        ).copy(tagIds = listOf(tagId.toString()))
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 2000L)
+
+        val response = service.pullRecipes(userId = userId, sinceMillis = 1000L, limit = 10)
+
+        assertEquals(1, response.recipes.size)
+        assertEquals(1, response.tags.size)
+        assertEquals(tagId.toString(), response.tags.first().uuid)
+    }
+
+    /**
+     * An ingredient updated after `since` but not referenced by any recipe in the
+     * current page must still appear in response.ingredients via the delta clause.
+     * Ensures the client receives all catalogue updates, not just referenced ones.
+     */
+    @Test
+    fun pullIncludesDeltaIngredientNotReferencedByCurrentPage() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val referencedIngredientId = repo.seedIngredient(serverUpdatedAt = 0L)
+        val deltaOnlyIngredientId = repo.seedIngredient(serverUpdatedAt = 1500L) // after since=1000, not in recipe
+
+        val recipe = sampleRecipe(
+            uuid = UUID.randomUUID(),
+            creatorId = userId,
+            updatedAt = 2000L,
+            ingredientId = referencedIngredientId
+        )
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 2000L)
+
+        val response = service.pullRecipes(userId = userId, sinceMillis = 1000L, limit = 10)
+
+        val returnedIds = response.ingredients.map { it.uuid }.toSet()
+        assertTrue(returnedIds.contains(referencedIngredientId.toString())) // gap
+        assertTrue(returnedIds.contains(deltaOnlyIngredientId.toString()))  // delta
+    }
+
+    /**
+     * Example 2 (unit): When a push produces a conflict, response.referenceData must
+     * include every entity referenced by the conflict's serverVersion so the client
+     * can upsert it without a separate pull. Without this, recipe_ingredients.ingredientId
+     * FK insert would fail on the client side.
+     */
+    @Test
+    fun pushConflictReferenceDataIncludesIngredientFromServerVersion() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val serverIngredientId = repo.seedIngredient(serverUpdatedAt = 100L)
+
+        // Server has a newer version of this recipe
+        val serverRecipe = sampleRecipe(
+            uuid = recipeId,
+            creatorId = userId,
+            updatedAt = 5000L,
+            ingredientId = serverIngredientId
+        )
+        repo.seedRecipe(serverRecipe, serverUpdatedAtMillis = 5000L)
+
+        // Client pushes a stale version — triggers conflict
+        val staleClientRecipe = sampleRecipe(
+            uuid = recipeId,
+            creatorId = userId,
+            updatedAt = 1000L,
+            ingredientId = serverIngredientId
+        )
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(staleClientRecipe)))
+
+        assertEquals(1, response.conflicts.size)
+        assertEquals(ConflictReasons.SERVER_NEWER, response.conflicts.first().reason)
+        val referenceIngredientIds = response.referenceData.ingredients.map { it.uuid }.toSet()
+        assertTrue(referenceIngredientIds.contains(serverIngredientId.toString()))
+    }
+
     @Test
     fun pushReturnsErrorForMalformedTagId() = withService { service, repo ->
         val userId = UUID.randomUUID()
