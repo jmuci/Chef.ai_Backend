@@ -11,6 +11,17 @@ Here are some useful links to get you started:
 - The [Ktor Slack chat](https://app.slack.com/client/T09229ZC6/C0A974TJ9). You'll need
   to [request an invite](https://surveys.jetbrains.com/s3/kotlin-slack-sign-up) to join.
 
+## Documentation
+
+Core architecture and protocol documentation:
+
+| Document | Coverage |
+|----------|----------|
+| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios |
+| [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
+| [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
+| [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
+
 ## Features
 
 Here's a list of features included in this project:
