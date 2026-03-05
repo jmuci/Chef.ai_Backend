@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Backend Dev Server",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["run"],
+      "port": 8080
+    },
+    {
+      "name": "Run All Tests",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["test"],
+      "port": 0
+    },
+    {
+      "name": "Run Sync Tests",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["test", "--tests", "*Sync*"],
+      "port": 0
+    },
+    {
+      "name": "Build FAT JAR",
+      "runtimeExecutable": "./gradlew",
+      "runtimeArgs": ["buildFatJar"],
+      "port": 0
+    }
+  ]
+}
