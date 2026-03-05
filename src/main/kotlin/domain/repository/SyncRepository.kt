@@ -1,7 +1,7 @@
 package com.tenmilelabs.domain.repository
 
-import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncRecipe
+import com.tenmilelabs.application.dto.SyncReferenceData
 import kotlinx.datetime.Instant
 import java.util.UUID
 
@@ -49,16 +49,27 @@ interface SyncRepository {
     suspend fun ingredientExists(uuid: UUID): Boolean
 
     /**
-     * Returns the union of:
-     *  - all ingredients with server_updated_at > sinceMillis (delta)
-     *  - all ingredients whose uuid is in [referencedIds] (gap coverage)
+     * Collects all reference entities (ingredients, allergens, source classifications,
+     * tags, labels) required for the client to satisfy FK constraints when persisting
+     * a set of recipe aggregates.
      *
-     * This guarantees referential completeness for the client without
-     * requiring per-client state: gap ingredients are only included when
-     * a recipe in the current page references them, so unchanged ingredients
-     * that the client already has are not re-sent on every pull.
+     * When [sinceMillis] is non-null each entity type is fetched as the union of:
+     *  - entities with server_updated_at > sinceMillis (delta — client needs updates)
+     *  - entities directly referenced by the recipes (gap — client may never have seen them)
+     *
+     * When [sinceMillis] is null only the directly referenced entities are fetched.
+     * This mode is used for push-conflict payloads where no cursor is available.
+     *
+     * Allergen and sourceClassification IDs are derived from the *returned* ingredients
+     * (not just from [ingredientIds]) so that delta ingredients always pull in their
+     * own transitive dependencies.
      */
-    suspend fun findIngredients(sinceMillis: Long, referencedIds: Set<UUID>): List<SyncIngredient>
+    suspend fun collectReferenceData(
+        sinceMillis: Long?,
+        ingredientIds: Set<UUID>,
+        tagIds: Set<UUID>,
+        labelIds: Set<UUID>
+    ): SyncReferenceData
 
     /**
      * Resolves [ids] against the tag catalogue and returns only those UUIDs
