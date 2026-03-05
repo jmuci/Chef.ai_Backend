@@ -9,6 +9,7 @@ import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
+import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.domain.repository.SyncRepository
 import io.ktor.util.logging.Logger
 import kotlinx.datetime.Clock
@@ -80,6 +81,29 @@ class SyncService(
             )
         }
 
+        val conflictReferenceData = if (conflicts.isEmpty()) {
+            SyncReferenceData()
+        } else {
+            val ingredientIds = conflicts
+                .flatMap { it.serverVersion.ingredients }
+                .map { UUID.fromString(it.ingredientId) }
+                .toSet()
+            val tagIds = conflicts
+                .flatMap { it.serverVersion.tagIds }
+                .map { UUID.fromString(it) }
+                .toSet()
+            val labelIds = conflicts
+                .flatMap { it.serverVersion.labelIds }
+                .map { UUID.fromString(it) }
+                .toSet()
+            syncRepository.collectReferenceData(
+                sinceMillis = null,
+                ingredientIds = ingredientIds,
+                tagIds = tagIds,
+                labelIds = labelIds
+            )
+        }
+
         log.info(
             "Sync push processed for user $userId: accepted=${accepted.size}, conflicts=${conflicts.size}, errors=${errors.size}"
         )
@@ -88,7 +112,8 @@ class SyncService(
             accepted = accepted,
             conflicts = conflicts,
             errors = errors,
-            serverTimestamp = Clock.System.now().toEpochMilliseconds()
+            serverTimestamp = Clock.System.now().toEpochMilliseconds(),
+            referenceData = conflictReferenceData
         )
     }
 
@@ -111,17 +136,39 @@ class SyncService(
         val page = if (hasMore) records.take(limit) else records
         val cursor = page.lastOrNull()?.serverUpdatedAtMillis ?: sinceMillis
 
-        val referencedIngredientIds = page
+        val ingredientIds = page
             .flatMap { it.recipe.ingredients }
             .map { UUID.fromString(it.ingredientId) }
             .toSet()
-        val ingredients = syncRepository.findIngredients(sinceMillis, referencedIngredientIds)
+        val tagIds = page
+            .flatMap { it.recipe.tagIds }
+            .map { UUID.fromString(it) }
+            .toSet()
+        val labelIds = page
+            .flatMap { it.recipe.labelIds }
+            .map { UUID.fromString(it) }
+            .toSet()
+        val refData = syncRepository.collectReferenceData(
+            sinceMillis = sinceMillis,
+            ingredientIds = ingredientIds,
+            tagIds = tagIds,
+            labelIds = labelIds
+        )
 
-        log.info("Sync pull processed for user $userId: returned=${page.size}, hasMore=$hasMore, ingredients=${ingredients.size}")
+        log.info(
+            "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
+                "ingredients=${refData.ingredients.size}, allergens=${refData.allergens.size}, " +
+                "sourceClassifications=${refData.sourceClassifications.size}, " +
+                "tags=${refData.tags.size}, labels=${refData.labels.size}"
+        )
 
         return SyncPullResponse(
             recipes = page.map { it.recipe },
-            ingredients = ingredients,
+            ingredients = refData.ingredients,
+            allergens = refData.allergens,
+            sourceClassifications = refData.sourceClassifications,
+            tags = refData.tags,
+            labels = refData.labels,
             serverTimestamp = cursor,
             hasMore = hasMore
         )
