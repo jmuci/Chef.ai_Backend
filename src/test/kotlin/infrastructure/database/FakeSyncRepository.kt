@@ -82,10 +82,10 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun ingredientExists(uuid: UUID): Boolean = ingredients.containsKey(uuid)
 
     override suspend fun collectReferenceData(
-        sinceMillis: Long?,
         ingredientIds: Set<UUID>,
         tagIds: Set<UUID>,
-        labelIds: Set<UUID>
+        labelIds: Set<UUID>,
+        sinceMillis: Long?
     ): SyncReferenceData {
         fun <V> Map<UUID, V>.unionFilter(ids: Set<UUID>, serverTs: Map<UUID, Long>): List<V> =
             filter { (uuid, _) ->

@@ -76,10 +76,10 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun ingredientExists(uuid: UUID): Boolean = ingredients.containsKey(uuid)
 
     override suspend fun collectReferenceData(
-        sinceMillis: Long?,
         ingredientIds: Set<UUID>,
         tagIds: Set<UUID>,
-        labelIds: Set<UUID>
+        labelIds: Set<UUID>,
+        sinceMillis: Long?
     ): SyncReferenceData {
         // Mirrors the union logic in PostgresSyncRepository:
         // include an entity if it changed since the cursor (delta) OR is directly referenced (gap).

@@ -65,10 +65,10 @@ interface SyncRepository {
      * own transitive dependencies.
      */
     suspend fun collectReferenceData(
-        sinceMillis: Long?,
         ingredientIds: Set<UUID>,
         tagIds: Set<UUID>,
-        labelIds: Set<UUID>
+        labelIds: Set<UUID>,
+        sinceMillis: Long?
     ): SyncReferenceData
 
     /**

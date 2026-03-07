@@ -188,14 +188,14 @@ class PostgresSyncRepository : SyncRepository {
     }
 
     override suspend fun collectReferenceData(
-        sinceMillis: Long?,
         ingredientIds: Set<UUID>,
         tagIds: Set<UUID>,
-        labelIds: Set<UUID>
+        labelIds: Set<UUID>,
+        sinceMillis: Long?
     ): SyncReferenceData = suspendTransaction {
         val sinceInstant = sinceMillis?.let { Instant.fromEpochMilliseconds(it) }
 
-        val ingredients = queryIngredients(sinceInstant, ingredientIds)
+        val ingredients = queryIngredients(ingredientIds, sinceInstant)
 
         // Derive transitive dependencies from the returned ingredients so that
         // delta ingredients always bring their own allergen / source-classification rows.
@@ -204,10 +204,10 @@ class PostgresSyncRepository : SyncRepository {
 
         SyncReferenceData(
             ingredients = ingredients,
-            allergens = queryAllergens(sinceInstant, allergenIds),
-            sourceClassifications = querySourceClassifications(sinceInstant, sourceClassificationIds),
-            tags = queryTags(sinceInstant, tagIds),
-            labels = queryLabels(sinceInstant, labelIds)
+            allergens = queryAllergens(allergenIds, sinceInstant),
+            sourceClassifications = querySourceClassifications(sourceClassificationIds, sinceInstant),
+            tags = queryTags(tagIds, sinceInstant),
+            labels = queryLabels(labelIds, sinceInstant)
         )
     }
 
@@ -216,7 +216,7 @@ class PostgresSyncRepository : SyncRepository {
     // Exposed SqlExpressionBuilder operators (greater, inList, or) are in scope.
     // When sinceInstant is null only the gap (id IN ids) clause is used.
 
-    private fun queryIngredients(sinceInstant: Instant?, ids: Set<UUID>): List<SyncIngredient> {
+    private fun queryIngredients( ids: Set<UUID>, sinceInstant: Instant?,): List<SyncIngredient> {
         if (sinceInstant == null && ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, IngredientTable) }
         return IngredientTable.selectAll().where {
@@ -240,7 +240,7 @@ class PostgresSyncRepository : SyncRepository {
         }
     }
 
-    private fun queryAllergens(sinceInstant: Instant?, ids: Set<UUID>): List<SyncAllergen> {
+    private fun queryAllergens(ids: Set<UUID>, sinceInstant: Instant?): List<SyncAllergen> {
         if (sinceInstant == null && ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, AllergenTable) }
         return AllergenTable.selectAll().where {
@@ -262,7 +262,7 @@ class PostgresSyncRepository : SyncRepository {
         }
     }
 
-    private fun querySourceClassifications(sinceInstant: Instant?, ids: Set<UUID>): List<SyncSourceClassification> {
+    private fun querySourceClassifications(ids: Set<UUID>, sinceInstant: Instant?): List<SyncSourceClassification> {
         if (sinceInstant == null && ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, SourceClassificationTable) }
         return SourceClassificationTable.selectAll().where {
@@ -286,7 +286,7 @@ class PostgresSyncRepository : SyncRepository {
         }
     }
 
-    private fun queryTags(sinceInstant: Instant?, ids: Set<UUID>): List<SyncTag> {
+    private fun queryTags(ids: Set<UUID>, sinceInstant: Instant?): List<SyncTag> {
         if (sinceInstant == null && ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, TagTable) }
         return TagTable.selectAll().where {
@@ -308,7 +308,7 @@ class PostgresSyncRepository : SyncRepository {
         }
     }
 
-    private fun queryLabels(sinceInstant: Instant?, ids: Set<UUID>): List<SyncLabel> {
+    private fun queryLabels(ids: Set<UUID>, sinceInstant: Instant?): List<SyncLabel> {
         if (sinceInstant == null && ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, LabelTable) }
         return LabelTable.selectAll().where {
