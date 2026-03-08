@@ -109,14 +109,14 @@ class SyncService(
         )
         // TODO Remove before release, or put behind debug flag.
         for (acceptedRecipe in accepted) {
-            log.debug(
+            log.info(
                 "Sync push accepted for user $userId, recipeId=${acceptedRecipe.uuid}, " +
                     "serverUpdatedAt=${acceptedRecipe.serverUpdatedAt}"
             )
         }
 
         for (conflict in conflicts) {
-            log.debug(
+            log.info(
                 "Sync push conflicted for user $userId, recipeId=${conflict.uuid}, " +
                     "reason=${conflict.reason}, clientUpdatedAt=${recipeClientUpdatedAt(conflict.uuid, request)}, " +
                     "serverUpdatedAt=${conflict.serverVersion.updatedAt}"
@@ -124,7 +124,7 @@ class SyncService(
         }
 
         for (error in errors) {
-            log.debug(
+            log.info(
                 "Sync push errored for user $userId, recipeId=${error.uuid}, " +
                     "reason=${error.reason}, message=${error.message}"
             )
