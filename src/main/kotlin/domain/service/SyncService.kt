@@ -107,6 +107,28 @@ class SyncService(
         log.info(
             "Sync push processed for user $userId: accepted=${accepted.size}, conflicts=${conflicts.size}, errors=${errors.size}"
         )
+        // TODO Remove before release, or put behind debug flag.
+        for (acceptedRecipe in accepted) {
+            log.debug(
+                "Sync push accepted for user $userId, recipeId=${acceptedRecipe.uuid}, " +
+                    "serverUpdatedAt=${acceptedRecipe.serverUpdatedAt}"
+            )
+        }
+
+        for (conflict in conflicts) {
+            log.debug(
+                "Sync push conflicted for user $userId, recipeId=${conflict.uuid}, " +
+                    "reason=${conflict.reason}, clientUpdatedAt=${recipeClientUpdatedAt(conflict.uuid, request)}, " +
+                    "serverUpdatedAt=${conflict.serverVersion.updatedAt}"
+            )
+        }
+
+        for (error in errors) {
+            log.debug(
+                "Sync push errored for user $userId, recipeId=${error.uuid}, " +
+                    "reason=${error.reason}, message=${error.message}"
+            )
+        }
 
         return SyncPushResponse(
             accepted = accepted,
@@ -246,4 +268,7 @@ class SyncService(
             onFailure()
             null
         }
+
+    private fun recipeClientUpdatedAt(recipeId: String, request: SyncPushRequest): Long? =
+        request.recipes.firstOrNull { it.uuid == recipeId }?.updatedAt
 }
