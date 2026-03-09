@@ -176,6 +176,13 @@ class SyncService(
             tagIds = tagIds,
             labelIds = labelIds
         )
+        val creatorIds = page
+            .map { UUID.fromString(it.recipe.creatorId) }
+            .toSet()
+        val creators = syncRepository.collectCreators(
+            creatorIds = creatorIds,
+            sinceMillis = sinceMillis
+        )
 
         log.info(
             "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
@@ -186,6 +193,7 @@ class SyncService(
 
         return SyncPullResponse(
             recipes = page.map { it.recipe },
+            creators = creators,
             ingredients = refData.ingredients,
             allergens = refData.allergens,
             sourceClassifications = refData.sourceClassifications,

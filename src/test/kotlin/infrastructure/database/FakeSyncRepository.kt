@@ -5,6 +5,7 @@ import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
+import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import kotlinx.datetime.Instant
@@ -18,6 +19,8 @@ class FakeSyncRepository : SyncRepository {
     private val tagServerTs = mutableMapOf<UUID, Long>()
     private val labels = mutableMapOf<UUID, SyncLabel>()
     private val labelServerTs = mutableMapOf<UUID, Long>()
+    private val users = mutableMapOf<UUID, SyncUser>()
+    private val userServerTs = mutableMapOf<UUID, Long>()
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -55,10 +58,27 @@ class FakeSyncRepository : SyncRepository {
     }
 
     fun seedRecipe(recipe: SyncRecipe, serverUpdatedAtMillis: Long) {
+        val creatorId = UUID.fromString(recipe.creatorId)
+        if (!users.containsKey(creatorId)) {
+            seedUser(uuid = creatorId, serverUpdatedAt = 0L)
+        }
         recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
             recipe = recipe,
             serverUpdatedAtMillis = serverUpdatedAtMillis
         )
+    }
+
+    fun seedUser(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
+        users[uuid] = SyncUser(
+            uuid = uuid.toString(),
+            displayName = "User-${uuid.toString().take(8)}",
+            email = "${uuid.toString().take(8)}@example.com",
+            avatarUrl = "",
+            updatedAt = serverUpdatedAt,
+            deletedAt = null
+        )
+        userServerTs[uuid] = serverUpdatedAt
+        return uuid
     }
 
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
@@ -104,4 +124,13 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun existingTagIds(ids: Set<UUID>): Set<UUID> = ids.intersect(tags.keys)
 
     override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(labels.keys)
+
+    override suspend fun collectCreators(creatorIds: Set<UUID>, sinceMillis: Long?): List<SyncUser> {
+        fun <V> Map<UUID, V>.unionFilter(ids: Set<UUID>, serverTs: Map<UUID, Long>): List<V> =
+            filter { (uuid, _) ->
+                (sinceMillis != null && (serverTs[uuid] ?: 0L) > sinceMillis) || uuid in ids
+            }.values.toList()
+
+        return users.unionFilter(creatorIds, userServerTs)
+    }
 }

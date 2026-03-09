@@ -311,6 +311,9 @@ class SyncRoutesIntegrationTest {
         assertTrue(returnedIds.contains(ownRecipe.uuid))
         assertTrue(returnedIds.contains(publicForeign.uuid))
         assertFalse(returnedIds.contains(privateForeign.uuid))
+        val pageCreatorIds = body.recipes.map { it.creatorId }.toSet()
+        val returnedCreatorIds = body.creators.map { it.uuid }.toSet()
+        assertEquals(pageCreatorIds, returnedCreatorIds)
     }
 
     @Test
@@ -350,6 +353,8 @@ class SyncRoutesIntegrationTest {
         assertEquals(2, firstPage.recipes.size)
         assertTrue(firstPage.hasMore)
         assertEquals(2000L, firstPage.serverTimestamp)
+        assertEquals(1, firstPage.creators.size)
+        assertEquals(auth.userId, firstPage.creators.first().uuid)
 
         val secondPageResponse = client.get("/sync/pull?since=${firstPage.serverTimestamp}&limit=2") {
             bearerAuth(auth.token)
@@ -360,6 +365,8 @@ class SyncRoutesIntegrationTest {
         assertEquals(1, secondPage.recipes.size)
         assertFalse(secondPage.hasMore)
         assertEquals(3000L, secondPage.serverTimestamp)
+        assertEquals(1, secondPage.creators.size)
+        assertEquals(auth.userId, secondPage.creators.first().uuid)
     }
 
     /**
@@ -399,6 +406,8 @@ class SyncRoutesIntegrationTest {
         assertEquals(1, body.recipes.size)
         assertEquals(1, body.tags.size)
         assertEquals(tagId.toString(), body.tags.first().uuid)
+        assertEquals(1, body.creators.size)
+        assertEquals(auth.userId, body.creators.first().uuid)
     }
 
     /**
@@ -498,6 +507,7 @@ class SyncRoutesIntegrationTest {
         assertEquals("Pasta", deviceBBaseline.recipes.first().title)
         assertTrue(deviceBBaseline.ingredients.any { it.uuid == ingredientId.toString() })
         assertTrue(deviceBBaseline.tags.any { it.uuid == tagId.toString() })
+        assertTrue(deviceBBaseline.creators.any { it.uuid == auth.userId })
         val deviceBCursor = deviceBBaseline.serverTimestamp // 500L
 
         // ── Step 2: Device A pushes "Carbonara" edit ─────────────────────────────────
@@ -577,6 +587,7 @@ class SyncRoutesIntegrationTest {
         assertEquals(1, finalBody.recipes.size)
         assertEquals("Carbonara", finalBody.recipes.first().title)
         assertFalse(finalBody.hasMore)
+        assertTrue(finalBody.creators.any { it.uuid == auth.userId })
     }
 
     @Test
