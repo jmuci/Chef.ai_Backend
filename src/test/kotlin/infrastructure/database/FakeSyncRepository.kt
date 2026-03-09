@@ -1,5 +1,6 @@
 package com.tenmilelabs.infrastructure.database
 
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -18,6 +19,8 @@ class FakeSyncRepository : SyncRepository {
     private val tagServerTs = mutableMapOf<UUID, Long>()
     private val labels = mutableMapOf<UUID, SyncLabel>()
     private val labelServerTs = mutableMapOf<UUID, Long>()
+    /** Key: (userId, recipeId), Value: (updatedAtMillis, deletedAtMillis?) */
+    private val bookmarks = mutableMapOf<Pair<UUID, UUID>, SyncBookmarkedRecipe>()
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -104,4 +107,27 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun existingTagIds(ids: Set<UUID>): Set<UUID> = ids.intersect(tags.keys)
 
     override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(labels.keys)
+
+    override suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        serverUpdatedAt: Instant,
+        deletedAt: Instant?
+    ) {
+        bookmarks[userId to recipeId] = SyncBookmarkedRecipe(
+            userId = userId.toString(),
+            recipeId = recipeId.toString(),
+            updatedAt = serverUpdatedAt.toEpochMilliseconds(),
+            deletedAt = deletedAt?.toEpochMilliseconds()
+        )
+    }
+
+    override suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmarkedRecipe> =
+        bookmarks
+            .filter { (key, bookmark) -> key.first == userId && bookmark.updatedAt > sinceMillis }
+            .values
+            .sortedBy { it.updatedAt }
+
+    fun getBookmark(userId: UUID, recipeId: UUID): SyncBookmarkedRecipe? =
+        bookmarks[userId to recipeId]
 }

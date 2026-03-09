@@ -15,6 +15,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.RefreshTokenTable
 import com.tenmilelabs.infrastructure.database.tables.SourceClassificationTable
+import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
 
 /**
@@ -35,7 +36,8 @@ fun initDatabaseAndSchema() {
             RecipeTagTable,
             RefreshTokenTable,
             SourceClassificationTable,
-            TagTable
+            TagTable,
+            BookmarkedRecipeTable
         )
     }
 }

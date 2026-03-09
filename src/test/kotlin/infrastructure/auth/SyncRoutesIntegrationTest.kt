@@ -1,7 +1,9 @@
 package infrastructure.auth
 
 import com.tenmilelabs.application.dto.AuthResponse
+import com.tenmilelabs.application.dto.BookmarkSyncErrors
 import com.tenmilelabs.application.dto.RegisterRequest
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushResponse
@@ -620,6 +622,393 @@ class SyncRoutesIntegrationTest {
         }
         assertEquals(HttpStatusCode.Created, registerResponse.status)
         return registerResponse.body()
+    }
+
+    @Test
+    fun pushBookmarkAcceptsValidPublicRecipe() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        // Seed a PUBLIC recipe owned by a different user
+        val otherUserId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val publicRecipe = buildRecipe(recipeId, otherUserId.toString(), ingredientId, 1000L, "PUBLIC")
+        syncRepository.seedRecipe(publicRecipe, 1000L)
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(1, body.acceptedBookmarks.size)
+        assertEquals(0, body.bookmarkErrors.size)
+        assertEquals("SYNCED", body.acceptedBookmarks.first().syncState)
+        assertEquals(recipeId.toString(), body.acceptedBookmarks.first().recipeId)
+        assertNotNull(syncRepository.getBookmark(UUID.fromString(auth.userId), recipeId))
+    }
+
+    @Test
+    fun pushBookmarkAcceptsOwnPrivateRecipe() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        // Seed a PRIVATE recipe owned by the authenticated user
+        val recipeId = UUID.randomUUID()
+        val ownRecipe = buildRecipe(recipeId, auth.userId, ingredientId, 1000L, "PRIVATE")
+        syncRepository.seedRecipe(ownRecipe, 1000L)
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(1, body.acceptedBookmarks.size)
+        assertEquals(0, body.bookmarkErrors.size)
+    }
+
+    @Test
+    fun pushBookmarkRejectsPrivateRecipeOwnedByOtherUser() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        // Seed a PRIVATE recipe owned by someone else
+        val otherUserId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val privateRecipe = buildRecipe(recipeId, otherUserId.toString(), ingredientId, 1000L, "PRIVATE")
+        syncRepository.seedRecipe(privateRecipe, 1000L)
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(0, body.acceptedBookmarks.size)
+        assertEquals(1, body.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.RECIPE_ACCESS_DENIED, body.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkRejectsUserMismatch() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+        val recipeId = UUID.randomUUID()
+        val recipe = buildRecipe(recipeId, auth.userId, ingredientId, 1000L, "PUBLIC")
+        syncRepository.seedRecipe(recipe, 1000L)
+
+        // Push bookmark with a different userId than the authenticated user
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = UUID.randomUUID().toString(), // not auth.userId
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(0, body.acceptedBookmarks.size)
+        assertEquals(1, body.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.USER_MISMATCH, body.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkRejectsNonExistentRecipe() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = UUID.randomUUID().toString(), // doesn't exist
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(0, body.acceptedBookmarks.size)
+        assertEquals(1, body.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.RECIPE_NOT_FOUND, body.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkSoftDeleteIsAccepted() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+        val recipeId = UUID.randomUUID()
+        val recipe = buildRecipe(recipeId, auth.userId, ingredientId, 1000L, "PUBLIC")
+        syncRepository.seedRecipe(recipe, 1000L)
+        val now = System.currentTimeMillis()
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = now,
+                            deletedAt = now, // un-bookmark
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals(1, body.acceptedBookmarks.size)
+        assertEquals(0, body.bookmarkErrors.size)
+        assertEquals(now, body.acceptedBookmarks.first().deletedAt)
+
+        val stored = syncRepository.getBookmark(UUID.fromString(auth.userId), recipeId)
+        assertNotNull(stored)
+        assertNotNull(stored.deletedAt)
+    }
+
+    @Test
+    fun pullReturnsDeltaBookmarks() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        // Push a public recipe and bookmark it
+        val recipeId = UUID.randomUUID()
+        val recipe = buildRecipe(recipeId, auth.userId, ingredientId, 500L, "PUBLIC")
+        syncRepository.seedRecipe(recipe, 500L)
+
+        client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        // Pull from 0 — should return the bookmark
+        val pullResponse = client.get("/sync/pull?since=0&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, pullResponse.status)
+        val body = pullResponse.body<SyncPullResponse>()
+        assertEquals(1, body.bookmarkedRecipes.size)
+        assertEquals(recipeId.toString(), body.bookmarkedRecipes.first().recipeId)
+        assertEquals(auth.userId, body.bookmarkedRecipes.first().userId)
+    }
+
+    @Test
+    fun pullExcludesBookmarksBeforeSinceCursor() = testApplication {
+        val syncRepository = FakeSyncRepository()
+        val ingredientId = syncRepository.seedIngredient()
+
+        application {
+            module(
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val recipeId = UUID.randomUUID()
+        val recipe = buildRecipe(recipeId, auth.userId, ingredientId, 500L, "PUBLIC")
+        syncRepository.seedRecipe(recipe, 500L)
+
+        // Create bookmark (server assigns current time as updated_at)
+        client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                SyncPushRequest(
+                    bookmarkedRecipes = listOf(
+                        SyncBookmarkedRecipe(
+                            userId = auth.userId,
+                            recipeId = recipeId.toString(),
+                            updatedAt = System.currentTimeMillis(),
+                            syncState = "PENDING"
+                        )
+                    )
+                )
+            )
+        }
+
+        // Pull with a future cursor — bookmark should NOT appear
+        val futureTs = System.currentTimeMillis() + 60_000L
+        val pullResponse = client.get("/sync/pull?since=$futureTs&limit=10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, pullResponse.status)
+        val body = pullResponse.body<SyncPullResponse>()
+        assertTrue(body.bookmarkedRecipes.isEmpty())
     }
 
     private fun buildRecipe(

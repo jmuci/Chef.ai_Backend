@@ -5,6 +5,7 @@ import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
+import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import kotlinx.datetime.Instant
@@ -18,6 +19,10 @@ class FakeSyncRepository : SyncRepository {
     private val tagServerTs = mutableMapOf<UUID, Long>()
     private val labels = mutableMapOf<UUID, SyncLabel>()
     private val labelServerTs = mutableMapOf<UUID, Long>()
+    private val users = mutableMapOf<UUID, SyncUser>()
+    private val userServerTs = mutableMapOf<UUID, Long>()
+    /** Key: (userId, recipeId), Value: bookmark snapshot */
+    private val bookmarks = mutableMapOf<Pair<UUID, UUID>, SyncBookmarkedRecipe>()
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -100,4 +105,36 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun existingTagIds(ids: Set<UUID>): Set<UUID> = ids.intersect(tags.keys)
 
     override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(labels.keys)
+
+    override suspend fun collectCreators(creatorIds: Set<UUID>, sinceMillis: Long?): List<SyncUser> {
+        fun <V> Map<UUID, V>.unionFilter(ids: Set<UUID>, serverTs: Map<UUID, Long>): List<V> =
+            filter { (uuid, _) ->
+                (sinceMillis != null && (serverTs[uuid] ?: 0L) > sinceMillis) || uuid in ids
+            }.values.toList()
+
+        return users.unionFilter(creatorIds, userServerTs)
+    }
+
+    override suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        serverUpdatedAt: Instant,
+        deletedAt: Instant?
+    ) {
+        bookmarks[userId to recipeId] = SyncBookmarkedRecipe(
+            userId = userId.toString(),
+            recipeId = recipeId.toString(),
+            updatedAt = serverUpdatedAt.toEpochMilliseconds(),
+            deletedAt = deletedAt?.toEpochMilliseconds()
+        )
+    }
+
+    override suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmarkedRecipe> =
+        bookmarks
+            .filter { (key, bookmark) -> key.first == userId && bookmark.updatedAt > sinceMillis }
+            .values
+            .sortedBy { it.updatedAt }
+
+    fun getBookmark(userId: UUID, recipeId: UUID): SyncBookmarkedRecipe? =
+        bookmarks[userId to recipeId]
 }

@@ -1,6 +1,7 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.application.dto.SyncAllergen
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -328,6 +329,79 @@ class PostgresSyncRepository : SyncRepository {
                 deletedAt = row[LabelTable.deleted_at]
             )
         }
+    }
+
+    /**
+     * Upserts a bookmark row using INSERT … ON CONFLICT semantics.
+     *
+     * [serverUpdatedAt] is always the server's current time so it serves as a
+     * monotonic sync cursor. [deletedAt] is non-null for un-bookmark (soft-delete)
+     * operations; the row is retained so clients receive the tombstone via pull.
+     */
+    override suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        serverUpdatedAt: Instant,
+        deletedAt: Instant?
+    ): Unit = suspendTransaction {
+        val userEntityId = EntityID(userId, UserTable)
+        val recipeEntityId = EntityID(recipeId, RecipeTable)
+
+        val exists = BookmarkedRecipeTable
+            .selectAll()
+            .where {
+                (BookmarkedRecipeTable.user_id eq userEntityId) and
+                    (BookmarkedRecipeTable.recipe_id eq recipeEntityId)
+            }
+            .limit(1)
+            .any()
+
+        if (exists) {
+            BookmarkedRecipeTable.update({
+                (BookmarkedRecipeTable.user_id eq userEntityId) and
+                    (BookmarkedRecipeTable.recipe_id eq recipeEntityId)
+            }) {
+                it[BookmarkedRecipeTable.updated_at] = serverUpdatedAt
+                it[BookmarkedRecipeTable.deleted_at] = deletedAt
+                it[BookmarkedRecipeTable.sync_state] = "SYNCED"
+            }
+        } else {
+            BookmarkedRecipeTable.insert {
+                it[BookmarkedRecipeTable.user_id] = userEntityId
+                it[BookmarkedRecipeTable.recipe_id] = recipeEntityId
+                it[BookmarkedRecipeTable.updated_at] = serverUpdatedAt
+                it[BookmarkedRecipeTable.deleted_at] = deletedAt
+                it[BookmarkedRecipeTable.sync_state] = "SYNCED"
+            }
+        }
+    }
+
+    /**
+     * Returns bookmarks for [userId] with [updated_at] > [sinceMillis], ordered
+     * by [updated_at] ascending. Includes soft-deleted rows so clients receive tombstones.
+     */
+    override suspend fun findDeltaBookmarks(
+        userId: UUID,
+        sinceMillis: Long
+    ): List<SyncBookmarkedRecipe> = suspendTransaction {
+        val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+        val userEntityId = EntityID(userId, UserTable)
+
+        BookmarkedRecipeTable
+            .selectAll()
+            .where {
+                (BookmarkedRecipeTable.user_id eq userEntityId) and
+                    (BookmarkedRecipeTable.updated_at greater sinceInstant)
+            }
+            .orderBy(BookmarkedRecipeTable.updated_at to SortOrder.ASC)
+            .map { row ->
+                SyncBookmarkedRecipe(
+                    userId = row[BookmarkedRecipeTable.user_id].value.toString(),
+                    recipeId = row[BookmarkedRecipeTable.recipe_id].value.toString(),
+                    updatedAt = row[BookmarkedRecipeTable.updated_at].toEpochMilliseconds(),
+                    deletedAt = row[BookmarkedRecipeTable.deleted_at]?.toEpochMilliseconds()
+                )
+            }
     }
 
     /**

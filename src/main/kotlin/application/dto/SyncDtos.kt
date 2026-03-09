@@ -4,7 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SyncPushRequest(
-    val recipes: List<SyncRecipe>
+    val recipes: List<SyncRecipe> = emptyList(),
+    val bookmarkedRecipes: List<SyncBookmarkedRecipe> = emptyList()
 )
 
 @Serializable
@@ -49,7 +50,9 @@ data class SyncPushResponse(
     val errors: List<SyncError>,
     val serverTimestamp: Long,
     /** Reference entities required to resolve every [ConflictEntity.serverVersion] locally. */
-    val referenceData: SyncReferenceData
+    val referenceData: SyncReferenceData,
+    val acceptedBookmarks: List<SyncBookmarkedRecipe> = emptyList(),
+    val bookmarkErrors: List<BookmarkSyncError> = emptyList()
 )
 
 @Serializable
@@ -154,6 +157,35 @@ data class SyncPullResponse(
     val sourceClassifications: List<SyncSourceClassification>,
     val tags: List<SyncTag>,
     val labels: List<SyncLabel>,
+    val bookmarkedRecipes: List<SyncBookmarkedRecipe> = emptyList(),
     val serverTimestamp: Long,
     val hasMore: Boolean
 )
+
+@Serializable
+data class SyncBookmarkedRecipe(
+    val userId: String,
+    val recipeId: String,
+    /** Epoch millis. On push responses this reflects the server-assigned timestamp. */
+    val updatedAt: Long,
+    val deletedAt: Long? = null,
+    /** Present in push requests/responses; null in pull responses. */
+    val syncState: String? = null
+)
+
+@Serializable
+data class BookmarkSyncError(
+    val userId: String,
+    val recipeId: String,
+    val reason: BookmarkSyncErrors,
+    val message: String
+)
+
+@Serializable
+enum class BookmarkSyncErrors(val message: String) {
+    INVALID_USER_ID("userId is invalid"),
+    INVALID_RECIPE_ID("recipeId is invalid"),
+    USER_MISMATCH("userId does not match authenticated user"),
+    RECIPE_NOT_FOUND("Recipe does not exist"),
+    RECIPE_ACCESS_DENIED("Cannot bookmark a private recipe you do not own")
+}

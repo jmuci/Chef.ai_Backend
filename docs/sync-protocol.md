@@ -503,6 +503,116 @@ Each page's reference data is independently complete:
 
 ---
 
+## Bookmarked Recipes
+
+Bookmarks allow users to save references to any accessible recipe (their own or PUBLIC). They sync alongside recipes using the same cursor-based protocol but with simpler semantics — no conflict detection, always last-writer-wins.
+
+### Authorization
+- **Authenticated users only**: the `user_id` in the bookmark must match the authenticated user's JWT. Anonymous clients receive a 401 and handle bookmarks locally.
+- **Recipe access**: a bookmark may only target a `PUBLIC` recipe or a `PRIVATE` recipe owned by the authenticated user.
+
+### Push (POST /sync/push)
+
+Add `bookmarkedRecipes` to the request body alongside `recipes`:
+
+```json
+{
+  "recipes": [...],
+  "bookmarkedRecipes": [
+    {
+      "userId": "<auth-user-uuid>",
+      "recipeId": "<recipe-uuid>",
+      "updatedAt": 1234567890,
+      "deletedAt": null,
+      "syncState": "PENDING"
+    }
+  ]
+}
+```
+
+`deletedAt` non-null = soft-delete (un-bookmark). The row is retained as a tombstone so other devices receive it on the next pull.
+
+Push response includes per-bookmark results alongside the existing recipe results:
+
+```json
+{
+  "accepted": [...],
+  "conflicts": [...],
+  "errors": [...],
+  "acceptedBookmarks": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "updatedAt": 1234567892,
+      "deletedAt": null,
+      "syncState": "SYNCED"
+    }
+  ],
+  "bookmarkErrors": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "reason": "RECIPE_ACCESS_DENIED",
+      "message": "Cannot bookmark a private recipe you do not own"
+    }
+  ],
+  "serverTimestamp": 1234567892,
+  "referenceData": {...}
+}
+```
+
+**Bookmark validation** (per-record, independent of recipe processing):
+
+| Check | Error Reason | Behavior |
+|-------|--------------|----------|
+| userId is valid UUID? | `INVALID_USER_ID` | Skip, record error |
+| userId matches authenticated user? | `USER_MISMATCH` | Skip, record error |
+| recipeId is valid UUID? | `INVALID_RECIPE_ID` | Skip, record error |
+| Recipe exists on server? | `RECIPE_NOT_FOUND` | Skip, record error |
+| Recipe accessible (PUBLIC or own PRIVATE)? | `RECIPE_ACCESS_DENIED` | Skip, record error |
+
+Valid bookmarks are always accepted (no conflict response). `updatedAt` in the response reflects the server-assigned timestamp (used as the sync cursor on the next pull).
+
+### Pull (GET /sync/pull)
+
+The pull response includes `bookmarkedRecipes` filtered by the same `since` cursor:
+
+```json
+{
+  "recipes": [...],
+  "bookmarkedRecipes": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "updatedAt": 1234567892,
+      "deletedAt": null
+    }
+  ],
+  "serverTimestamp": 1234567892,
+  "hasMore": false
+}
+```
+
+- Only bookmarks for the authenticated user where `updated_at > since`
+- Includes soft-deleted rows (tombstones) so clients can un-bookmark locally
+- Ordered by `updated_at ASC` (same ordering as recipes)
+
+### DB Schema
+
+```sql
+CREATE TABLE bookmarked_recipes (
+    user_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+    updated_at TIMESTAMPTZ NOT NULL,   -- server-assigned; used as sync cursor
+    deleted_at TIMESTAMPTZ,            -- non-null = tombstone (un-bookmarked)
+    sync_state TEXT NOT NULL DEFAULT 'PENDING',
+    PRIMARY KEY (user_id, recipe_id)
+);
+CREATE INDEX idx_bookmarked_recipes_updated ON bookmarked_recipes(updated_at);
+```
+
+---
+
 ## Validation & Errors
 
 The server validates each pushed recipe:
@@ -563,3 +673,4 @@ While the server ensures referential integrity, the client must:
 | **Pagination** | Cursor-based; each page's reference data is independent |
 | **Atomicity** | Batch; all recipes processed in single transaction |
 | **Errors** | Per-recipe; don't fail batch |
+| **Bookmarks** | Cursor-based; no conflict response; always last-writer-wins |

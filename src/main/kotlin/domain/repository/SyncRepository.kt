@@ -1,5 +1,6 @@
 package com.tenmilelabs.domain.repository
 
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import kotlinx.datetime.Instant
@@ -84,4 +85,23 @@ interface SyncRepository {
      * than failing the entire recipe aggregate.
      */
     suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID>
+
+    /**
+     * Upserts a bookmark for ([userId], [recipeId]). [serverUpdatedAt] is the
+     * server-assigned timestamp used as the sync cursor. [deletedAt] is non-null
+     * for soft-delete (un-bookmark) operations.
+     */
+    suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        serverUpdatedAt: Instant,
+        deletedAt: Instant?
+    )
+
+    /**
+     * Returns bookmarks for [userId] whose [updated_at] is after [sinceMillis],
+     * ordered by [updated_at] ascending. Includes soft-deleted rows so clients
+     * can process tombstones.
+     */
+    suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmarkedRecipe>
 }

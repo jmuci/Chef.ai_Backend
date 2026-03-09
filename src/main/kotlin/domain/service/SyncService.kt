@@ -1,8 +1,11 @@
 package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.AcceptedEntity
+import com.tenmilelabs.application.dto.BookmarkSyncError
+import com.tenmilelabs.application.dto.BookmarkSyncErrors
 import com.tenmilelabs.application.dto.ConflictEntity
 import com.tenmilelabs.application.dto.ConflictReasons
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncError
 import com.tenmilelabs.application.dto.SyncErrors
 import com.tenmilelabs.application.dto.SyncPullResponse
@@ -13,6 +16,7 @@ import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.domain.repository.SyncRepository
 import io.ktor.util.logging.Logger
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import java.util.UUID
 
 class SyncService(
@@ -104,8 +108,11 @@ class SyncService(
             )
         }
 
+        val (acceptedBookmarks, bookmarkErrors) = processBookmarks(userId, request)
+
         log.info(
-            "Sync push processed for user $userId: accepted=${accepted.size}, conflicts=${conflicts.size}, errors=${errors.size}"
+            "Sync push processed for user $userId: accepted=${accepted.size}, conflicts=${conflicts.size}, " +
+                "errors=${errors.size}, acceptedBookmarks=${acceptedBookmarks.size}, bookmarkErrors=${bookmarkErrors.size}"
         )
         // TODO Remove before release, or put behind debug flag.
         for (acceptedRecipe in accepted) {
@@ -135,7 +142,9 @@ class SyncService(
             conflicts = conflicts,
             errors = errors,
             serverTimestamp = Clock.System.now().toEpochMilliseconds(),
-            referenceData = conflictReferenceData
+            referenceData = conflictReferenceData,
+            acceptedBookmarks = acceptedBookmarks,
+            bookmarkErrors = bookmarkErrors
         )
     }
 
@@ -177,11 +186,13 @@ class SyncService(
             labelIds = labelIds
         )
 
+        val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
+
         log.info(
             "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
                 "ingredients=${refData.ingredients.size}, allergens=${refData.allergens.size}, " +
                 "sourceClassifications=${refData.sourceClassifications.size}, " +
-                "tags=${refData.tags.size}, labels=${refData.labels.size}"
+                "tags=${refData.tags.size}, labels=${refData.labels.size}, bookmarks=${bookmarks.size}"
         )
 
         return SyncPullResponse(
@@ -191,9 +202,90 @@ class SyncService(
             sourceClassifications = refData.sourceClassifications,
             tags = refData.tags,
             labels = refData.labels,
+            bookmarkedRecipes = bookmarks,
             serverTimestamp = cursor,
             hasMore = hasMore
         )
+    }
+
+    /**
+     * Processes bookmarked_recipes from a push request.
+     *
+     * Validates user ownership and recipe access (PUBLIC or creator-owned).
+     * Always accepts valid bookmarks using last-writer-wins semantics; no conflict
+     * is reported for bookmarks. Returns a pair of (accepted, errors).
+     */
+    private suspend fun processBookmarks(
+        userId: UUID,
+        request: SyncPushRequest
+    ): Pair<List<SyncBookmarkedRecipe>, List<BookmarkSyncError>> {
+        val accepted = mutableListOf<SyncBookmarkedRecipe>()
+        val errors = mutableListOf<BookmarkSyncError>()
+
+        request.bookmarkedRecipes.forEach { bookmark ->
+            val bookmarkUserId = parseUuid(bookmark.userId) {
+                errors += BookmarkSyncError(
+                    userId = bookmark.userId,
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkSyncErrors.INVALID_USER_ID,
+                    message = BookmarkSyncErrors.INVALID_USER_ID.message
+                )
+            } ?: return@forEach
+
+            if (bookmarkUserId != userId) {
+                errors += BookmarkSyncError(
+                    userId = bookmark.userId,
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkSyncErrors.USER_MISMATCH,
+                    message = BookmarkSyncErrors.USER_MISMATCH.message
+                )
+                return@forEach
+            }
+
+            val recipeId = parseUuid(bookmark.recipeId) {
+                errors += BookmarkSyncError(
+                    userId = bookmark.userId,
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkSyncErrors.INVALID_RECIPE_ID,
+                    message = BookmarkSyncErrors.INVALID_RECIPE_ID.message
+                )
+            } ?: return@forEach
+
+            val existing = syncRepository.getRecipe(recipeId)
+            if (existing == null) {
+                errors += BookmarkSyncError(
+                    userId = bookmark.userId,
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkSyncErrors.RECIPE_NOT_FOUND,
+                    message = BookmarkSyncErrors.RECIPE_NOT_FOUND.message
+                )
+                return@forEach
+            }
+
+            if (existing.recipe.privacy == "PRIVATE" && existing.recipe.creatorId != userId.toString()) {
+                errors += BookmarkSyncError(
+                    userId = bookmark.userId,
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkSyncErrors.RECIPE_ACCESS_DENIED,
+                    message = BookmarkSyncErrors.RECIPE_ACCESS_DENIED.message
+                )
+                return@forEach
+            }
+
+            val now = Clock.System.now()
+            val deletedAt = bookmark.deletedAt?.let { Instant.fromEpochMilliseconds(it) }
+            syncRepository.upsertBookmark(userId, recipeId, now, deletedAt)
+
+            accepted += SyncBookmarkedRecipe(
+                userId = bookmark.userId,
+                recipeId = bookmark.recipeId,
+                updatedAt = now.toEpochMilliseconds(),
+                deletedAt = bookmark.deletedAt,
+                syncState = "SYNCED"
+            )
+        }
+
+        return accepted to errors
     }
 
     /**

@@ -1,5 +1,7 @@
 package domain.service
 
+import com.tenmilelabs.application.dto.BookmarkSyncErrors
+import com.tenmilelabs.application.dto.SyncBookmarkedRecipe
 import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
@@ -14,6 +16,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SyncServiceTest {
@@ -236,6 +239,192 @@ class SyncServiceTest {
         tagIds = emptyList(),
         labelIds = emptyList()
     )
+
+    // ── Bookmark tests ────────────────────────────────────────────────────────
+
+    @Test
+    fun pushBookmarkAcceptsPublicRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, UUID.randomUUID(), 1000L, ingredientId, "PUBLIC"), 1000L)
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = recipeId.toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(1, response.acceptedBookmarks.size)
+        assertEquals(0, response.bookmarkErrors.size)
+        assertEquals("SYNCED", response.acceptedBookmarks.first().syncState)
+        assertNotNull(repo.getBookmark(userId, recipeId))
+    }
+
+    @Test
+    fun pushBookmarkAcceptsOwnPrivateRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, userId, 1000L, ingredientId, "PRIVATE"), 1000L)
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = recipeId.toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(1, response.acceptedBookmarks.size)
+        assertEquals(0, response.bookmarkErrors.size)
+    }
+
+    @Test
+    fun pushBookmarkRejectsPrivateForeignRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, UUID.randomUUID(), 1000L, ingredientId, "PRIVATE"), 1000L)
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = recipeId.toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(0, response.acceptedBookmarks.size)
+        assertEquals(1, response.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.RECIPE_ACCESS_DENIED, response.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkRejectsUserMismatch() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, userId, 1000L, ingredientId, "PUBLIC"), 1000L)
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = UUID.randomUUID().toString(), // different from auth userId
+                        recipeId = recipeId.toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(0, response.acceptedBookmarks.size)
+        assertEquals(1, response.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.USER_MISMATCH, response.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkRejectsNonExistentRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = UUID.randomUUID().toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(0, response.acceptedBookmarks.size)
+        assertEquals(1, response.bookmarkErrors.size)
+        assertEquals(BookmarkSyncErrors.RECIPE_NOT_FOUND, response.bookmarkErrors.first().reason)
+    }
+
+    @Test
+    fun pushBookmarkSoftDeleteIsAccepted() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, userId, 1000L, ingredientId, "PUBLIC"), 1000L)
+        val now = System.currentTimeMillis()
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = recipeId.toString(),
+                        updatedAt = now,
+                        deletedAt = now,
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        assertEquals(1, response.acceptedBookmarks.size)
+        assertEquals(0, response.bookmarkErrors.size)
+        val stored = repo.getBookmark(userId, recipeId)
+        assertNotNull(stored)
+        assertNotNull(stored.deletedAt)
+    }
+
+    @Test
+    fun pullReturnsDeltaBookmarks() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipeId = UUID.randomUUID()
+        repo.seedRecipe(sampleRecipe(recipeId, userId, 1000L, ingredientId, "PUBLIC"), 1000L)
+
+        // Accept bookmark via push
+        service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                bookmarkedRecipes = listOf(
+                    SyncBookmarkedRecipe(
+                        userId = userId.toString(),
+                        recipeId = recipeId.toString(),
+                        updatedAt = System.currentTimeMillis(),
+                        syncState = "PENDING"
+                    )
+                )
+            )
+        )
+
+        val pull = service.pullRecipes(userId, sinceMillis = 0L, limit = 10)
+        assertEquals(1, pull.bookmarkedRecipes.size)
+        assertEquals(recipeId.toString(), pull.bookmarkedRecipes.first().recipeId)
+    }
 
     private fun withService(block: suspend TestApplicationBuilder.(SyncService, FakeSyncRepository) -> Unit) {
         testApplication {
