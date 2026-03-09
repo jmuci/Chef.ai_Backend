@@ -9,6 +9,7 @@ import com.tenmilelabs.application.dto.SyncRecipeStep
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncSourceClassification
 import com.tenmilelabs.application.dto.SyncTag
+import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
@@ -211,6 +212,14 @@ class PostgresSyncRepository : SyncRepository {
         )
     }
 
+    override suspend fun collectCreators(
+        creatorIds: Set<UUID>,
+        sinceMillis: Long?
+    ): List<SyncUser> = suspendTransaction {
+        val sinceInstant = sinceMillis?.let { Instant.fromEpochMilliseconds(it) }
+        queryCreators(creatorIds, sinceInstant)
+    }
+
     // ── Private query helpers ──────────────────────────────────────────────────
     // Each helper applies the union pattern inside the where{} lambda where the
     // Exposed SqlExpressionBuilder operators (greater, inList, or) are in scope.
@@ -326,6 +335,35 @@ class PostgresSyncRepository : SyncRepository {
                 displayName = row[LabelTable.display_name],
                 updatedAt = row[LabelTable.updated_at],
                 deletedAt = row[LabelTable.deleted_at]
+            )
+        }
+    }
+
+    private fun queryCreators(ids: Set<UUID>, sinceInstant: Instant?): List<SyncUser> {
+        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+        val entityIds = ids.map { EntityID(it, UserTable) }
+        return UserTable.selectAll().where {
+            when {
+                sinceInstant != null && entityIds.isNotEmpty() ->
+                    (UserTable.updated_at greater sinceInstant) or (UserTable.id inList entityIds)
+                sinceInstant != null ->
+                    UserTable.updated_at greater sinceInstant
+                else ->
+                    UserTable.id inList entityIds
+            }
+        }.map { row ->
+            val email = row.getOrNull(UserTable.email).orEmpty()
+            val displayName = row.getOrNull(UserTable.display_name)
+                ?.takeIf { it.isNotBlank() }
+                ?: row.getOrNull(UserTable.user_name)?.takeIf { it.isNotBlank() }
+                ?: email
+            SyncUser(
+                uuid = row[UserTable.id].value.toString(),
+                displayName = displayName,
+                email = email,
+                avatarUrl = row.getOrNull(UserTable.avatar_url).orEmpty(),
+                updatedAt = row[UserTable.updated_at].toEpochMilliseconds(),
+                deletedAt = null
             )
         }
     }

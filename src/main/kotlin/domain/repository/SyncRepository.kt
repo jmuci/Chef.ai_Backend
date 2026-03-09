@@ -2,6 +2,7 @@ package com.tenmilelabs.domain.repository
 
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
+import com.tenmilelabs.application.dto.SyncUser
 import kotlinx.datetime.Instant
 import java.util.UUID
 
@@ -70,6 +71,21 @@ interface SyncRepository {
         labelIds: Set<UUID>,
         sinceMillis: Long?
     ): SyncReferenceData
+
+    /**
+     * Collects user rows required for recipes in the current page.
+     *
+     * When [sinceMillis] is non-null, applies the same delta+gap union semantics
+     * used by pull reference data:
+     *  - users updated after sinceMillis (delta)
+     *  - users referenced by [creatorIds] (gap)
+     *
+     * When [sinceMillis] is null, returns only [creatorIds].
+     */
+    suspend fun collectCreators(
+        creatorIds: Set<UUID>,
+        sinceMillis: Long?
+    ): List<SyncUser>
 
     /**
      * Resolves [ids] against the tag catalogue and returns only those UUIDs
