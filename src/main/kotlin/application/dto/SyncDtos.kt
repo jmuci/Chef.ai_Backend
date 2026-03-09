@@ -132,6 +132,16 @@ data class SyncLabel(
     val deletedAt: Long?
 )
 
+@Serializable
+data class SyncUser(
+    val uuid: String,
+    val displayName: String,
+    val email: String,
+    val avatarUrl: String,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
 /**
  * All reference entities needed to satisfy FK constraints when persisting
  * a set of recipe aggregates. Shared by both the pull response (flat fields)
@@ -149,6 +159,7 @@ data class SyncReferenceData(
 @Serializable
 data class SyncPullResponse(
     val recipes: List<SyncRecipe>,
+    val creators: List<SyncUser> = emptyList(),
     val ingredients: List<SyncIngredient>,
     val allergens: List<SyncAllergen>,
     val sourceClassifications: List<SyncSourceClassification>,

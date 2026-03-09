@@ -99,6 +99,26 @@ class SyncServiceTest {
         assertEquals(2, response.recipes.size)
         assertTrue(response.hasMore)
         assertFalse(response.recipes.any { it.uuid == privateForeign.uuid })
+        val pageCreatorIds = response.recipes.map { it.creatorId }.toSet()
+        val returnedCreatorIds = response.creators.map { it.uuid }.toSet()
+        assertEquals(pageCreatorIds, returnedCreatorIds)
+    }
+
+    @Test
+    fun pullReturnsUniqueCreatorsPerPage() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+
+        val ownA = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+        val ownB = sampleRecipe(UUID.randomUUID(), userId, 2000L, ingredientId)
+        repo.seedRecipe(ownA, 1100L)
+        repo.seedRecipe(ownB, 2200L)
+
+        val response = service.pullRecipes(userId = userId, sinceMillis = 0L, limit = 10)
+
+        assertEquals(2, response.recipes.size)
+        assertEquals(1, response.creators.size)
+        assertEquals(userId.toString(), response.creators.first().uuid)
     }
 
     // ── Referential completeness tests ───────────────────────────────────────
