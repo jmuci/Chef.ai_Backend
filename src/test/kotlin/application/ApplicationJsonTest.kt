@@ -40,7 +40,7 @@ class ApplicationJsonPathTest {
     @Test
     fun recipesCanBeFound() = testApplication {
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(TEST_USER_ID),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository()

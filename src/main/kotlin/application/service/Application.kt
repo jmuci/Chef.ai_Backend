@@ -39,6 +39,7 @@ fun Application.module(
             encodeDefaults = false
         }
     ),
+    configureDatabase: Boolean = true,
 ) {
     val recipeRepository = recipeRepository
     val userRepository = userRepository
@@ -56,7 +57,9 @@ fun Application.module(
     val syncService = SyncService(syncRepository, log)
 
     // Set up plugins
-    configureDatabases()
+    if (configureDatabase) {
+        configureDatabases()
+    }
     configureJwtAuth(jwtService)
     configureRouting(
         recipeRepository = recipeRepository,
