@@ -21,6 +21,7 @@ Core architecture and protocol documentation:
 | [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
+| [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, caching and ETag behavior |
 
 ## Features
 
