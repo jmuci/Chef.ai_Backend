@@ -3,6 +3,7 @@ package com.tenmilelabs.application.service
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.service.AuthService
+import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SoftDeletePurgeConfig
@@ -20,6 +21,7 @@ import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
 import kotlinx.coroutines.*
 import io.ktor.server.netty.*
+import kotlinx.serialization.json.Json
 
 fun main(args: Array<String>) {
     EngineMain.main(args)
@@ -29,7 +31,15 @@ fun Application.module(
     recipeRepository: RecipesRepository = PostgresRecipesRepository(log),
     userRepository: UserRepository = PostgresUserRepository(log),
     refreshTokenRepository: RefreshTokenRepository = PostgresRefreshTokenRepository(log),
-    syncRepository: SyncRepository = PostgresSyncRepository()
+    syncRepository: SyncRepository = PostgresSyncRepository(),
+    homeLayoutService: HomeLayoutService = HomeLayoutService(
+        json = Json {
+            ignoreUnknownKeys = true
+            explicitNulls = true
+            encodeDefaults = false
+        }
+    ),
+    configureDatabase: Boolean = true,
 ) {
     val recipeRepository = recipeRepository
     val userRepository = userRepository
@@ -47,9 +57,17 @@ fun Application.module(
     val syncService = SyncService(syncRepository, log)
 
     // Set up plugins
-    configureDatabases()
+    if (configureDatabase) {
+        configureDatabases()
+    }
     configureJwtAuth(jwtService)
-    configureRouting(recipeRepository = recipeRepository, recipesService, authService, syncService)
+    configureRouting(
+        recipeRepository = recipeRepository,
+        recipesService = recipesService,
+        authService = authService,
+        syncService = syncService,
+        homeLayoutService = homeLayoutService,
+    )
 
     val purgeConfig = softDeletePurgeConfig()
     if (purgeConfig.enabled) {

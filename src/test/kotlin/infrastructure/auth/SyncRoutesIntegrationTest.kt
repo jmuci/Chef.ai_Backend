@@ -36,7 +36,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -111,7 +111,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -163,7 +163,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -230,7 +230,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -275,7 +275,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -322,7 +322,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -381,7 +381,7 @@ class SyncRoutesIntegrationTest {
         val tagId = syncRepository.seedTag(serverUpdatedAt = 500L) // predates since=1000
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -421,7 +421,7 @@ class SyncRoutesIntegrationTest {
         val ingredientId = syncRepository.seedIngredient()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -473,7 +473,7 @@ class SyncRoutesIntegrationTest {
         val tagId = syncRepository.seedTag(serverUpdatedAt = 100L)
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
@@ -595,7 +595,7 @@ class SyncRoutesIntegrationTest {
         val syncRepository = FakeSyncRepository()
 
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),

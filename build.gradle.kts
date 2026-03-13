@@ -12,7 +12,18 @@ application {
 }
 
 tasks.test {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        excludeTags("db-integration")
+    }
+}
+
+val dbIntegrationTest by tasks.registering(Test::class) {
+    description = "Runs database-backed integration tests."
+    group = "verification"
+    useJUnitPlatform {
+        includeTags("db-integration")
+    }
+    shouldRunAfter(tasks.test)
 }
 
 dependencies {

@@ -43,7 +43,7 @@ class ApplicationTest {
     @Test
     fun testRoot() = testApplication {
         application {
-            module(
+            module(configureDatabase = false, 
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository()
@@ -58,7 +58,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundByName() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -83,7 +83,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeFoundById() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -108,7 +108,7 @@ class ApplicationTest {
     @Test
     fun recipesCanBeDeletedById() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -136,7 +136,7 @@ class ApplicationTest {
     @Test
     fun newRecipesCanBeAdded() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -184,7 +184,7 @@ class ApplicationTest {
     @Test
     fun postCreateRecipeRequest_withWrongPrivacy() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -223,7 +223,7 @@ class ApplicationTest {
     @Test
     fun newRecipesFailToBeAddedWithInvalidPrivacy() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
 
         val client = createClient {
@@ -261,7 +261,7 @@ class ApplicationTest {
     @Test
     fun userCanRegister() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -291,7 +291,7 @@ class ApplicationTest {
     @Test
     fun userCannotRegisterWithDuplicateEmail() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -323,7 +323,7 @@ class ApplicationTest {
     @Test
     fun userCanLogin() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -363,7 +363,7 @@ class ApplicationTest {
     @Test
     fun userCannotLoginWithWrongPassword() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -398,7 +398,7 @@ class ApplicationTest {
     @Test
     fun unauthorizedRequestReturns401() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {
@@ -414,7 +414,7 @@ class ApplicationTest {
     @Test
     fun invalidTokenReturns401() = testApplication {
         application {
-            module(recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository())
         }
         val client = createClient {
             install(ContentNegotiation) {

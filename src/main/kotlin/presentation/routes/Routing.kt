@@ -5,6 +5,7 @@ import com.tenmilelabs.application.dto.ErrorResponse
 import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
+import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
@@ -20,6 +21,7 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.server.thymeleaf.*
 import io.ktor.util.logging.*
+import kotlinx.serialization.json.Json
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
 import java.util.*
 
@@ -30,11 +32,18 @@ fun Application.configureRouting(
     recipeRepository: RecipesRepository,
     recipesService: RecipesService,
     authService: AuthService,
-    syncService: SyncService
+    syncService: SyncService,
+    homeLayoutService: HomeLayoutService,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
-        json()
+        json(
+            Json {
+                ignoreUnknownKeys = true
+                explicitNulls = true
+                encodeDefaults = false
+            }
+        )
     }
     install(StatusPages) {
         exception<IllegalStateException> { call, cause ->
@@ -65,6 +74,7 @@ fun Application.configureRouting(
         }
         // Public authentication routes
         authRoutes(authService)
+        homeRoutes(homeLayoutService)
 
         // Protected routes - require authentication
         authenticate("auth-jwt") {
