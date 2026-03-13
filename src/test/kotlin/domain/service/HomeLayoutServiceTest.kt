@@ -3,16 +3,20 @@ package com.tenmilelabs.domain.service
 import com.tenmilelabs.application.dto.CarouselComponent
 import com.tenmilelabs.application.dto.LargeCardComponent
 import com.tenmilelabs.application.dto.SectionHeaderComponent
+import io.ktor.util.logging.KtorSimpleLogger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class HomeLayoutServiceTest {
 
+    private val log = KtorSimpleLogger("HomeLayoutServiceIntegrationTest")
+
     @Test
     fun `unknown component types are ignored without crashing`() {
         val service = HomeLayoutService(
             loadLayoutJson = { layoutWithUnknownTypes },
+            log = log
         )
 
         val layout = service.getHomeLayout()

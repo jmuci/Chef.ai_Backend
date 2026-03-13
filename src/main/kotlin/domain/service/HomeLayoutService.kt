@@ -1,6 +1,7 @@
 package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.*
+import io.ktor.util.logging.Logger
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.IOException
@@ -13,6 +14,7 @@ class HomeLayoutService(
         encodeDefaults = false
     },
     private val loadLayoutJson: () -> String = { loadLayoutFromResources(DEFAULT_LAYOUT_RESOURCE_PATH) },
+    val log: Logger,
 ) {
 
     /**
@@ -40,6 +42,7 @@ class HomeLayoutService(
         val canonicalComponentsJson = json.encodeToString(cleanedComponents)
         val checksum = computeLayoutChecksum(canonicalComponentsJson)
 
+        log.info("HomeLayoutService: Serving home layout with checksum $checksum, v ${resource.schemaVersion} amd ${cleanedComponents.size} components.")
         return HomeLayoutResponse(
             schemaVersion = resource.schemaVersion,
             layoutChecksum = checksum,
