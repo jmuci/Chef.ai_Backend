@@ -21,7 +21,7 @@ fun Route.homeRoutes(homeLayoutService: HomeLayoutService) {
                 return@get
             }
 
-            call.response.headers.append(HttpHeaders.ETag, layout.layoutChecksum.asEtag())
+            call.response.headers.append(HttpHeaders.ETag, layout.layoutChecksum.toQuotedEtag())
             call.response.headers.append(HttpHeaders.CacheControl, HomeLayoutService.CACHE_CONTROL_VALUE)
             call.response.headers.append(HomeLayoutService.MIN_SCHEMA_VERSION_HEADER, HomeLayoutService.MIN_SCHEMA_VERSION)
             call.respond(HttpStatusCode.OK, layout)
@@ -32,7 +32,7 @@ fun Route.homeRoutes(homeLayoutService: HomeLayoutService) {
     }
 }
 
-private fun String.asEtag(): String = "\"$this\""
+private fun String.toQuotedEtag(): String = "\"$this\""
 
 private fun String.matchesChecksum(currentChecksum: String): Boolean {
     val candidateTags = split(",").map { it.trim() }
