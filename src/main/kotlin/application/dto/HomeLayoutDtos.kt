@@ -20,6 +20,45 @@ data class HomeLayoutResponse(
     val schemaVersion: String,
     val layoutChecksum: String,
     val components: List<HomeComponent>,
+    val sidecar: HomeSidecar? = null,
+)
+
+@Serializable
+data class HomeSidecar(
+    val recipes: List<SidecarRecipeDto>,
+    val tags: List<SidecarTagDto> = emptyList(),
+    val labels: List<SidecarLabelDto> = emptyList(),
+    val creators: List<SidecarCreatorDto> = emptyList(),
+)
+
+@Serializable
+data class SidecarRecipeDto(
+    val uuid: String,
+    val title: String,
+    val description: String,
+    val imageUrl: String,
+    val imageUrlThumbnail: String,
+    val prepTimeMinutes: Int,
+    val cookTimeMinutes: Int,
+    val servings: Int,
+    val creatorId: String,
+    val privacy: String = "PUBLIC",
+    val updatedAt: Long,
+    val tagIds: List<String> = emptyList(),
+    val labelIds: List<String> = emptyList(),
+)
+
+@Serializable
+data class SidecarTagDto(val uuid: String, val displayName: String)
+
+@Serializable
+data class SidecarLabelDto(val uuid: String, val displayName: String)
+
+@Serializable
+data class SidecarCreatorDto(
+    val uuid: String,
+    val displayName: String,
+    val avatarUrl: String? = null,
 )
 
 @Serializable(with = HomeComponentSerializer::class)
