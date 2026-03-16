@@ -1,6 +1,7 @@
 package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.*
+import io.ktor.util.logging.KtorSimpleLogger
 import io.ktor.util.logging.Logger
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -14,7 +15,8 @@ class HomeLayoutService(
         encodeDefaults = false
     },
     private val loadLayoutJson: () -> String = { loadLayoutFromResources(DEFAULT_LAYOUT_RESOURCE_PATH) },
-    val log: Logger,
+    private val loadSidecarJson: () -> String = { loadLayoutFromResources(DEFAULT_SIDECAR_RESOURCE_PATH) },
+    val log: Logger = KtorSimpleLogger("HomeLayoutService"),
 ) {
 
     /**
@@ -42,11 +44,14 @@ class HomeLayoutService(
         val canonicalComponentsJson = json.encodeToString(cleanedComponents)
         val checksum = computeLayoutChecksum(canonicalComponentsJson)
 
-        log.info("HomeLayoutService: Serving home layout with checksum $checksum, v ${resource.schemaVersion} amd ${cleanedComponents.size} components.")
+        val sidecar = json.decodeFromString<HomeSidecar>(loadSidecarJson())
+
+        log.info("HomeLayoutService: Serving home layout with checksum $checksum, v ${resource.schemaVersion} and ${cleanedComponents.size} components, ${sidecar.recipes.size} sidecar recipes.")
         return HomeLayoutResponse(
             schemaVersion = resource.schemaVersion,
             layoutChecksum = checksum,
             components = cleanedComponents,
+            sidecar = sidecar,
         )
     }
 
@@ -80,6 +85,7 @@ class HomeLayoutService(
         const val MIN_SCHEMA_VERSION_HEADER = "X-Min-Schema-Version"
         const val CACHE_CONTROL_VALUE = "max-age=300"
         const val DEFAULT_LAYOUT_RESOURCE_PATH = "home_layout.json"
+        const val DEFAULT_SIDECAR_RESOURCE_PATH = "home_sidecar.json"
 
         /** MD5 is used only for equality checks (If-None-Match), not for security. */
         fun computeLayoutChecksum(componentsJson: String): String {
