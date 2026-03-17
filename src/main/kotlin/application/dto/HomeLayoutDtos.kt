@@ -92,7 +92,8 @@ data class LargeCardComponent(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     override val type: String = LARGE_CARD_TYPE,
     val recipeId: String? = null,
-    val title: String,
+    // TODO remove all those fields
+    val title: String? = null,
     val description: String? = null,
     val imageUrl: String? = null,
     val prepTimeMinutes: Int? = null,
@@ -108,10 +109,11 @@ data class SquaredCardComponent(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     override val type: String = SQUARED_CARD_TYPE,
     val recipeId: String? = null,
-    val title: String,
+    // TODO remove all those fields
+    val title: String? = null,
     val imageUrl: String? = null,
     val subtitle: String? = null,
-    val tag: String?,
+    val tag: String? = null,
 ) : HomeComponent
 
 @Serializable
@@ -120,7 +122,8 @@ data class ListCardComponent(
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     override val type: String = LIST_CARD_TYPE,
     val recipeId: String? = null,
-    val title: String,
+    // TODO remove all those fields
+    val title: String? = null,
     val description: String? = null,
     val imageUrl: String? = null,
     val prepTimeMinutes: Int? = null,
@@ -201,11 +204,10 @@ object HomeComponentSerializer : KSerializer<HomeComponent> {
 
     private fun decodeSquaredCard(component: JsonObject): SquaredCardComponent {
         val id = component.requiredString("id", SQUARED_CARD_TYPE)
-        val title = component.requiredString("title", SQUARED_CARD_TYPE)
         return SquaredCardComponent(
             id = id,
             recipeId = component.optionalString("recipeId"),
-            title = title,
+            title = component.optionalString("title"),
             imageUrl = component.optionalString("imageUrl"),
             subtitle = component.optionalString("subtitle"),
             tag = component.optionalString("tag"),
