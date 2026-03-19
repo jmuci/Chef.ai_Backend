@@ -12,66 +12,11 @@
       "type": "carousel",
       "id": "carousel-for-you",
       "items": [
-        {
-          "type": "large_card",
-          "id": "for-you-paella",
-          "title": "Valencian Paella",
-          "description": "A classic Spanish rice dish loaded with saffron, fresh seafood, and seasonal vegetables.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/paella-closeup.jpeg",
-          "prepTimeMinutes": 15,
-          "cookTimeMinutes": 25,
-          "servings": 4,
-          "labels": ["Spicy", "Spanish"],
-          "tags": ["Dinner"]
-        },
-        {
-          "type": "large_card",
-          "id": "for-you-grilled-chicken",
-          "title": "Delicious Grilled Chicken",
-          "description": "Juicy lemon-herb marinated chicken grilled to perfection.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/lem-chicken.jpeg",
-          "prepTimeMinutes": 15,
-          "cookTimeMinutes": 20,
-          "servings": 4,
-          "labels": ["Dinner"],
-          "tags": ["Healthy", "Quick"]
-        },
-        {
-          "type": "large_card",
-          "id": "for-you-thai-green-curry",
-          "title": "Thai Green Curry",
-          "description": "Aromatic green curry with coconut milk, vegetables, and fragrant Thai basil.",
-          "imageUrl": "https://plus.unsplash.com/premium_photo-1713089366140-814130d69933?q=80&w=1740&auto=format&fit=crop",
-          "prepTimeMinutes": 15,
-          "cookTimeMinutes": 25,
-          "servings": 4,
-          "labels": ["Spicy", "Asian"],
-          "tags": ["Dinner", "Thai"]
-        },
-        {
-          "type": "large_card",
-          "id": "for-you-margherita-pizza",
-          "title": "Classic Margherita Pizza",
-          "description": "Simple and delicious pizza with San Marzano tomatoes, fresh mozzarella, and basil.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/pizza-marg .jpeg",
-          "prepTimeMinutes": 20,
-          "cookTimeMinutes": 15,
-          "servings": 2,
-          "labels": ["Italian", "Vegetarian"],
-          "tags": ["Italian", "Dinner"]
-        },
-        {
-          "type": "large_card",
-          "id": "for-you-beef-stew",
-          "title": "Classic Beef Stew",
-          "description": "Hearty slow-cooked beef stew with root vegetables and rich gravy.",
-          "imageUrl": "https://images.unsplash.com/photo-1608500218861-01091cdc501e?q=80&w=987&auto=format&fit=crop",
-          "prepTimeMinutes": 15,
-          "cookTimeMinutes": 20,
-          "servings": 4,
-          "labels": ["Comfort Food"],
-          "tags": ["Slow Cook", "Beef"]
-        }
+        { "type": "large_card",   "id": "for-you-paella",           "recipeId": "a1b2c3d4-0000-0000-0000-000000000001" },
+        { "type": "large_card",   "id": "for-you-grilled-chicken",  "recipeId": "a1b2c3d4-0000-0000-0000-000000000002" },
+        { "type": "large_card",   "id": "for-you-thai-green-curry", "recipeId": "a1b2c3d4-0000-0000-0000-000000000003" },
+        { "type": "large_card",   "id": "for-you-margherita-pizza", "recipeId": "a1b2c3d4-0000-0000-0000-000000000004" },
+        { "type": "large_card",   "id": "for-you-beef-stew",        "recipeId": "a1b2c3d4-0000-0000-0000-000000000005" }
       ]
     },
     {
@@ -84,46 +29,10 @@
       "type": "carousel",
       "id": "carousel-italian-classics",
       "items": [
-        {
-          "type": "large_card",
-          "id": "italian-carbonara",
-          "title": "Traditional Carbonara Pasta",
-          "description": "Rich and creamy carbonara made with guanciale, pecorino, and egg yolks.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/pasta-carbonara2.jpeg",
-          "prepTimeMinutes": 10,
-          "cookTimeMinutes": 25,
-          "servings": 6,
-          "labels": ["Weeknight"],
-          "tags": ["Pasta", "Comfort Food"]
-        },
-        {
-          "type": "squared_card",
-          "id": "italian-margherita-pizza",
-          "title": "Margherita Pizza",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/pizza-marg .jpeg",
-          "subtitle": "20 min \u00b7 Easy",
-          "tag": "Italian"
-        },
-        {
-          "type": "squared_card",
-          "id": "italian-lasagna",
-          "title": "Lasagna Bolognese",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/lasagne.jpeg",
-          "subtitle": "50 min \u00b7 Medium",
-          "tag": "Classic"
-        },
-        {
-          "type": "large_card",
-          "id": "italian-tuscan-sausage-pasta",
-          "title": "Tuscan Sausage Pasta",
-          "description": "Penne with Italian sausage, sun-dried tomatoes, and a creamy garlic sauce.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/pasta-carbonara.jpeg",
-          "prepTimeMinutes": 10,
-          "cookTimeMinutes": 25,
-          "servings": 6,
-          "labels": ["Weeknight"],
-          "tags": ["Pasta", "Comfort Food"]
-        }
+        { "type": "large_card",   "id": "italian-carbonara",            "recipeId": "a1b2c3d4-0000-0000-0000-000000000006" },
+        { "type": "squared_card", "id": "italian-margherita-pizza",     "recipeId": "a1b2c3d4-0000-0000-0000-000000000004" },
+        { "type": "squared_card", "id": "italian-lasagna",              "recipeId": "a1b2c3d4-0000-0000-0000-000000000007" },
+        { "type": "large_card",   "id": "italian-tuscan-sausage-pasta", "recipeId": "a1b2c3d4-0000-0000-0000-000000000008" }
       ]
     },
     {
@@ -136,38 +45,10 @@
       "type": "carousel",
       "id": "carousel-quick-healthy",
       "items": [
-        {
-          "type": "squared_card",
-          "id": "quick-salmon-teriyaki",
-          "title": "Grilled Salmon Teriyaki",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/salmon-ter.jpeg",
-          "subtitle": "25 min \u00b7 Easy",
-          "tag": "Healthy"
-        },
-        {
-          "type": "squared_card",
-          "id": "quick-sushi-nigiris",
-          "title": "Sushi Nigiris",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/sushi.jpeg",
-          "subtitle": "25 min \u00b7 Medium",
-          "tag": null
-        },
-        {
-          "type": "squared_card",
-          "id": "quick-shrimp-ceviche",
-          "title": "Shrimp Ceviche",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/shrimp-ceviche.jpeg",
-          "subtitle": "25 min \u00b7 Easy",
-          "tag": "Fresh"
-        },
-        {
-          "type": "squared_card",
-          "id": "quick-med-chicken",
-          "title": "Mediterranean Grilled Chicken",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/chicken-med.jpeg",
-          "subtitle": "35 min \u00b7 Easy",
-          "tag": "Healthy"
-        }
+        { "type": "squared_card", "id": "quick-salmon-teriyaki", "recipeId": "a1b2c3d4-0000-0000-0000-000000000009" },
+        { "type": "squared_card", "id": "quick-sushi-nigiris",   "recipeId": "a1b2c3d4-0000-0000-0000-000000000010" },
+        { "type": "squared_card", "id": "quick-shrimp-ceviche",  "recipeId": "a1b2c3d4-0000-0000-0000-000000000011" },
+        { "type": "squared_card", "id": "quick-med-chicken",     "recipeId": "a1b2c3d4-0000-0000-0000-000000000012" }
       ]
     },
     {
@@ -180,50 +61,10 @@
       "type": "carousel",
       "id": "carousel-seafood",
       "items": [
-        {
-          "type": "list_card",
-          "id": "seafood-salmon-teriyaki",
-          "title": "Grilled Salmon Teriyaki",
-          "description": "Glazed salmon fillet with a sweet and savory teriyaki sauce.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/salmon-ter.jpeg",
-          "prepTimeMinutes": 10,
-          "cookTimeMinutes": 15,
-          "labels": ["Healthy", "Asian"],
-          "tags": ["Dinner", "Fish"]
-        },
-        {
-          "type": "list_card",
-          "id": "seafood-sushi-nigiris",
-          "title": "Sushi Nigiris",
-          "description": "Fresh hand-pressed sushi with assorted fish over seasoned rice.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/sushi.jpeg",
-          "prepTimeMinutes": 10,
-          "cookTimeMinutes": 15,
-          "labels": ["Healthy", "Asian"],
-          "tags": ["Dinner", "Fish"]
-        },
-        {
-          "type": "list_card",
-          "id": "seafood-shrimp-ceviche",
-          "title": "Shrimp Ceviche",
-          "description": "Zesty citrus-marinated shrimp with fresh herbs and avocado.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/shrimp-ceviche.jpeg",
-          "prepTimeMinutes": 10,
-          "cookTimeMinutes": 15,
-          "labels": ["Healthy"],
-          "tags": ["Dinner", "Fish"]
-        },
-        {
-          "type": "list_card",
-          "id": "seafood-battered-cod",
-          "title": "Battered Cod with Lemon",
-          "description": "Crispy beer-battered cod fillets served with lemon wedges and tartar sauce.",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/shrimp_ceviche.jpeg",
-          "prepTimeMinutes": 20,
-          "cookTimeMinutes": 25,
-          "labels": ["British"],
-          "tags": ["Pub Food", "Dinner", "Fish"]
-        }
+        { "type": "list_card", "id": "seafood-salmon-teriyaki", "recipeId": "a1b2c3d4-0000-0000-0000-000000000009" },
+        { "type": "list_card", "id": "seafood-sushi-nigiris",   "recipeId": "a1b2c3d4-0000-0000-0000-000000000010" },
+        { "type": "list_card", "id": "seafood-shrimp-ceviche",  "recipeId": "a1b2c3d4-0000-0000-0000-000000000011" },
+        { "type": "list_card", "id": "seafood-battered-cod",    "recipeId": "a1b2c3d4-0000-0000-0000-000000000013" }
       ]
     },
     {
@@ -236,30 +77,9 @@
       "type": "carousel",
       "id": "carousel-desserts",
       "items": [
-        {
-          "type": "squared_card",
-          "id": "dessert-choc-chip-cookies",
-          "title": "Chocolate Chip Cookies",
-          "imageUrl": "https://images.unsplash.com/photo-1499636136210-6f4ee915583e?q=80&w=1064&auto=format&fit=crop",
-          "subtitle": "27 min \u00b7 Easy",
-          "tag": "Baking"
-        },
-        {
-          "type": "squared_card",
-          "id": "dessert-blueberry-cheesecake",
-          "title": "Blue Berry Cheesecake",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/cheesecake.jpeg",
-          "subtitle": "27 min \u00b7 Medium",
-          "tag": "Dessert"
-        },
-        {
-          "type": "squared_card",
-          "id": "dessert-ghirardelli-cookies",
-          "title": "Ghirardelli Cookies",
-          "imageUrl": "https://raw.githubusercontent.com/jmuci/ChATestAPI/refs/heads/main/statics/thumbnails/lowres/cookies.jpeg",
-          "subtitle": "27 min \u00b7 Easy",
-          "tag": "Baking"
-        }
+        { "type": "squared_card", "id": "dessert-choc-chip-cookies",    "recipeId": "a1b2c3d4-0000-0000-0000-000000000014" },
+        { "type": "squared_card", "id": "dessert-blueberry-cheesecake", "recipeId": "a1b2c3d4-0000-0000-0000-000000000015" },
+        { "type": "squared_card", "id": "dessert-ghirardelli-cookies",  "recipeId": "a1b2c3d4-0000-0000-0000-000000000016" }
       ]
     }
   ]

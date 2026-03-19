@@ -37,7 +37,8 @@ fun Application.module(
             ignoreUnknownKeys = true
             explicitNulls = true
             encodeDefaults = false
-        }
+        },
+        log = log,
     ),
     configureDatabase: Boolean = true,
 ) {
