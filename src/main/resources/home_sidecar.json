@@ -13,7 +13,27 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000001"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000001", "a1b2c3d4-0002-0000-0000-000000000002"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000001", "a1b2c3d4-0002-0000-0000-000000000002"],
+      "ingredients": [
+        { "name": "Short-grain rice", "quantity": 2.0, "unit": "cups" },
+        { "name": "Saffron threads", "quantity": 0.5, "unit": "tsp" },
+        { "name": "Chicken broth", "quantity": 4.0, "unit": "cups" },
+        { "name": "Shrimp", "quantity": 200.0, "unit": "g" },
+        { "name": "Mussels", "quantity": 200.0, "unit": "g" },
+        { "name": "Red bell pepper", "quantity": 1.0, "unit": "whole" },
+        { "name": "Olive oil", "quantity": 3.0, "unit": "tbsp" },
+        { "name": "Garlic cloves", "quantity": 3.0, "unit": "whole" },
+        { "name": "Smoked paprika", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Salt", "quantity": 1.0, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Dissolve saffron in warm chicken broth and set aside." },
+        { "orderIndex": 2, "instruction": "Heat olive oil in a paella pan over medium heat. Sauté garlic and red bell pepper for 2 minutes." },
+        { "orderIndex": 3, "instruction": "Add smoked paprika and rice, stirring to coat in the oil for 1 minute." },
+        { "orderIndex": 4, "instruction": "Pour in the saffron broth, season with salt, and bring to a boil." },
+        { "orderIndex": 5, "instruction": "Nestle shrimp and mussels into the rice. Reduce heat and simmer uncovered for 18 minutes until rice is cooked and liquid is absorbed." },
+        { "orderIndex": 6, "instruction": "Rest for 5 minutes before serving." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000002",
@@ -28,7 +48,24 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000002", "a1b2c3d4-0001-0000-0000-000000000003"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000003"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000003"],
+      "ingredients": [
+        { "name": "Chicken breasts", "quantity": 4.0, "unit": "whole" },
+        { "name": "Lemon juice", "quantity": 3.0, "unit": "tbsp" },
+        { "name": "Olive oil", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Garlic cloves", "quantity": 3.0, "unit": "whole" },
+        { "name": "Fresh rosemary", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Fresh thyme", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Salt", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Black pepper", "quantity": 0.5, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Whisk together lemon juice, olive oil, minced garlic, rosemary, thyme, salt, and pepper." },
+        { "orderIndex": 2, "instruction": "Coat chicken breasts in marinade and refrigerate for at least 30 minutes." },
+        { "orderIndex": 3, "instruction": "Preheat grill to medium-high heat and oil the grates." },
+        { "orderIndex": 4, "instruction": "Grill chicken for 6–7 minutes per side until internal temperature reaches 74°C (165°F)." },
+        { "orderIndex": 5, "instruction": "Rest for 5 minutes before slicing and serving." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000003",
@@ -43,7 +80,27 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000001", "a1b2c3d4-0001-0000-0000-000000000004"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000001", "a1b2c3d4-0002-0000-0000-000000000004"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000001", "a1b2c3d4-0002-0000-0000-000000000004"],
+      "ingredients": [
+        { "name": "Coconut milk", "quantity": 400.0, "unit": "ml" },
+        { "name": "Green curry paste", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Chicken thighs", "quantity": 500.0, "unit": "g" },
+        { "name": "Zucchini", "quantity": 1.0, "unit": "whole" },
+        { "name": "Red bell pepper", "quantity": 1.0, "unit": "whole" },
+        { "name": "Thai basil leaves", "quantity": 0.5, "unit": "cup" },
+        { "name": "Fish sauce", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Palm sugar", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Vegetable oil", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Lime juice", "quantity": 1.0, "unit": "tbsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Heat oil in a wok over medium heat. Fry curry paste for 1–2 minutes until fragrant." },
+        { "orderIndex": 2, "instruction": "Add chicken pieces and cook until sealed on all sides, about 4 minutes." },
+        { "orderIndex": 3, "instruction": "Pour in coconut milk and bring to a gentle simmer." },
+        { "orderIndex": 4, "instruction": "Add zucchini and bell pepper. Season with fish sauce, palm sugar, and lime juice." },
+        { "orderIndex": 5, "instruction": "Simmer for 15 minutes until chicken is cooked through and vegetables are tender." },
+        { "orderIndex": 6, "instruction": "Stir in Thai basil leaves and serve with steamed jasmine rice." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000004",
@@ -58,7 +115,23 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000005", "a1b2c3d4-0001-0000-0000-000000000001"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000005", "a1b2c3d4-0002-0000-0000-000000000006"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000005", "a1b2c3d4-0002-0000-0000-000000000006"],
+      "ingredients": [
+        { "name": "Pizza dough", "quantity": 250.0, "unit": "g" },
+        { "name": "San Marzano tomatoes", "quantity": 200.0, "unit": "g" },
+        { "name": "Fresh mozzarella", "quantity": 150.0, "unit": "g" },
+        { "name": "Fresh basil leaves", "quantity": 10.0, "unit": "whole" },
+        { "name": "Olive oil", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Salt", "quantity": 0.5, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Preheat oven to 250°C (480°F) with a pizza stone or baking sheet inside." },
+        { "orderIndex": 2, "instruction": "Stretch dough into a 30 cm round on a floured surface." },
+        { "orderIndex": 3, "instruction": "Crush tomatoes by hand and spread over the dough, leaving a 2 cm border. Season with salt and drizzle with olive oil." },
+        { "orderIndex": 4, "instruction": "Tear mozzarella into pieces and scatter over the sauce." },
+        { "orderIndex": 5, "instruction": "Bake for 12–15 minutes until crust is golden and cheese is bubbling." },
+        { "orderIndex": 6, "instruction": "Top with fresh basil leaves and a drizzle of olive oil before serving." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000005",
@@ -73,7 +146,27 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000008", "a1b2c3d4-0001-0000-0000-000000000009"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000007"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000007"],
+      "ingredients": [
+        { "name": "Beef chuck", "quantity": 700.0, "unit": "g" },
+        { "name": "Carrots", "quantity": 3.0, "unit": "whole" },
+        { "name": "Potatoes", "quantity": 3.0, "unit": "whole" },
+        { "name": "Onion", "quantity": 1.0, "unit": "whole" },
+        { "name": "Beef broth", "quantity": 500.0, "unit": "ml" },
+        { "name": "Tomato paste", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Flour", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Olive oil", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Fresh thyme", "quantity": 3.0, "unit": "sprigs" },
+        { "name": "Bay leaves", "quantity": 2.0, "unit": "whole" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Cut beef into 3 cm cubes. Season with salt and pepper, then dust with flour." },
+        { "orderIndex": 2, "instruction": "Heat oil in a heavy pot and brown beef in batches. Remove and set aside." },
+        { "orderIndex": 3, "instruction": "In the same pot, sauté diced onion until softened. Stir in tomato paste and cook for 1 minute." },
+        { "orderIndex": 4, "instruction": "Return beef to pot. Add broth, thyme, and bay leaves. Bring to a boil." },
+        { "orderIndex": 5, "instruction": "Reduce heat, cover, and simmer for 1.5 hours until beef is tender." },
+        { "orderIndex": 6, "instruction": "Add chopped carrots and potatoes. Simmer uncovered for 30 more minutes. Discard bay leaves and thyme before serving." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000006",
@@ -88,7 +181,23 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000006", "a1b2c3d4-0001-0000-0000-000000000007"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000008"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000008"],
+      "ingredients": [
+        { "name": "Spaghetti", "quantity": 400.0, "unit": "g" },
+        { "name": "Guanciale", "quantity": 150.0, "unit": "g" },
+        { "name": "Egg yolks", "quantity": 4.0, "unit": "whole" },
+        { "name": "Whole egg", "quantity": 1.0, "unit": "whole" },
+        { "name": "Pecorino Romano", "quantity": 80.0, "unit": "g" },
+        { "name": "Black pepper", "quantity": 1.0, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Cook spaghetti in heavily salted boiling water until al dente. Reserve 200 ml of pasta water." },
+        { "orderIndex": 2, "instruction": "Cut guanciale into lardons and cook in a dry pan over medium heat until crispy. Set aside." },
+        { "orderIndex": 3, "instruction": "Whisk egg yolks, whole egg, and grated pecorino together. Add a generous amount of cracked black pepper." },
+        { "orderIndex": 4, "instruction": "Remove pan from heat. Add drained pasta to the guanciale pan and toss." },
+        { "orderIndex": 5, "instruction": "Off the heat, pour egg mixture over pasta, adding reserved pasta water a splash at a time, tossing vigorously to create a creamy sauce." },
+        { "orderIndex": 6, "instruction": "Serve immediately topped with more pecorino and black pepper." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000007",
@@ -103,7 +212,27 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000014"],
-      "labelIds": []
+      "labelIds": [],
+      "ingredients": [
+        { "name": "Lasagna sheets", "quantity": 12.0, "unit": "whole" },
+        { "name": "Ground beef", "quantity": 400.0, "unit": "g" },
+        { "name": "Crushed tomatoes", "quantity": 400.0, "unit": "g" },
+        { "name": "Whole milk", "quantity": 500.0, "unit": "ml" },
+        { "name": "Butter", "quantity": 40.0, "unit": "g" },
+        { "name": "Flour", "quantity": 40.0, "unit": "g" },
+        { "name": "Parmesan", "quantity": 80.0, "unit": "g" },
+        { "name": "Onion", "quantity": 1.0, "unit": "whole" },
+        { "name": "Olive oil", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Nutmeg", "quantity": 0.25, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Sauté diced onion in olive oil until soft. Add ground beef and brown well. Stir in crushed tomatoes, season, and simmer for 20 minutes." },
+        { "orderIndex": 2, "instruction": "Make béchamel: melt butter, stir in flour, cook for 1 minute, then gradually whisk in milk. Simmer until thickened. Season with salt and nutmeg." },
+        { "orderIndex": 3, "instruction": "Preheat oven to 190°C (375°F). Spread a thin layer of Bolognese on the bottom of a baking dish." },
+        { "orderIndex": 4, "instruction": "Layer lasagna sheets, Bolognese, then béchamel. Repeat layers, finishing with béchamel on top." },
+        { "orderIndex": 5, "instruction": "Sprinkle Parmesan over the top and bake for 35–40 minutes until golden and bubbling." },
+        { "orderIndex": 6, "instruction": "Rest for 10 minutes before cutting and serving." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000008",
@@ -118,7 +247,26 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000006", "a1b2c3d4-0001-0000-0000-000000000007"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000008"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000008"],
+      "ingredients": [
+        { "name": "Penne pasta", "quantity": 400.0, "unit": "g" },
+        { "name": "Italian sausage", "quantity": 300.0, "unit": "g" },
+        { "name": "Sun-dried tomatoes", "quantity": 80.0, "unit": "g" },
+        { "name": "Heavy cream", "quantity": 200.0, "unit": "ml" },
+        { "name": "Garlic cloves", "quantity": 4.0, "unit": "whole" },
+        { "name": "Baby spinach", "quantity": 60.0, "unit": "g" },
+        { "name": "Parmesan", "quantity": 60.0, "unit": "g" },
+        { "name": "Olive oil", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Red chili flakes", "quantity": 0.5, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Cook penne in salted boiling water until al dente. Reserve 100 ml pasta water." },
+        { "orderIndex": 2, "instruction": "Remove sausage from casings and cook in olive oil over medium-high heat, breaking into pieces, until browned." },
+        { "orderIndex": 3, "instruction": "Add minced garlic and chili flakes; cook for 1 minute. Stir in sun-dried tomatoes." },
+        { "orderIndex": 4, "instruction": "Pour in cream and simmer for 3–4 minutes until slightly thickened." },
+        { "orderIndex": 5, "instruction": "Add cooked pasta and spinach to the pan. Toss, adding pasta water to loosen if needed." },
+        { "orderIndex": 6, "instruction": "Serve topped with grated Parmesan." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000009",
@@ -133,7 +281,24 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000001", "a1b2c3d4-0001-0000-0000-000000000010"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009", "a1b2c3d4-0002-0000-0000-000000000004"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009", "a1b2c3d4-0002-0000-0000-000000000004"],
+      "ingredients": [
+        { "name": "Salmon fillets", "quantity": 2.0, "unit": "whole" },
+        { "name": "Soy sauce", "quantity": 3.0, "unit": "tbsp" },
+        { "name": "Mirin", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Sake", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Sugar", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Sesame oil", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Spring onion", "quantity": 2.0, "unit": "whole" },
+        { "name": "Sesame seeds", "quantity": 1.0, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Mix soy sauce, mirin, sake, and sugar in a small saucepan. Simmer over low heat for 2–3 minutes until slightly thickened. Stir in sesame oil." },
+        { "orderIndex": 2, "instruction": "Pat salmon fillets dry and brush with half the teriyaki sauce." },
+        { "orderIndex": 3, "instruction": "Grill or pan-sear salmon skin-side down over medium-high heat for 4 minutes." },
+        { "orderIndex": 4, "instruction": "Flip salmon, brush with remaining sauce, and cook for another 3–4 minutes until glazed and cooked through." },
+        { "orderIndex": 5, "instruction": "Garnish with sliced spring onion and sesame seeds. Serve with steamed rice." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000010",
@@ -148,7 +313,25 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000001", "a1b2c3d4-0001-0000-0000-000000000010"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009", "a1b2c3d4-0002-0000-0000-000000000004"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009", "a1b2c3d4-0002-0000-0000-000000000004"],
+      "ingredients": [
+        { "name": "Sushi rice", "quantity": 2.0, "unit": "cups" },
+        { "name": "Rice vinegar", "quantity": 3.0, "unit": "tbsp" },
+        { "name": "Sugar", "quantity": 1.0, "unit": "tbsp" },
+        { "name": "Salt", "quantity": 0.5, "unit": "tsp" },
+        { "name": "Salmon sashimi grade", "quantity": 100.0, "unit": "g" },
+        { "name": "Tuna sashimi grade", "quantity": 100.0, "unit": "g" },
+        { "name": "Soy sauce", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Wasabi", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Pickled ginger", "quantity": 30.0, "unit": "g" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Cook sushi rice according to package instructions. Mix rice vinegar, sugar, and salt; fold into warm rice. Allow to cool to room temperature." },
+        { "orderIndex": 2, "instruction": "Slice fish into 5 mm thick pieces at an angle." },
+        { "orderIndex": 3, "instruction": "Wet hands and form 1 tbsp of rice into an oval shape." },
+        { "orderIndex": 4, "instruction": "Dab a small amount of wasabi on the rice, then press a slice of fish on top." },
+        { "orderIndex": 5, "instruction": "Serve with soy sauce and pickled ginger on the side." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000011",
@@ -163,7 +346,24 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000001", "a1b2c3d4-0001-0000-0000-000000000010"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000009"],
+      "ingredients": [
+        { "name": "Raw shrimp peeled", "quantity": 300.0, "unit": "g" },
+        { "name": "Lime juice", "quantity": 4.0, "unit": "tbsp" },
+        { "name": "Lemon juice", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Red onion", "quantity": 0.5, "unit": "whole" },
+        { "name": "Jalapeño", "quantity": 1.0, "unit": "whole" },
+        { "name": "Avocado", "quantity": 1.0, "unit": "whole" },
+        { "name": "Fresh cilantro", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Salt", "quantity": 0.5, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Briefly cook shrimp in boiling water for 1–2 minutes until pink. Transfer to ice water to stop cooking, then drain." },
+        { "orderIndex": 2, "instruction": "Cut shrimp into halves and place in a bowl with lime and lemon juice. Marinate for 10 minutes." },
+        { "orderIndex": 3, "instruction": "Finely dice red onion and jalapeño. Dice avocado." },
+        { "orderIndex": 4, "instruction": "Drain excess citrus from shrimp. Combine with onion, jalapeño, avocado, and cilantro." },
+        { "orderIndex": 5, "instruction": "Season with salt and serve immediately with tortilla chips." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000012",
@@ -178,7 +378,24 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000002"],
-      "labelIds": []
+      "labelIds": [],
+      "ingredients": [
+        { "name": "Chicken thighs bone-in", "quantity": 4.0, "unit": "whole" },
+        { "name": "Olive oil", "quantity": 3.0, "unit": "tbsp" },
+        { "name": "Lemon juice", "quantity": 2.0, "unit": "tbsp" },
+        { "name": "Dried oregano", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Ground cumin", "quantity": 0.5, "unit": "tsp" },
+        { "name": "Garlic cloves", "quantity": 3.0, "unit": "whole" },
+        { "name": "Kalamata olives", "quantity": 60.0, "unit": "g" },
+        { "name": "Cherry tomatoes", "quantity": 200.0, "unit": "g" },
+        { "name": "Salt", "quantity": 1.0, "unit": "tsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Mix olive oil, lemon juice, minced garlic, oregano, cumin, and salt. Coat chicken thighs and marinate for at least 20 minutes." },
+        { "orderIndex": 2, "instruction": "Preheat oven to 200°C (390°F). Place chicken in a roasting tray with cherry tomatoes and olives." },
+        { "orderIndex": 3, "instruction": "Roast for 35–40 minutes until skin is golden and juices run clear." },
+        { "orderIndex": 4, "instruction": "Rest for 5 minutes. Serve with the pan juices spooned over." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000013",
@@ -193,7 +410,23 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000011", "a1b2c3d4-0001-0000-0000-000000000001", "a1b2c3d4-0001-0000-0000-000000000010"],
-      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000010"]
+      "labelIds": ["a1b2c3d4-0002-0000-0000-000000000010"],
+      "ingredients": [
+        { "name": "Cod fillets", "quantity": 400.0, "unit": "g" },
+        { "name": "Plain flour", "quantity": 150.0, "unit": "g" },
+        { "name": "Cold beer", "quantity": 200.0, "unit": "ml" },
+        { "name": "Baking powder", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Salt", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Vegetable oil", "quantity": 500.0, "unit": "ml" },
+        { "name": "Lemon", "quantity": 1.0, "unit": "whole" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Heat vegetable oil in a deep pot to 180°C (350°F)." },
+        { "orderIndex": 2, "instruction": "Whisk flour, baking powder, and salt together. Gradually add cold beer, whisking until a smooth batter forms." },
+        { "orderIndex": 3, "instruction": "Pat cod fillets dry. Dip each fillet in batter, letting excess drip off." },
+        { "orderIndex": 4, "instruction": "Carefully lower fillets into hot oil and fry for 4–5 minutes per side until golden and crispy." },
+        { "orderIndex": 5, "instruction": "Drain on a wire rack. Serve immediately with lemon wedges and tartar sauce." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000014",
@@ -208,7 +441,26 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000012"],
-      "labelIds": []
+      "labelIds": [],
+      "ingredients": [
+        { "name": "All-purpose flour", "quantity": 280.0, "unit": "g" },
+        { "name": "Butter softened", "quantity": 225.0, "unit": "g" },
+        { "name": "Brown sugar", "quantity": 200.0, "unit": "g" },
+        { "name": "White sugar", "quantity": 100.0, "unit": "g" },
+        { "name": "Eggs", "quantity": 2.0, "unit": "whole" },
+        { "name": "Vanilla extract", "quantity": 2.0, "unit": "tsp" },
+        { "name": "Baking soda", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Salt", "quantity": 0.5, "unit": "tsp" },
+        { "name": "Chocolate chips", "quantity": 300.0, "unit": "g" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Preheat oven to 190°C (375°F). Line baking sheets with parchment paper." },
+        { "orderIndex": 2, "instruction": "Beat butter and both sugars until light and fluffy. Add eggs one at a time, then vanilla." },
+        { "orderIndex": 3, "instruction": "Whisk together flour, baking soda, and salt. Gradually mix into butter mixture." },
+        { "orderIndex": 4, "instruction": "Fold in chocolate chips." },
+        { "orderIndex": 5, "instruction": "Drop rounded tablespoons of dough onto prepared sheets, spacing 5 cm apart." },
+        { "orderIndex": 6, "instruction": "Bake for 9–11 minutes until edges are golden but centers look slightly underdone. Cool on pan for 5 minutes before transferring." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000015",
@@ -223,7 +475,25 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000013"],
-      "labelIds": []
+      "labelIds": [],
+      "ingredients": [
+        { "name": "Cream cheese", "quantity": 600.0, "unit": "g" },
+        { "name": "Digestive biscuits", "quantity": 200.0, "unit": "g" },
+        { "name": "Butter melted", "quantity": 80.0, "unit": "g" },
+        { "name": "Sour cream", "quantity": 150.0, "unit": "ml" },
+        { "name": "Sugar", "quantity": 150.0, "unit": "g" },
+        { "name": "Eggs", "quantity": 3.0, "unit": "whole" },
+        { "name": "Vanilla extract", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Fresh blueberries", "quantity": 250.0, "unit": "g" },
+        { "name": "Lemon juice", "quantity": 1.0, "unit": "tbsp" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Crush biscuits and mix with melted butter. Press into the base of a 23 cm springform pan. Chill for 20 minutes." },
+        { "orderIndex": 2, "instruction": "Preheat oven to 160°C (320°F). Beat cream cheese and sugar until smooth. Add sour cream, vanilla, and eggs one at a time." },
+        { "orderIndex": 3, "instruction": "Pour filling over the chilled base and bake for 55–60 minutes until set but with a slight wobble in the center." },
+        { "orderIndex": 4, "instruction": "Turn off oven, crack the door, and leave cheesecake to cool for 1 hour. Refrigerate for at least 4 hours." },
+        { "orderIndex": 5, "instruction": "Simmer blueberries with sugar and lemon juice for 5 minutes to make compote. Cool before topping cheesecake." }
+      ]
     },
     {
       "uuid": "a1b2c3d4-0000-0000-0000-000000000016",
@@ -238,7 +508,27 @@
       "privacy": "PUBLIC",
       "updatedAt": 1735689600000,
       "tagIds": ["a1b2c3d4-0001-0000-0000-000000000012"],
-      "labelIds": []
+      "labelIds": [],
+      "ingredients": [
+        { "name": "All-purpose flour", "quantity": 250.0, "unit": "g" },
+        { "name": "Ghirardelli cocoa powder", "quantity": 50.0, "unit": "g" },
+        { "name": "Butter softened", "quantity": 225.0, "unit": "g" },
+        { "name": "Brown sugar", "quantity": 200.0, "unit": "g" },
+        { "name": "White sugar", "quantity": 100.0, "unit": "g" },
+        { "name": "Eggs", "quantity": 2.0, "unit": "whole" },
+        { "name": "Vanilla extract", "quantity": 2.0, "unit": "tsp" },
+        { "name": "Baking soda", "quantity": 1.0, "unit": "tsp" },
+        { "name": "Salt", "quantity": 0.5, "unit": "tsp" },
+        { "name": "Ghirardelli chocolate chips", "quantity": 300.0, "unit": "g" }
+      ],
+      "steps": [
+        { "orderIndex": 1, "instruction": "Preheat oven to 175°C (350°F). Line baking sheets with parchment paper." },
+        { "orderIndex": 2, "instruction": "Sift together flour, cocoa, baking soda, and salt." },
+        { "orderIndex": 3, "instruction": "Beat butter and both sugars until light and fluffy. Add eggs one at a time, then vanilla." },
+        { "orderIndex": 4, "instruction": "Gradually blend in flour mixture. Fold in chocolate chips." },
+        { "orderIndex": 5, "instruction": "Drop rounded tablespoons of dough onto prepared sheets, spacing 5 cm apart." },
+        { "orderIndex": 6, "instruction": "Bake for 9–11 minutes. Cookies will look soft — do not overbake. Cool on pan for 5 minutes before transferring." }
+      ]
     }
   ],
   "tags": [
