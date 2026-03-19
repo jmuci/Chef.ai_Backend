@@ -156,7 +156,7 @@ class HomeLayoutServiceTest {
                     {
                       "type": "large_card",
                       "id": "large-1",
-                      "title": "Valencian Paella"
+                      "recipeId": "a1b2c3d4-0000-0000-0000-000000000001"
                     },
                     {
                       "type": "section_header",
