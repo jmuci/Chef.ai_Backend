@@ -46,6 +46,21 @@ data class SidecarRecipeDto(
     val updatedAt: Long,
     val tagIds: List<String> = emptyList(),
     val labelIds: List<String> = emptyList(),
+    val ingredients: List<SidecarIngredient> = emptyList(),
+    val steps: List<SidecarStep> = emptyList(),
+)
+
+@Serializable
+data class SidecarIngredient(
+    val name: String,
+    val quantity: Double,
+    val unit: String,
+)
+
+@Serializable
+data class SidecarStep(
+    val orderIndex: Int,
+    val instruction: String,
 )
 
 @Serializable

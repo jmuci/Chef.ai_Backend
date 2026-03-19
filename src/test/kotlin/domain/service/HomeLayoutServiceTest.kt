@@ -89,6 +89,20 @@ class HomeLayoutServiceTest {
     }
 
     @Test
+    fun `every sidecar recipe has at least one ingredient and one step`() {
+        val service = HomeLayoutService(log = log)
+        val layout = service.getHomeLayout()
+
+        val sidecar = assertNotNull(layout.sidecar)
+        for (recipe in sidecar.recipes) {
+            assertTrue(recipe.ingredients.isNotEmpty(),
+                "recipe '${recipe.uuid}' has no ingredients")
+            assertTrue(recipe.steps.isNotEmpty(),
+                "recipe '${recipe.uuid}' has no steps")
+        }
+    }
+
+    @Test
     fun `checksum covers only components, not the sidecar`() {
         val service = HomeLayoutService(log = log)
         val layout = service.getHomeLayout()
