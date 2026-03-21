@@ -11,8 +11,8 @@ fun configureDatabases() {
     val user = System.getenv("DB_USER") ?: "postgres"
     val password = System.getenv("DB_PASSWORD") ?: "password"
     Database.connect(url, user = user, password = password)
+    initDatabaseAndSchema()
     runSqlMigration("sql/backfill_users_profile_defaults.sql")
-    // initDatabaseAndSchema()
 }
 
 private fun runSqlMigration(resourcePath: String) {

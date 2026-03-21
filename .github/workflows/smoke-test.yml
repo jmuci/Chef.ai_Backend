@@ -23,3 +23,7 @@ jobs:
           chmod +x ./smoke-test.sh
           docker compose -f docker-compose.smoketest.yaml down -v || true
           ./smoke-test.sh
+
+      - name: Dump app container logs on failure
+        if: failure()
+        run: docker logs smoketest_chefai || true

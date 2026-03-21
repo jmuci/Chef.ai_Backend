@@ -88,8 +88,28 @@ fun Route.syncRoutes(syncService: SyncService) {
                 return@get
             }
 
-            val response = syncService.pullRecipes(userId, since, limit)
-            call.respond(HttpStatusCode.OK, response)
+            try {
+                val response = syncService.pullRecipes(userId, since, limit)
+                call.respond(HttpStatusCode.OK, response)
+            } catch (ex: ExposedSQLException) {
+                call.application.environment.log.error("Sync pull database failure", ex)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse(buildDetailedError("Sync pull database error", ex))
+                )
+            } catch (ex: SQLException) {
+                call.application.environment.log.error("Sync pull SQL failure", ex)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse(buildDetailedError("Sync pull database error", ex))
+                )
+            } catch (ex: Exception) {
+                call.application.environment.log.error("Sync pull unexpected failure", ex)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    ErrorResponse(buildDetailedError("Sync pull failed unexpectedly", ex))
+                )
+            }
         }
     }
 }
