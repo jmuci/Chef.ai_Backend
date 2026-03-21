@@ -503,6 +503,130 @@ Each page's reference data is independently complete:
 
 ---
 
+## Bookmarks (Favourites)
+
+Bookmarks represent a user's saved/favourited recipes. They are synced through the same push/pull endpoints as recipes — no separate endpoints needed.
+
+### Data Model
+
+```sql
+bookmarked_recipes (
+    user_id          UUID NOT NULL  REFERENCES users(id)   ON DELETE CASCADE,
+    recipe_id        UUID NOT NULL  REFERENCES recipes(id) ON DELETE CASCADE,
+    server_updated_at TIMESTAMPTZ NOT NULL,   -- sync cursor
+    deleted_at        TIMESTAMPTZ,             -- tombstone for removals
+    PRIMARY KEY (user_id, recipe_id)
+)
+```
+
+- **Composite PK** `(user_id, recipe_id)` — one row per user/recipe pair.
+- **`server_updated_at`** — stamped by the server on every upsert; used as the pull cursor.
+- **`deleted_at`** non-null — tombstone; client should remove the bookmark locally.
+
+### Push — Adding / Removing a Bookmark
+
+Include a `bookmarkedRecipes` array in the existing `POST /sync/push` body:
+
+```json
+{
+  "recipes": [],
+  "bookmarkedRecipes": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "updatedAt": 1234567890,
+      "deletedAt": null
+    }
+  ]
+}
+```
+
+- `deletedAt` **null** → upsert active bookmark.
+- `deletedAt` **non-null** → soft-delete (tombstone). Client should pass the removal timestamp it stamped locally.
+
+**Push response** (`SyncPushResponse`) gains two new fields:
+
+```json
+{
+  "accepted": [...],
+  "conflicts": [...],
+  "errors": [...],
+  "bookmarkedRecipes": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "syncState": "SYNCED",
+      "serverUpdatedAt": 1234567891
+    }
+  ],
+  "bookmarkErrors": [
+    {
+      "recipeId": "<uuid>",
+      "reason": "RECIPE_NOT_FOUND",
+      "message": "recipe does not exist or is not accessible"
+    }
+  ],
+  "serverTimestamp": 1234567891,
+  "referenceData": {...}
+}
+```
+
+**Bookmark push validation:**
+
+| Check | Error Reason | Behaviour |
+|-------|--------------|-----------|
+| `userId` matches authenticated user? | `USER_MISMATCH` | Skip, record error |
+| `recipeId` is valid UUID? | `INVALID_RECIPE_ID` | Skip, record error |
+| Recipe exists and is PUBLIC or owned by user? | `RECIPE_NOT_FOUND` | Skip, record error (403 semantics) |
+
+Bookmark errors are per-item and don't fail the rest of the push batch.
+
+### Pull — Receiving Bookmark Deltas
+
+`GET /sync/pull?since={ms}&limit={n}` now includes a `bookmarkedRecipes` array:
+
+```json
+{
+  "recipes": [...],
+  "bookmarkedRecipes": [
+    {
+      "userId": "<uuid>",
+      "recipeId": "<uuid>",
+      "updatedAt": 1234567891,
+      "deletedAt": null
+    }
+  ],
+  "serverTimestamp": 1234567891,
+  "hasMore": false
+}
+```
+
+- Filtered by `user_id = authenticated user` AND `server_updated_at > since`.
+- Tombstones (non-null `deletedAt`) are included so the client can remove the local row.
+- `updatedAt` in the response is the `server_updated_at` timestamp; clients should treat it as the bookmark's cursor value.
+
+### Cursor Advancement with Bookmarks
+
+The pull response `serverTimestamp` is derived from recipe `server_updated_at` values. Since bookmarks are stamped with real epoch time (`Clock.System.now()`), clients should advance their cursor to the **maximum of all timestamps** in the response:
+
+```
+advancedCursor = max(
+    serverTimestamp,                               // recipe-based
+    bookmarkedRecipes.maxOfOrNull { it.updatedAt } // bookmark-based
+)
+```
+
+This ensures no bookmark deltas are re-fetched on the next pull.
+
+### Authorization
+
+- Only authenticated users can push/pull bookmarks.
+- A user can only push bookmarks where `userId == authenticated user id` — mismatches produce `USER_MISMATCH` errors.
+- A recipe can be bookmarked only if it is `PUBLIC` or the user is the creator. Attempting to bookmark a private recipe owned by another user produces `RECIPE_NOT_FOUND`.
+- Anonymous / unauthenticated requests return `401`; the client should handle bookmarks as local-only in that case.
+
+---
+
 ## Validation & Errors
 
 The server validates each pushed recipe:
@@ -563,3 +687,4 @@ While the server ensures referential integrity, the client must:
 | **Pagination** | Cursor-based; each page's reference data is independent |
 | **Atomicity** | Batch; all recipes processed in single transaction |
 | **Errors** | Per-recipe; don't fail batch |
+| **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |
