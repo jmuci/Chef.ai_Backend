@@ -1,6 +1,7 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.application.dto.SyncAllergen
+import com.tenmilelabs.application.dto.SyncBookmark
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -392,6 +393,67 @@ class PostgresSyncRepository : SyncRepository {
             .where { LabelTable.id inList entityIds }
             .map { it[LabelTable.id].value }
             .toSet()
+    }
+
+    override suspend fun isRecipeAccessibleBy(userId: UUID, recipeId: UUID): Boolean = suspendTransaction {
+        RecipeTable.selectAll()
+            .where {
+                (RecipeTable.id eq recipeId) and
+                    ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
+            }
+            .limit(1)
+            .any()
+    }
+
+    override suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        deletedAt: Instant?,
+        serverUpdatedAt: Instant
+    ): Unit = suspendTransaction {
+        val existing = BookmarkedRecipeTable
+            .selectAll()
+            .where {
+                (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
+                    (BookmarkedRecipeTable.recipe_id eq EntityID(recipeId, RecipeTable))
+            }
+            .limit(1)
+            .any()
+
+        if (existing) {
+            BookmarkedRecipeTable.update({
+                (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
+                    (BookmarkedRecipeTable.recipe_id eq EntityID(recipeId, RecipeTable))
+            }) {
+                it[BookmarkedRecipeTable.server_updated_at] = serverUpdatedAt
+                it[BookmarkedRecipeTable.deleted_at] = deletedAt
+            }
+        } else {
+            BookmarkedRecipeTable.insert {
+                it[BookmarkedRecipeTable.user_id] = EntityID(userId, UserTable)
+                it[BookmarkedRecipeTable.recipe_id] = EntityID(recipeId, RecipeTable)
+                it[BookmarkedRecipeTable.server_updated_at] = serverUpdatedAt
+                it[BookmarkedRecipeTable.deleted_at] = deletedAt
+            }
+        }
+    }
+
+    override suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmark> = suspendTransaction {
+        val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+        BookmarkedRecipeTable
+            .selectAll()
+            .where {
+                (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
+                    (BookmarkedRecipeTable.server_updated_at greater sinceInstant)
+            }
+            .map { row ->
+                SyncBookmark(
+                    userId = row[BookmarkedRecipeTable.user_id].value.toString(),
+                    recipeId = row[BookmarkedRecipeTable.recipe_id].value.toString(),
+                    updatedAt = row[BookmarkedRecipeTable.server_updated_at].toEpochMilliseconds(),
+                    deletedAt = row[BookmarkedRecipeTable.deleted_at]?.toEpochMilliseconds()
+                )
+            }
     }
 
     /**
