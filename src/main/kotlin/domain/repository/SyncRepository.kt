@@ -1,5 +1,6 @@
 package com.tenmilelabs.domain.repository
 
+import com.tenmilelabs.application.dto.SyncBookmark
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncUser
@@ -100,4 +101,29 @@ interface SyncRepository {
      * than failing the entire recipe aggregate.
      */
     suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID>
+
+    /**
+     * Returns true if [recipeId] exists and is accessible by [userId] —
+     * i.e., the user is the creator or the recipe is PUBLIC.
+     * Used to enforce the bookmark privacy rule before upsert.
+     */
+    suspend fun isRecipeAccessibleBy(userId: UUID, recipeId: UUID): Boolean
+
+    /**
+     * Upserts a bookmark row for the given (userId, recipeId) pair.
+     * [deletedAt] non-null → soft-delete (tombstone); null → active bookmark.
+     * [serverUpdatedAt] is the server-authoritative timestamp used as the sync cursor.
+     */
+    suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        deletedAt: Instant?,
+        serverUpdatedAt: Instant
+    )
+
+    /**
+     * Returns all bookmark rows for [userId] whose [server_updated_at] is after [sinceMillis].
+     * Includes tombstones (deleted_at non-null) so the client can handle removals.
+     */
+    suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmark>
 }

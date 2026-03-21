@@ -1,6 +1,9 @@
 package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.AcceptedEntity
+import com.tenmilelabs.application.dto.BookmarkErrors
+import com.tenmilelabs.application.dto.BookmarkPushError
+import com.tenmilelabs.application.dto.BookmarkPushResult
 import com.tenmilelabs.application.dto.ConflictEntity
 import com.tenmilelabs.application.dto.ConflictReasons
 import com.tenmilelabs.application.dto.SyncError
@@ -130,13 +133,70 @@ class SyncService(
             )
         }
 
+        val (bookmarkResults, bookmarkErrors) = processBookmarks(userId, request)
+
         return SyncPushResponse(
             accepted = accepted,
             conflicts = conflicts,
             errors = errors,
             serverTimestamp = Clock.System.now().toEpochMilliseconds(),
-            referenceData = conflictReferenceData
+            referenceData = conflictReferenceData,
+            bookmarkedRecipes = bookmarkResults,
+            bookmarkErrors = bookmarkErrors
         )
+    }
+
+    private suspend fun processBookmarks(
+        userId: UUID,
+        request: SyncPushRequest
+    ): Pair<List<BookmarkPushResult>, List<BookmarkPushError>> {
+        if (request.bookmarkedRecipes.isEmpty()) return emptyList<BookmarkPushResult>() to emptyList()
+
+        val results = mutableListOf<BookmarkPushResult>()
+        val errors = mutableListOf<BookmarkPushError>()
+
+        request.bookmarkedRecipes.forEach { bookmark ->
+            val bookmarkUserId = parseUuid(bookmark.userId) {
+                // If userId is malformed treat it as a mismatch — skip silently
+            }
+            if (bookmarkUserId == null || bookmarkUserId != userId) {
+                errors += BookmarkPushError(
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkErrors.USER_MISMATCH,
+                    message = BookmarkErrors.USER_MISMATCH.message
+                )
+                return@forEach
+            }
+
+            val recipeId = parseUuid(bookmark.recipeId) {
+                errors += BookmarkPushError(
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkErrors.INVALID_RECIPE_ID,
+                    message = BookmarkErrors.INVALID_RECIPE_ID.message
+                )
+            } ?: return@forEach
+
+            if (!syncRepository.isRecipeAccessibleBy(userId, recipeId)) {
+                errors += BookmarkPushError(
+                    recipeId = bookmark.recipeId,
+                    reason = BookmarkErrors.RECIPE_NOT_FOUND,
+                    message = BookmarkErrors.RECIPE_NOT_FOUND.message
+                )
+                return@forEach
+            }
+
+            val now = Clock.System.now()
+            val deletedAt = bookmark.deletedAt?.let { kotlinx.datetime.Instant.fromEpochMilliseconds(it) }
+            syncRepository.upsertBookmark(userId, recipeId, deletedAt, now)
+            results += BookmarkPushResult(
+                userId = bookmark.userId,
+                recipeId = bookmark.recipeId,
+                syncState = "SYNCED",
+                serverUpdatedAt = now.toEpochMilliseconds()
+            )
+        }
+
+        return results to errors
     }
 
     /**
@@ -184,11 +244,14 @@ class SyncService(
             sinceMillis = sinceMillis
         )
 
+        val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
+
         log.info(
             "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
                 "ingredients=${refData.ingredients.size}, allergens=${refData.allergens.size}, " +
                 "sourceClassifications=${refData.sourceClassifications.size}, " +
-                "tags=${refData.tags.size}, labels=${refData.labels.size}"
+                "tags=${refData.tags.size}, labels=${refData.labels.size}, " +
+                "bookmarks=${bookmarks.size}"
         )
 
         return SyncPullResponse(
@@ -199,6 +262,7 @@ class SyncService(
             sourceClassifications = refData.sourceClassifications,
             tags = refData.tags,
             labels = refData.labels,
+            bookmarkedRecipes = bookmarks,
             serverTimestamp = cursor,
             hasMore = hasMore
         )
