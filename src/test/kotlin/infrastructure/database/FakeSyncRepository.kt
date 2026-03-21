@@ -1,5 +1,6 @@
 package com.tenmilelabs.infrastructure.database
 
+import com.tenmilelabs.application.dto.SyncBookmark
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -21,6 +22,11 @@ class FakeSyncRepository : SyncRepository {
     private val labelServerTs = mutableMapOf<UUID, Long>()
     private val users = mutableMapOf<UUID, SyncUser>()
     private val userServerTs = mutableMapOf<UUID, Long>()
+    // key: (userId, recipeId), value: bookmark with server-stamped updatedAt
+    private val bookmarks = mutableMapOf<Pair<UUID, UUID>, SyncBookmark>()
+    private val bookmarkServerTs = mutableMapOf<Pair<UUID, UUID>, Long>()
+    // accessible recipe ids (by default, all seeded recipes are accessible)
+    private val inaccessibleRecipes = mutableSetOf<UUID>()
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -81,6 +87,10 @@ class FakeSyncRepository : SyncRepository {
         return uuid
     }
 
+    fun makeRecipeInaccessible(recipeId: UUID) {
+        inaccessibleRecipes += recipeId
+    }
+
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
 
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
@@ -133,4 +143,34 @@ class FakeSyncRepository : SyncRepository {
 
         return users.unionFilter(creatorIds, userServerTs)
     }
+
+    override suspend fun isRecipeAccessibleBy(userId: UUID, recipeId: UUID): Boolean {
+        if (recipeId in inaccessibleRecipes) return false
+        val record = recipes[recipeId] ?: return false
+        return record.recipe.creatorId == userId.toString() || record.recipe.privacy == "PUBLIC"
+    }
+
+    override suspend fun upsertBookmark(
+        userId: UUID,
+        recipeId: UUID,
+        deletedAt: Instant?,
+        serverUpdatedAt: Instant
+    ) {
+        val key = userId to recipeId
+        val ts = serverUpdatedAt.toEpochMilliseconds()
+        bookmarks[key] = SyncBookmark(
+            userId = userId.toString(),
+            recipeId = recipeId.toString(),
+            updatedAt = ts,
+            deletedAt = deletedAt?.toEpochMilliseconds()
+        )
+        bookmarkServerTs[key] = ts
+    }
+
+    override suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmark> =
+        bookmarks.entries
+            .filter { (key, _) ->
+                key.first == userId && (bookmarkServerTs[key] ?: 0L) > sinceMillis
+            }
+            .map { it.value }
 }
