@@ -150,6 +150,7 @@ class SyncService(
         userId: UUID,
         request: SyncPushRequest
     ): Pair<List<BookmarkPushResult>, List<BookmarkPushError>> {
+        log.info("Sync push bookmark batch for user $userId: received=${request.bookmarkedRecipes.size}")
         if (request.bookmarkedRecipes.isEmpty()) return emptyList<BookmarkPushResult>() to emptyList()
 
         val results = mutableListOf<BookmarkPushResult>()

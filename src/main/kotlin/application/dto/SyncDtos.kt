@@ -1,5 +1,7 @@
 package com.tenmilelabs.application.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -43,6 +45,7 @@ data class SyncRecipeIngredient(
     val unit: String
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SyncPushResponse(
     val accepted: List<AcceptedEntity>,
@@ -51,8 +54,8 @@ data class SyncPushResponse(
     val serverTimestamp: Long,
     /** Reference entities required to resolve every [ConflictEntity.serverVersion] locally. */
     val referenceData: SyncReferenceData,
-    val bookmarkedRecipes: List<BookmarkPushResult> = emptyList(),
-    val bookmarkErrors: List<BookmarkPushError> = emptyList()
+    @EncodeDefault val bookmarkedRecipes: List<BookmarkPushResult> = emptyList(),
+    @EncodeDefault val bookmarkErrors: List<BookmarkPushError> = emptyList()
 )
 
 @Serializable
@@ -189,16 +192,17 @@ enum class BookmarkErrors(val message: String) {
     USER_MISMATCH("userId does not match authenticated user")
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SyncPullResponse(
     val recipes: List<SyncRecipe>,
-    val creators: List<SyncUser> = emptyList(),
+    @EncodeDefault val creators: List<SyncUser> = emptyList(),
     val ingredients: List<SyncIngredient>,
     val allergens: List<SyncAllergen>,
     val sourceClassifications: List<SyncSourceClassification>,
     val tags: List<SyncTag>,
     val labels: List<SyncLabel>,
-    val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
+    @EncodeDefault val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
     val serverTimestamp: Long,
     val hasMore: Boolean
 )
