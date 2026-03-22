@@ -503,6 +503,161 @@ Each page's reference data is independently complete:
 
 ---
 
+## Client Pre-Population / Bundle Strategy
+
+For production deployments, mobile clients should ship with pre-populated recipe and ingredient data to reduce initial sync time and provide offline-ready content on first launch.
+
+### Space Estimate
+
+**100 popular recipes** (including ingredients, steps, tags, labels):
+- ~1 KB per recipe (JSON, with full graph of references)
+- **100 recipes ≈ 100 KB** (raw JSON) → ~25–35 KB gzipped
+
+**500 common ingredients** (with allergen and source classification references):
+- ~160 bytes per ingredient (UUID, name, allergen_id, source_primary_id)
+- **500 ingredients ≈ 80 KB** (raw JSON) → ~15–20 KB gzipped
+
+**Reference data** (allergens, source classifications, tags, labels):
+- ~10 KB total
+
+**Total in-app storage**:
+- **Room SQLite database**: ~150–250 KB (uncompressed; includes indices)
+- **Bundled as compressed JSON**: ~40–60 KB (gzipped)
+
+This is negligible for modern mobile apps (typical ~10–100 MB range).
+
+### Why Pre-Population Works with Cursor-Based Sync
+
+The cursor protocol solves pre-population conflict-free:
+
+1. **Record bundle timestamp**: When generating the bundle, capture the maximum `server_updated_at` across all included recipes. This becomes the client's **initial cursor**.
+
+2. **Client initialization**: On first app launch, Room DB is pre-populated with 100 recipes + 500 ingredients + reference data.
+
+3. **First sync**: Client calls:
+   ```
+   GET /sync/pull?since={bundleTimestamp}&limit=50
+   ```
+   - Server returns only recipes/ingredients modified **after `bundleTimestamp`**.
+   - Client receives new deltas, deduplicates with pre-populated data (UUIDs are unique), and upserts.
+   - **No conflicts, no duplicates**: Same UUID on client and server results in a safe upsert.
+
+4. **Subsequent syncs**: Normal cursor advancement continues indefinitely.
+
+### Pre-Population Benefits
+
+- ✅ **Faster first launch**: User sees recipes instantly; sync happens in background
+- ✅ **Offline-ready**: Recipes available before any network request
+- ✅ **No sync conflicts**: Cursor-based protocol ensures clean merging with server state
+- ✅ **Minimal storage**: ~150 KB (Room) in app bundle is negligible
+- ✅ **Version management**: Bundle can be versioned; client can detect stale bundles and re-sync if needed
+
+### Export Process (Backend)
+
+To generate a client bundle:
+
+```kotlin
+// In your backend sync service
+suspend fun exportClientBundle(): ClientBundle {
+    // Query top 100 recipes by popularity/creation/rating
+    val recipes = syncRepository.getTopRecipes(limit = 100)
+    val bundleTimestamp = recipes.maxOf { it.serverUpdatedAtMillis }
+
+    // Collect all ingredients referenced by these recipes
+    val ingredientIds = recipes
+        .flatMap { it.ingredients.map { UUID.fromString(it.ingredientId) } }
+        .toSet()
+
+    // Query top 500 ingredients (by usage frequency)
+    val ingredients = syncRepository.getTopIngredients(limit = 500)
+
+    // Collect reference data (union of all referenced entities)
+    val refData = syncRepository.collectReferenceData(
+        sinceMillis = null,  // Get all; this is the baseline
+        ingredientIds = ingredientIds,
+        tagIds = recipes.flatMap { it.tagIds }.map(UUID::fromString).toSet(),
+        labelIds = recipes.flatMap { it.labelIds }.map(UUID::fromString).toSet()
+    )
+
+    return ClientBundle(
+        recipes = recipes,
+        referenceData = refData,
+        bundleTimestamp = bundleTimestamp,
+        bundleVersion = "1.0"  // Increment for future bundles
+    )
+}
+```
+
+### Export Format Options
+
+**Option A (Simplest for client)**: Room database snapshot
+- Export backend database to `.db` file
+- Client copies to Room's app directory on first launch
+- No JSON parsing overhead
+
+**Option B (Most flexible)**: JSON export
+- Export `ClientBundle` to JSON file
+- Client parses and imports on first launch
+- Allows transformation/validation during import
+
+**Option C (Recommended)**: JSON + manifest
+- Export recipes/reference data as JSON
+- Manifest file containing:
+  ```json
+  {
+    "bundleVersion": "1.0",
+    "bundleTimestamp": 1711000000000,
+    "ingredientCount": 500,
+    "recipeCount": 100,
+    "generatedAt": "2025-03-21T12:00:00Z"
+  }
+  ```
+- Client can detect stale bundles and request fresh sync if needed
+
+### Sync Conflict Prevention Checklist
+
+- ✅ **Record max `server_updated_at`** from bundle recipes → client's initial cursor
+- ✅ **UUID uniqueness**: Natural (handled by backend)
+- ✅ **Reference data complete**: All allergens, sources, tags, labels included
+- ✅ **No timestamp skew**: Use server clock (`Clock.System.now()`), not client time
+- ✅ **Version the bundle**: Embed version/timestamp in manifest for staleness detection
+- ✅ **Delta-only first sync**: Client cursor is bundleTimestamp; first pull fetches only new data
+
+### Example: Client-Side Initialization (Pseudo-Code)
+
+```kotlin
+// On first app launch (Android/Kotlin pseudocode)
+suspend fun initializeApp() {
+    val db = createAppDatabase()
+
+    // Check if bundle is in app resources
+    val bundleJson = readBundleFromAssets("recipe_bundle.json")
+    if (bundleJson != null) {
+        val bundle = Json.decodeFromString<ClientBundle>(bundleJson)
+
+        // Validate bundle version
+        if (bundle.bundleVersion == "1.0") {
+            // Import recipes + reference data into Room
+            db.recipeDao().insertAll(bundle.recipes)
+            db.ingredientDao().insertAll(bundle.referenceData.ingredients)
+            db.allergenDao().insertAll(bundle.referenceData.allergens)
+            // ... etc
+
+            // Store initial cursor (for next sync)
+            prefs.edit().putLong("sync_cursor", bundle.bundleTimestamp).apply()
+            prefs.edit().putString("bundle_version", bundle.bundleVersion).apply()
+        }
+    }
+
+    // On first sync (possibly after bundle import)
+    val cursor = prefs.getLong("sync_cursor", 0L)
+    syncClient.pull(since = cursor, limit = 50)
+    // → Server returns only changes after bundleTimestamp
+}
+```
+
+---
+
 ## Bookmarks (Favourites)
 
 Bookmarks represent a user's saved/favourited recipes. They are synced through the same push/pull endpoints as recipes — no separate endpoints needed.
@@ -687,4 +842,5 @@ While the server ensures referential integrity, the client must:
 | **Pagination** | Cursor-based; each page's reference data is independent |
 | **Atomicity** | Batch; all recipes processed in single transaction |
 | **Errors** | Per-recipe; don't fail batch |
+| **Client Pre-Population** | Ship bundle (100 recipes, 500 ingredients) with initial cursor; first sync fetches deltas only |
 | **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |

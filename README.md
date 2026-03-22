@@ -17,7 +17,7 @@ Core architecture and protocol documentation:
 
 | Document | Coverage |
 |----------|----------|
-| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios |
+| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios, **client pre-population strategy** |
 | [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
