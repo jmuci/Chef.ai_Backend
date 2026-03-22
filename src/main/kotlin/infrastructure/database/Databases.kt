@@ -2,7 +2,6 @@ package com.tenmilelabs.infrastructure.database
 
 import io.ktor.server.application.*
 import org.jetbrains.exposed.sql.Database
-import org.jetbrains.exposed.sql.transactions.transaction
 import java.sql.Connection
 import java.sql.DriverManager
 
@@ -12,19 +11,6 @@ fun configureDatabases() {
     val password = System.getenv("DB_PASSWORD") ?: "password"
     Database.connect(url, user = user, password = password)
     initDatabaseAndSchema()
-    runSqlMigration("sql/backfill_users_profile_defaults.sql")
-}
-
-private fun runSqlMigration(resourcePath: String) {
-    val sql = object {}.javaClass.classLoader
-        .getResourceAsStream(resourcePath)
-        ?.bufferedReader()
-        ?.use { it.readText() }
-        ?: return
-
-    transaction {
-        exec(sql)
-    }
 }
 
 /**

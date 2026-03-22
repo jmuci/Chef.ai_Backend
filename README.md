@@ -197,6 +197,24 @@ To start both the DB and the service, run:
  docker compose -f docker-compose.yaml up --build
 ```
 
+### Database Setup
+
+To reset and reseed the local database from scratch, run these three scripts in order against the running Postgres container:
+
+```bash
+psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/drop_tables.sql
+psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/create_tables.sql
+psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/seed.sql
+```
+
+| Script | Purpose |
+|--------|---------|
+| `drop_tables.sql` | Drops all tables (clean slate) |
+| `create_tables.sql` | Creates the full schema |
+| `seed.sql` | Seeds reference data (allergens, ingredients, source classifications) + sample recipes and users |
+
+> The DB must be running first — `docker compose up db` if it isn't.
+
 ## Postgres CheatSheet
 # PostgreSQL psql Command Cheat Sheet
 
