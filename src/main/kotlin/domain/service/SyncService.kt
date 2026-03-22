@@ -161,6 +161,10 @@ class SyncService(
                 // If userId is malformed treat it as a mismatch — skip silently
             }
             if (bookmarkUserId == null || bookmarkUserId != userId) {
+                log.warn(
+                    "Bookmark USER_MISMATCH for recipeId=${bookmark.recipeId}: " +
+                        "auth userId=$userId, bookmark.userId=${bookmark.userId}"
+                )
                 errors += BookmarkPushError(
                     recipeId = bookmark.recipeId,
                     reason = BookmarkErrors.USER_MISMATCH,
@@ -170,6 +174,7 @@ class SyncService(
             }
 
             val recipeId = parseUuid(bookmark.recipeId) {
+                log.warn("Bookmark INVALID_RECIPE_ID: recipeId=${bookmark.recipeId} is not a valid UUID")
                 errors += BookmarkPushError(
                     recipeId = bookmark.recipeId,
                     reason = BookmarkErrors.INVALID_RECIPE_ID,
@@ -178,6 +183,10 @@ class SyncService(
             } ?: return@forEach
 
             if (!syncRepository.isRecipeAccessibleBy(userId, recipeId)) {
+                log.warn(
+                    "Bookmark RECIPE_NOT_FOUND for recipeId=$recipeId, userId=$userId: " +
+                        "recipe does not exist or is private and owned by another user"
+                )
                 errors += BookmarkPushError(
                     recipeId = bookmark.recipeId,
                     reason = BookmarkErrors.RECIPE_NOT_FOUND,
@@ -189,6 +198,10 @@ class SyncService(
             val now = Clock.System.now()
             val deletedAt = bookmark.deletedAt?.let { kotlinx.datetime.Instant.fromEpochMilliseconds(it) }
             syncRepository.upsertBookmark(userId, recipeId, deletedAt, now)
+            log.info(
+                "Bookmark upserted for userId=$userId, recipeId=$recipeId, " +
+                    "deletedAt=$deletedAt, serverUpdatedAt=$now"
+            )
             results += BookmarkPushResult(
                 userId = bookmark.userId,
                 recipeId = bookmark.recipeId,
