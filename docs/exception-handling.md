@@ -110,6 +110,41 @@ curl -X POST http://localhost:8080/auth/refresh \
 }
 ```
 
+---
+
+## Sync Error Codes
+
+Unlike auth errors (which map to HTTP status codes), sync errors are returned **inside the 200 response body** as per-item lists. There are two categories:
+
+### Recipe sync errors (`SyncErrors`)
+
+Returned in `SyncPushResponse.errors[]`:
+
+| Code | Meaning | Client action |
+|------|---------|---------------|
+| `INVALID_UUID` | Recipe UUID is not a valid UUID | Fix client-side ID generation |
+| `INVALID_CREATOR` | `creatorId` is not a valid UUID | Fix client-side ID |
+| `CREATOR_MISMATCH` | `creatorId` does not match authenticated user | Auth mismatch — re-authenticate |
+| `INVALID_PRIVACY` | `privacy` is not `PUBLIC` or `PRIVATE` | Fix enum value |
+| `INVALID_INGREDIENT` | An `ingredientId` is not a valid UUID | Fix client-side data |
+| `INGREDIENT_NOT_FOUND` | An `ingredientId` does not exist in the catalogue | Remove or replace the ingredient |
+| `INVALID_TAG` | A `tagId` is not a valid UUID | Fix client-side data |
+| `INVALID_LABEL` | A `labelId` is not a valid UUID | Fix client-side data |
+
+### Bookmark sync errors (`BookmarkErrors`)
+
+Returned in `SyncPushResponse.bookmarkErrors[]`:
+
+| Code | Meaning | Client action |
+|------|---------|---------------|
+| `USER_MISMATCH` | `userId` does not match the authenticated user | Re-authenticate; don't push other users' bookmarks |
+| `INVALID_RECIPE_ID` | `recipeId` is not a valid UUID | Fix client-side ID |
+| `RECIPE_NOT_FOUND` | Recipe does not exist or is PRIVATE and not owned by the user | Remove the bookmark locally; recipe is inaccessible |
+
+Bookmark errors are **per-item** — other bookmarks and all recipes in the same push batch are unaffected.
+
+---
+
 ## Future Enhancements
 
 - Custom exception handler plugin for consistent error responses

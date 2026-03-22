@@ -4,8 +4,8 @@ import org.jetbrains.exposed.sql.SchemaUtils
 import org.jetbrains.exposed.sql.transactions.transaction
 import org.jetbrains.exposed.sql.Database
 // Import all table objects
-import com.tenmilelabs.infrastructure.database.tables.UserTable
 import com.tenmilelabs.infrastructure.database.tables.AllergenTable
+import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
 import com.tenmilelabs.infrastructure.database.tables.IngredientTable
 import com.tenmilelabs.infrastructure.database.tables.LabelTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeIngredientTable
@@ -16,6 +16,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.RefreshTokenTable
 import com.tenmilelabs.infrastructure.database.tables.SourceClassificationTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
+import com.tenmilelabs.infrastructure.database.tables.UserTable
 
 /**
  * Initializes the database and creates all tables if they do not exist.
@@ -35,7 +36,8 @@ fun initDatabaseAndSchema() {
             RecipeTagTable,
             RefreshTokenTable,
             SourceClassificationTable,
-            TagTable
+            TagTable,
+            BookmarkedRecipeTable
         )
     }
 }

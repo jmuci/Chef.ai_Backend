@@ -1,10 +1,13 @@
 package com.tenmilelabs.application.dto
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class SyncPushRequest(
-    val recipes: List<SyncRecipe>
+    val recipes: List<SyncRecipe>,
+    val bookmarkedRecipes: List<SyncBookmark> = emptyList()
 )
 
 @Serializable
@@ -42,6 +45,7 @@ data class SyncRecipeIngredient(
     val unit: String
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SyncPushResponse(
     val accepted: List<AcceptedEntity>,
@@ -49,7 +53,9 @@ data class SyncPushResponse(
     val errors: List<SyncError>,
     val serverTimestamp: Long,
     /** Reference entities required to resolve every [ConflictEntity.serverVersion] locally. */
-    val referenceData: SyncReferenceData
+    val referenceData: SyncReferenceData,
+    @EncodeDefault val bookmarkedRecipes: List<BookmarkPushResult> = emptyList(),
+    @EncodeDefault val bookmarkErrors: List<BookmarkPushError> = emptyList()
 )
 
 @Serializable
@@ -157,14 +163,46 @@ data class SyncReferenceData(
 )
 
 @Serializable
+data class SyncBookmark(
+    val userId: String,
+    val recipeId: String,
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
+data class BookmarkPushResult(
+    val userId: String,
+    val recipeId: String,
+    val syncState: String,
+    val serverUpdatedAt: Long
+)
+
+@Serializable
+data class BookmarkPushError(
+    val recipeId: String,
+    val reason: BookmarkErrors,
+    val message: String
+)
+
+@Serializable
+enum class BookmarkErrors(val message: String) {
+    INVALID_RECIPE_ID("recipeId is not a valid UUID"),
+    RECIPE_NOT_FOUND("recipe does not exist or is not accessible"),
+    USER_MISMATCH("userId does not match authenticated user")
+}
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
 data class SyncPullResponse(
     val recipes: List<SyncRecipe>,
-    val creators: List<SyncUser> = emptyList(),
+    @EncodeDefault val creators: List<SyncUser> = emptyList(),
     val ingredients: List<SyncIngredient>,
     val allergens: List<SyncAllergen>,
     val sourceClassifications: List<SyncSourceClassification>,
     val tags: List<SyncTag>,
     val labels: List<SyncLabel>,
+    @EncodeDefault val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
     val serverTimestamp: Long,
     val hasMore: Boolean
 )

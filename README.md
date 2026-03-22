@@ -17,7 +17,7 @@ Core architecture and protocol documentation:
 
 | Document | Coverage |
 |----------|----------|
-| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios |
+| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios, **client pre-population strategy** |
 | [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
@@ -103,20 +103,41 @@ curl -s -X POST http://localhost:8080/sync/push \
   }'
 ```
 
-3. Pull deltas
+3. Push a bookmark for the recipe
+```bash
+curl -s -X POST http://localhost:8080/sync/push \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "recipes":[],
+    "bookmarkedRecipes":[
+      {
+        "userId":"<USER_ID>",
+        "recipeId":"11111111-1111-1111-1111-111111111111",
+        "updatedAt":1735689600001,
+        "deletedAt":null
+      }
+    ]
+  }'
+```
+
+4. Pull deltas (recipes + bookmarks)
 ```bash
 curl -s "http://localhost:8080/sync/pull?since=0&limit=100" \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
 Expected outcomes:
-- Push returns `200` with arrays for `accepted`, `conflicts`, `errors`.
-- Pull returns `200` with `recipes`, `serverTimestamp`, `hasMore`.
+- Recipe push returns `200` with arrays for `accepted`, `conflicts`, `errors`.
+- Bookmark push returns `200` with `bookmarkedRecipes[].syncState == "SYNCED"` and a `serverUpdatedAt` timestamp.
+- Pull returns `200` with `recipes`, `bookmarkedRecipes`, `serverTimestamp`, `hasMore`.
 - Re-run pull with `since=<serverTimestamp>` to verify cursor-based pagination.
+- To remove a bookmark, re-push with `"deletedAt": <timestamp>` — it appears as a tombstone in the next pull.
 
 ### Sync Rollout Checklist
 
 - Ensure DB index exists on `recipes.server_updated_at`.
+- Ensure DB index exists on `bookmarked_recipes.server_updated_at`.
 - Confirm `DELETE /recipes` now performs soft delete (`deleted_at` + `server_updated_at` update).
 - Run test suites:
 ```bash
@@ -125,7 +146,9 @@ Expected outcomes:
 ./gradlew test
 ```
 - Validate push mixed response behavior (accepted/conflicts/errors in one response).
+- Validate push bookmark response behavior (`bookmarkedRecipes[].syncState`, `bookmarkErrors`).
 - Validate pull pagination behavior (`limit`, `hasMore`, `serverTimestamp` cursor).
+- Validate pull includes bookmark deltas and tombstones alongside recipe deltas.
 
 ## Test Users
 
