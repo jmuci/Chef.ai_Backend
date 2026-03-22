@@ -1,0 +1,952 @@
+-- ChefAI Seed Data
+-- Run after create_tables.sql
+
+-- ===============================
+-- SAMPLE DATA (users, allergens, source classifications, ingredients, recipes)
+-- ===============================
+-- ===============================
+-- SAMPLE DATA (users, labels, tags, recipes)
+-- ===============================
+-- Sample Data Inserts for ChefAI Database (with valid hex UUIDs)
+-- NOTE: For local/dev usage. Adjust for production compliance.
+
+-- ===============================
+-- USERS
+-- ===============================
+INSERT INTO users (uuid, user_name, display_name, email, password_hash, avatar_url, created_at, updated_at) VALUES
+  ('10000000-0000-0000-0000-000000000001','alice','Alice','alice@example.com','hash1','https://example.com/av1.png',now(),now()),
+  ('10000000-0000-0000-0000-000000000002','bob','Bob','bob@example.com','hash2','https://example.com/av2.png',now(),now()),
+  ('10000000-0000-0000-0000-000000000003','carol','Carol','carol@example.com','hash3','https://example.com/av3.png',now(),now()),
+  ('1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7','test1','Test 1','lorz88@gmail.com','$2a$12$YQoHYaun8kHxhxLc7ZoRrORwUFauuL5xONAHlwxQhDBb7t52LyHNC','https://example.com/av-test1.png','2026-01-12 15:57:29.03656','2026-01-12 15:57:29.036566'),
+  ('29002be5-01a8-49d8-b2bd-25ad73745d13','testuser2','Test Two','test2@ex.com','$2a$12$/xxh8lXULJoVRl5/DJQZHu6Pw5ShEHw5oRGXutbVhBMWFPdrEnJ9m','https://example.com/av-test2.png','2026-02-23 20:11:22.607604','2026-02-23 20:11:22.607608'),
+  ('d3c3a63a-0705-472a-a97f-d5edfde8aaa1','testUser3','','test3@ex.com','$2a$12$lQF9lESiEdXg9LggQWkaNuIOl3eZ3E4hsE/RReaijin0vZHMCThBW','https://example.com/av-test3.png','2026-02-23 21:52:44.828985','2026-02-23 21:52:44.828993'),
+  ('d7773142-d89f-495a-9dda-aa4cd0a2ea84','TestUser4','','test4@ex.com','$2a$12$g67z8CUsrbXYyexEKI.LfuDg4t9j1S0o.FOnlTpsA.aCYndXdFtOW','https://example.com/av-test4.png','2026-02-24 00:52:55.059899','2026-02-24 00:52:55.059902'),
+  ('e69845ff-5a3d-49f8-9ed4-f0f956ec8779','TestUser','','test1@ex.com','$2a$12$U7VAySUMasBHu9JUFcVbe.HxB2c81bJIdB9MyvnA9Z2C90avDKsxm','https://example.com/av-test5.png','2026-02-23 20:07:53.594713','2026-02-23 20:07:53.594717');
+
+-- ===============================
+-- ALLERGENS
+-- ===============================
+INSERT INTO allergens (uuid, display_name, updated_at, deleted_at, server_updated_at) VALUES
+  ('20000000-0000-0000-0000-000000000001', 'Peanuts', 1, NULL, now()),
+  ('20000000-0000-0000-0000-000000000002', 'Soy', 2, NULL, now()),
+  ('20000000-0000-0000-0000-000000000003', 'Dairy', 3, NULL, now()),
+  ('20000000-0000-0000-0000-000000000004', 'Gluten', 4, NULL, now()),
+  ('20000000-0000-0000-0000-000000000005', 'Eggs', 5, NULL, now()),
+  ('20000000-0000-0000-0000-000000000006', 'Fish', 6, NULL, now()),
+  ('20000000-0000-0000-0000-000000000007', 'Shellfish', 7, NULL, now()),
+  ('20000000-0000-0000-0000-000000000008', 'Tree nuts', 8, NULL, now()),
+  ('20000000-0000-0000-0000-000000000009', 'Sesame', 9, NULL, now()),
+  ('20000000-0000-0000-0000-00000000000a', 'Mustard', 10, NULL, now());
+
+-- ===============================
+-- SOURCE_CLASSIFICATIONS
+-- ===============================
+INSERT INTO source_classifications (uuid, category, subcategory, updated_at, deleted_at, server_updated_at) VALUES
+  ('30000000-0000-0000-0000-000000000001', 'Vegetable', 'Root', 1, NULL, now()),
+  ('30000000-0000-0000-0000-000000000002', 'Vegetable', 'Leafy', 2, NULL, now()),
+  ('30000000-0000-0000-0000-000000000003', 'Fruit', NULL, 3, NULL, now()),
+  ('30000000-0000-0000-0000-000000000004', 'Grain', 'Whole', 4, NULL, now()),
+  ('30000000-0000-0000-0000-000000000005', 'Dairy', 'Milk', 5, NULL, now()),
+  ('30000000-0000-0000-0000-000000000006', 'Meat', 'Red', 6, NULL, now()),
+  ('30000000-0000-0000-0000-000000000007', 'Meat', 'White', 7, NULL, now()),
+  ('30000000-0000-0000-0000-000000000008', 'Fish', NULL, 8, NULL, now()),
+  ('30000000-0000-0000-0000-000000000009', 'Seafood', NULL, 9, NULL, now()),
+  ('30000000-0000-0000-0000-00000000000a', 'Legume', NULL, 10, NULL, now());
+
+-- ===============================
+-- LABELS
+-- ===============================
+INSERT INTO labels (uuid, display_name, updated_at, deleted_at, server_updated_at) VALUES
+  ('40000000-0000-0000-0000-000000000001', 'Vegan', 1, NULL, now()),
+  ('40000000-0000-0000-0000-000000000002', 'Vegetarian', 2, NULL, now()),
+  ('40000000-0000-0000-0000-000000000003', 'Gluten-Free', 3, NULL, now()),
+  ('40000000-0000-0000-0000-000000000004', 'Dairy-Free', 4, NULL, now()),
+  ('40000000-0000-0000-0000-000000000005', 'Nut-Free', 5, NULL, now()),
+  ('40000000-0000-0000-0000-000000000006', 'High Protein', 6, NULL, now()),
+  ('40000000-0000-0000-0000-000000000007', 'Low Carb', 7, NULL, now()),
+  ('40000000-0000-0000-0000-000000000008', 'Paleo', 8, NULL, now()),
+  ('40000000-0000-0000-0000-000000000009', 'Keto', 9, NULL, now()),
+  ('40000000-0000-0000-0000-00000000000a', 'Contains Seafood', 10, NULL, now());
+
+-- ===============================
+-- TAGS
+-- ===============================
+INSERT INTO tags (uuid, display_name, updated_at, deleted_at, server_updated_at) VALUES
+  ('50000000-0000-0000-0000-000000000001', 'Spicy', 1, NULL, now()),
+  ('50000000-0000-0000-0000-000000000002', 'Sweet', 2, NULL, now()),
+  ('50000000-0000-0000-0000-000000000003', 'Savory', 3, NULL, now()),
+  ('50000000-0000-0000-0000-000000000004', 'Breakfast', 4, NULL, now()),
+  ('50000000-0000-0000-0000-000000000005', 'Lunch', 5, NULL, now()),
+  ('50000000-0000-0000-0000-000000000006', 'Dinner', 6, NULL, now()),
+  ('50000000-0000-0000-0000-000000000007', 'Snack', 7, NULL, now()),
+  ('50000000-0000-0000-0000-000000000008', 'Dessert', 8, NULL, now()),
+  ('50000000-0000-0000-0000-000000000009', 'Holiday', 9, NULL, now()),
+  ('50000000-0000-0000-0000-00000000000a', 'Quick', 10, NULL, now());
+
+-- ===============================
+-- INGREDIENTS
+-- ===============================
+INSERT INTO ingredients (uuid, display_name, allergen_id, source_primary_id, updated_at, deleted_at, server_updated_at) VALUES
+  ('60000000-0000-0000-0000-000000000001','Flour','20000000-0000-0000-0000-000000000004','30000000-0000-0000-0000-000000000004',1,NULL,now()),
+  ('60000000-0000-0000-0000-000000000002','Eggs','20000000-0000-0000-0000-000000000005','30000000-0000-0000-0000-000000000005',2,NULL,now()),
+  ('60000000-0000-0000-0000-000000000003','Milk','20000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000005',3,NULL,now()),
+  ('60000000-0000-0000-0000-000000000004','Chicken',NULL,'30000000-0000-0000-0000-000000000007',4,NULL,now()),
+  ('60000000-0000-0000-0000-000000000005','Tomato',NULL,'30000000-0000-0000-0000-000000000002',5,NULL,now()),
+  ('60000000-0000-0000-0000-000000000006','Spinach',NULL,'30000000-0000-0000-0000-000000000002',6,NULL,now()),
+  ('60000000-0000-0000-0000-000000000007','Cheese','20000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000005',7,NULL,now()),
+  ('60000000-0000-0000-0000-000000000008','Almond','20000000-0000-0000-0000-000000000008','30000000-0000-0000-0000-00000000000a',8,NULL,now()),
+  ('60000000-0000-0000-0000-000000000009','Salmon','20000000-0000-0000-0000-000000000006','30000000-0000-0000-0000-000000000008',9,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000a','Rice',NULL,'30000000-0000-0000-0000-000000000004',10,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000b','Garlic',NULL,'30000000-0000-0000-0000-000000000001',11,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000c','Onion',NULL,'30000000-0000-0000-0000-000000000001',12,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000d','Bell Pepper',NULL,'30000000-0000-0000-0000-000000000002',13,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000e','Broccoli',NULL,'30000000-0000-0000-0000-000000000002',14,NULL,now()),
+  ('60000000-0000-0000-0000-00000000000f','Beef',NULL,'30000000-0000-0000-0000-000000000006',15,NULL,now()),
+  ('60000000-0000-0000-0000-000000000010','Tofu','20000000-0000-0000-0000-000000000002','30000000-0000-0000-0000-00000000000a',16,NULL,now()),
+  ('60000000-0000-0000-0000-000000000011','Shrimp','20000000-0000-0000-0000-000000000007','30000000-0000-0000-0000-000000000009',17,NULL,now()),
+  ('60000000-0000-0000-0000-000000000012','Yogurt','20000000-0000-0000-0000-000000000003','30000000-0000-0000-0000-000000000005',18,NULL,now()),
+  ('60000000-0000-0000-0000-000000000013','Oats',NULL,'30000000-0000-0000-0000-000000000004',19,NULL,now()),
+  ('60000000-0000-0000-0000-000000000014','Lentils',NULL,'30000000-0000-0000-0000-00000000000a',20,NULL,now());
+
+-- ===============================
+-- RECIPES
+-- ===============================
+INSERT INTO recipes (uuid, title, description, image_url, image_url_thumbnail, prep_time_minutes, cook_time_minutes, servings, creator_id, recipe_external_url, privacy, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000001','Salmon Rice Bowl','Fresh salmon and rice.','https://images.unsplash.com/photo-1546069596-600bbf3dbd3a?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1546069596-600bbf3dbd3a?w=320&h=240&fit=crop&q=80',10,15,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',1,NULL,now()),
+  ('70000000-0000-0000-0000-000000000002','Chicken Salad','Healthy chicken salad.','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=320&h=240&fit=crop&q=80',10,20,1,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',2,NULL,now()),
+  ('70000000-0000-0000-0000-000000000003','Tomato Soup','Tomato-based soup.','https://images.unsplash.com/photo-1547592180-85f173990554?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1547592180-85f173990554?w=320&h=240&fit=crop&q=80',10,30,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',3,NULL,now()),
+  ('70000000-0000-0000-0000-000000000004','Vegan Stir Fry','Colorful veggie stir fry.','https://images.unsplash.com/photo-1512058564366-18510be2db19?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1512058564366-18510be2db19?w=320&h=240&fit=crop&q=80',15,10,3,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',4,NULL,now()),
+  ('70000000-0000-0000-0000-000000000005','Cheese Omelette','Classic cheese omelette.','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=320&h=240&fit=crop&q=80',5,5,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'private',5,NULL,now()),
+  ('70000000-0000-0000-0000-000000000006','Nutty Snack','Snack with nuts.','https://images.unsplash.com/photo-1536304993329-8bc7d7dbd42a?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1536304993329-8bc7d7dbd42a?w=320&h=240&fit=crop&q=80',3,0,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',6,NULL,now()),
+  ('70000000-0000-0000-0000-000000000007','Rice Pudding','Sweet rice pudding.','https://images.unsplash.com/photo-1484723091739-30e0791ef6ab?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1484723091739-30e0791ef6ab?w=320&h=240&fit=crop&q=80',10,25,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',7,NULL,now()),
+  ('70000000-0000-0000-0000-000000000008','Almond Cookie','Cookies with almond.','https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=320&h=240&fit=crop&q=80',20,30,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',8,NULL,now()),
+  ('70000000-0000-0000-0000-000000000009','Spinach Lasagna','Vegetarian lasagna.','https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=320&h=240&fit=crop&q=80',20,60,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'private',9,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000a','Egg Fried Rice','Classic egg and rice.','https://images.unsplash.com/photo-1603133872878-684f08a513a9?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1603133872878-684f08a513a9?w=320&h=240&fit=crop&q=80',10,15,2,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',10,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000b','Garlic Chicken Skillet','One-pan garlic chicken with peppers.','https://images.unsplash.com/photo-1598103442097-be0f2177b6a9?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1598103442097-be0f2177b6a9?w=320&h=240&fit=crop&q=80',12,18,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',11,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000c','Tofu Veggie Bowl','Tofu with broccoli and rice.','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=320&h=240&fit=crop&q=80',15,12,2,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',12,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000d','Beef Pepper Stir Fry','Beef strips with bell peppers and onion.','https://images.unsplash.com/photo-1555939594-f35ea0fb42af?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1555939594-f35ea0fb42af?w=320&h=240&fit=crop&q=80',10,14,3,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',13,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000e','Shrimp Tomato Pasta','Light shrimp and tomato pasta-style dish.','https://images.unsplash.com/photo-1563379926898-05f4575a45d4?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1563379926898-05f4575a45d4?w=320&h=240&fit=crop&q=80',10,16,2,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',14,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000f','Savory Oats','Creamy oats with spinach and cheese.','https://images.unsplash.com/photo-1517673408022-316f9dbd57be?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1517673408022-316f9dbd57be?w=320&h=240&fit=crop&q=80',5,8,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'private',15,NULL,now()),
+  ('70000000-0000-0000-0000-000000000010','Lentil Tomato Stew','Protein-rich lentil stew.','https://images.unsplash.com/photo-1547592180-85f173990554?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1547592180-85f173990554?w=320&h=240&fit=crop&q=80',12,30,4,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',16,NULL,now()),
+  ('70000000-0000-0000-0000-000000000011','Yogurt Fruit Bowl','Chilled yogurt bowl with toppings.','https://images.unsplash.com/photo-1488477181483-b5e8f8c28fb6?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1488477181483-b5e8f8c28fb6?w=320&h=240&fit=crop&q=80',5,0,1,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',17,NULL,now()),
+  ('70000000-0000-0000-0000-000000000012','Broccoli Rice Bake','Baked rice casserole with broccoli.','https://images.unsplash.com/photo-1559181567-c3190144347a?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1559181567-c3190144347a?w=320&h=240&fit=crop&q=80',15,25,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',18,NULL,now()),
+  ('70000000-0000-0000-0000-000000000013','Onion Omelette Wrap','Egg wrap with onion and tomato.','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=320&h=240&fit=crop&q=80',8,8,1,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'private',19,NULL,now()),
+  ('70000000-0000-0000-0000-000000000014','Salmon Lentil Salad','Warm salmon over lentil salad.','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=320&h=240&fit=crop&q=80',12,12,2,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',20,NULL,now()),
+  ('70000000-0000-0000-0000-000000000015','Test Recipe 21','Auto-generated test recipe 21.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',11,26,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',21,NULL,now()),
+  ('70000000-0000-0000-0000-000000000016','Test Recipe 22','Auto-generated test recipe 22.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',12,27,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',22,NULL,now()),
+  ('70000000-0000-0000-0000-000000000017','Test Recipe 23','Auto-generated test recipe 23.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',13,28,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',23,NULL,now()),
+  ('70000000-0000-0000-0000-000000000018','Test Recipe 24','Auto-generated test recipe 24.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',14,29,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'private',24,NULL,now()),
+  ('70000000-0000-0000-0000-000000000019','Test Recipe 25','Auto-generated test recipe 25.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',15,30,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',25,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001a','Test Recipe 26','Auto-generated test recipe 26.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',16,31,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',26,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001b','Test Recipe 27','Auto-generated test recipe 27.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',17,32,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',27,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001c','Test Recipe 28','Auto-generated test recipe 28.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',18,33,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'private',28,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001d','Test Recipe 29','Auto-generated test recipe 29.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',19,34,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',29,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001e','Test Recipe 30','Auto-generated test recipe 30.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',5,35,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',30,NULL,now()),
+  ('70000000-0000-0000-0000-00000000001f','Test Recipe 31','Auto-generated test recipe 31.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',6,36,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',31,NULL,now()),
+  ('70000000-0000-0000-0000-000000000020','Test Recipe 32','Auto-generated test recipe 32.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',7,37,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'private',32,NULL,now()),
+  ('70000000-0000-0000-0000-000000000021','Test Recipe 33','Auto-generated test recipe 33.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',8,38,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',33,NULL,now()),
+  ('70000000-0000-0000-0000-000000000022','Test Recipe 34','Auto-generated test recipe 34.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',9,39,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',34,NULL,now()),
+  ('70000000-0000-0000-0000-000000000023','Test Recipe 35','Auto-generated test recipe 35.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',10,40,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',35,NULL,now()),
+  ('70000000-0000-0000-0000-000000000024','Test Recipe 36','Auto-generated test recipe 36.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',11,41,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'private',36,NULL,now()),
+  ('70000000-0000-0000-0000-000000000025','Test Recipe 37','Auto-generated test recipe 37.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',12,42,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',37,NULL,now()),
+  ('70000000-0000-0000-0000-000000000026','Test Recipe 38','Auto-generated test recipe 38.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',13,43,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',38,NULL,now()),
+  ('70000000-0000-0000-0000-000000000027','Test Recipe 39','Auto-generated test recipe 39.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',14,44,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',39,NULL,now()),
+  ('70000000-0000-0000-0000-000000000028','Test Recipe 40','Auto-generated test recipe 40.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',15,5,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'private',40,NULL,now()),
+  ('70000000-0000-0000-0000-000000000029','Test Recipe 41','Auto-generated test recipe 41.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',16,6,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',41,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002a','Test Recipe 42','Auto-generated test recipe 42.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',17,7,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',42,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002b','Test Recipe 43','Auto-generated test recipe 43.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',18,8,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',43,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002c','Test Recipe 44','Auto-generated test recipe 44.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',19,9,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'private',44,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002d','Test Recipe 45','Auto-generated test recipe 45.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',5,10,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',45,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002e','Test Recipe 46','Auto-generated test recipe 46.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',6,11,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',46,NULL,now()),
+  ('70000000-0000-0000-0000-00000000002f','Test Recipe 47','Auto-generated test recipe 47.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',7,12,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',47,NULL,now()),
+  ('70000000-0000-0000-0000-000000000030','Test Recipe 48','Auto-generated test recipe 48.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',8,13,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'private',48,NULL,now()),
+  ('70000000-0000-0000-0000-000000000031','Test Recipe 49','Auto-generated test recipe 49.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',9,14,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',49,NULL,now()),
+  ('70000000-0000-0000-0000-000000000032','Test Recipe 50','Auto-generated test recipe 50.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',10,15,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',50,NULL,now()),
+  ('70000000-0000-0000-0000-000000000033','Test Recipe 51','Auto-generated test recipe 51.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',11,16,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',51,NULL,now()),
+  ('70000000-0000-0000-0000-000000000034','Test Recipe 52','Auto-generated test recipe 52.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',12,17,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'private',52,NULL,now()),
+  ('70000000-0000-0000-0000-000000000035','Test Recipe 53','Auto-generated test recipe 53.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',13,18,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',53,NULL,now()),
+  ('70000000-0000-0000-0000-000000000036','Test Recipe 54','Auto-generated test recipe 54.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',14,19,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',54,NULL,now()),
+  ('70000000-0000-0000-0000-000000000037','Test Recipe 55','Auto-generated test recipe 55.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',15,20,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',55,NULL,now()),
+  ('70000000-0000-0000-0000-000000000038','Test Recipe 56','Auto-generated test recipe 56.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',16,21,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'private',56,NULL,now()),
+  ('70000000-0000-0000-0000-000000000039','Test Recipe 57','Auto-generated test recipe 57.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',17,22,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',57,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003a','Test Recipe 58','Auto-generated test recipe 58.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',18,23,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',58,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003b','Test Recipe 59','Auto-generated test recipe 59.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',19,24,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',59,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003c','Test Recipe 60','Auto-generated test recipe 60.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',5,25,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'private',60,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003d','Test Recipe 61','Auto-generated test recipe 61.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',6,26,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',61,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003e','Test Recipe 62','Auto-generated test recipe 62.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',7,27,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',62,NULL,now()),
+  ('70000000-0000-0000-0000-00000000003f','Test Recipe 63','Auto-generated test recipe 63.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',8,28,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'public',63,NULL,now()),
+  ('70000000-0000-0000-0000-000000000040','Test Recipe 64','Auto-generated test recipe 64.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',9,29,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'private',64,NULL,now()),
+  ('70000000-0000-0000-0000-000000000041','Test Recipe 65','Auto-generated test recipe 65.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',10,30,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',65,NULL,now()),
+  ('70000000-0000-0000-0000-000000000042','Test Recipe 66','Auto-generated test recipe 66.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',11,31,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'public',66,NULL,now()),
+  ('70000000-0000-0000-0000-000000000043','Test Recipe 67','Auto-generated test recipe 67.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',12,32,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'public',67,NULL,now()),
+  ('70000000-0000-0000-0000-000000000044','Test Recipe 68','Auto-generated test recipe 68.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',13,33,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'private',68,NULL,now()),
+  ('70000000-0000-0000-0000-000000000045','Test Recipe 69','Auto-generated test recipe 69.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',14,34,5,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'public',69,NULL,now()),
+  ('70000000-0000-0000-0000-000000000046','Test Recipe 70','Auto-generated test recipe 70.','https://picsum.photos/seed/chefai-rec-/1024/768','https://picsum.photos/seed/chefai-rec-/320/240',15,35,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'public',70,NULL,now());
+
+-- ===============================
+-- RECIPE_INGREDIENTS
+-- ===============================
+INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-000000000009',200,'g',1,NULL,now()),
+  ('70000000-0000-0000-0000-000000000001','60000000-0000-0000-0000-00000000000a',150,'g',1,NULL,now()),
+  ('70000000-0000-0000-0000-000000000002','60000000-0000-0000-0000-000000000004',100,'g',2,NULL,now()),
+  ('70000000-0000-0000-0000-000000000002','60000000-0000-0000-0000-000000000005',50,'g',2,NULL,now()),
+  ('70000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000005',100,'g',3,NULL,now()),
+  ('70000000-0000-0000-0000-000000000003','60000000-0000-0000-0000-000000000006',50,'g',3,NULL,now()),
+  ('70000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000005',60,'g',4,NULL,now()),
+  ('70000000-0000-0000-0000-000000000004','60000000-0000-0000-0000-000000000006',80,'g',4,NULL,now()),
+  ('70000000-0000-0000-0000-000000000005','60000000-0000-0000-0000-000000000002',2,'pcs',5,NULL,now()),
+  ('70000000-0000-0000-0000-000000000005','60000000-0000-0000-0000-000000000007',20,'g',5,NULL,now()),
+  ('70000000-0000-0000-0000-000000000006','60000000-0000-0000-0000-000000000008',40,'g',6,NULL,now()),
+  ('70000000-0000-0000-0000-000000000006','60000000-0000-0000-0000-00000000000b',5,'g',6,NULL,now()),
+  ('70000000-0000-0000-0000-000000000007','60000000-0000-0000-0000-00000000000a',120,'g',7,NULL,now()),
+  ('70000000-0000-0000-0000-000000000007','60000000-0000-0000-0000-000000000003',80,'ml',7,NULL,now()),
+  ('70000000-0000-0000-0000-000000000008','60000000-0000-0000-0000-000000000008',50,'g',8,NULL,now()),
+  ('70000000-0000-0000-0000-000000000008','60000000-0000-0000-0000-000000000001',70,'g',8,NULL,now()),
+  ('70000000-0000-0000-0000-000000000009','60000000-0000-0000-0000-000000000006',90,'g',9,NULL,now()),
+  ('70000000-0000-0000-0000-000000000009','60000000-0000-0000-0000-000000000007',60,'g',9,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000a','60000000-0000-0000-0000-000000000002',2,'pcs',10,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000a','60000000-0000-0000-0000-00000000000a',150,'g',10,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000b','60000000-0000-0000-0000-000000000004',180,'g',11,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000b','60000000-0000-0000-0000-00000000000b',8,'g',11,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000c','60000000-0000-0000-0000-000000000010',160,'g',12,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000c','60000000-0000-0000-0000-00000000000e',90,'g',12,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000d','60000000-0000-0000-0000-00000000000f',170,'g',13,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000d','60000000-0000-0000-0000-00000000000d',70,'g',13,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000e','60000000-0000-0000-0000-000000000011',140,'g',14,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000e','60000000-0000-0000-0000-000000000005',90,'g',14,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000f','60000000-0000-0000-0000-000000000013',70,'g',15,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000f','60000000-0000-0000-0000-000000000006',40,'g',15,NULL,now()),
+  ('70000000-0000-0000-0000-000000000010','60000000-0000-0000-0000-000000000014',180,'g',16,NULL,now()),
+  ('70000000-0000-0000-0000-000000000010','60000000-0000-0000-0000-000000000005',100,'g',16,NULL,now()),
+  ('70000000-0000-0000-0000-000000000011','60000000-0000-0000-0000-000000000012',180,'g',17,NULL,now()),
+  ('70000000-0000-0000-0000-000000000011','60000000-0000-0000-0000-000000000008',20,'g',17,NULL,now()),
+  ('70000000-0000-0000-0000-000000000012','60000000-0000-0000-0000-00000000000a',180,'g',18,NULL,now()),
+  ('70000000-0000-0000-0000-000000000012','60000000-0000-0000-0000-00000000000e',110,'g',18,NULL,now()),
+  ('70000000-0000-0000-0000-000000000013','60000000-0000-0000-0000-000000000002',3,'pcs',19,NULL,now()),
+  ('70000000-0000-0000-0000-000000000013','60000000-0000-0000-0000-00000000000c',45,'g',19,NULL,now()),
+  ('70000000-0000-0000-0000-000000000014','60000000-0000-0000-0000-000000000009',160,'g',20,NULL,now()),
+  ('70000000-0000-0000-0000-000000000014','60000000-0000-0000-0000-000000000014',120,'g',20,NULL,now());
+
+-- ===============================
+-- RECIPE_LABELS
+-- ===============================
+INSERT INTO recipe_labels (recipe_id, label_id, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000001','40000000-0000-0000-0000-000000000009',1,NULL,now()),
+  ('70000000-0000-0000-0000-000000000002','40000000-0000-0000-0000-000000000006',2,NULL,now()),
+  ('70000000-0000-0000-0000-000000000003','40000000-0000-0000-0000-000000000002',3,NULL,now()),
+  ('70000000-0000-0000-0000-000000000004','40000000-0000-0000-0000-000000000001',4,NULL,now()),
+  ('70000000-0000-0000-0000-000000000005','40000000-0000-0000-0000-000000000004',5,NULL,now()),
+  ('70000000-0000-0000-0000-000000000006','40000000-0000-0000-0000-000000000005',6,NULL,now()),
+  ('70000000-0000-0000-0000-000000000007','40000000-0000-0000-0000-000000000003',7,NULL,now()),
+  ('70000000-0000-0000-0000-000000000008','40000000-0000-0000-0000-000000000005',8,NULL,now()),
+  ('70000000-0000-0000-0000-000000000009','40000000-0000-0000-0000-000000000002',9,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000a','40000000-0000-0000-0000-000000000007',10,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000b','40000000-0000-0000-0000-000000000006',11,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000c','40000000-0000-0000-0000-000000000001',12,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000d','40000000-0000-0000-0000-000000000006',13,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000e','40000000-0000-0000-0000-00000000000a',14,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000f','40000000-0000-0000-0000-000000000002',15,NULL,now()),
+  ('70000000-0000-0000-0000-000000000010','40000000-0000-0000-0000-000000000001',16,NULL,now()),
+  ('70000000-0000-0000-0000-000000000011','40000000-0000-0000-0000-000000000002',17,NULL,now()),
+  ('70000000-0000-0000-0000-000000000012','40000000-0000-0000-0000-000000000004',18,NULL,now()),
+  ('70000000-0000-0000-0000-000000000013','40000000-0000-0000-0000-000000000007',19,NULL,now()),
+  ('70000000-0000-0000-0000-000000000014','40000000-0000-0000-0000-000000000006',20,NULL,now());
+
+-- ===============================
+-- RECIPE_TAGS
+-- ===============================
+INSERT INTO recipe_tags (recipe_id, tag_id, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000005',1,NULL,now()),
+  ('70000000-0000-0000-0000-000000000002','50000000-0000-0000-0000-000000000004',2,NULL,now()),
+  ('70000000-0000-0000-0000-000000000003','50000000-0000-0000-0000-000000000001',3,NULL,now()),
+  ('70000000-0000-0000-0000-000000000004','50000000-0000-0000-0000-000000000003',4,NULL,now()),
+  ('70000000-0000-0000-0000-000000000005','50000000-0000-0000-0000-000000000006',5,NULL,now()),
+  ('70000000-0000-0000-0000-000000000006','50000000-0000-0000-0000-000000000007',6,NULL,now()),
+  ('70000000-0000-0000-0000-000000000007','50000000-0000-0000-0000-000000000008',7,NULL,now()),
+  ('70000000-0000-0000-0000-000000000008','50000000-0000-0000-0000-000000000002',8,NULL,now()),
+  ('70000000-0000-0000-0000-000000000009','50000000-0000-0000-0000-000000000009',9,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000a','50000000-0000-0000-0000-00000000000a',10,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000b','50000000-0000-0000-0000-000000000006',11,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000c','50000000-0000-0000-0000-000000000005',12,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000d','50000000-0000-0000-0000-000000000003',13,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000e','50000000-0000-0000-0000-000000000001',14,NULL,now()),
+  ('70000000-0000-0000-0000-00000000000f','50000000-0000-0000-0000-000000000004',15,NULL,now()),
+  ('70000000-0000-0000-0000-000000000010','50000000-0000-0000-0000-000000000006',16,NULL,now()),
+  ('70000000-0000-0000-0000-000000000011','50000000-0000-0000-0000-000000000007',17,NULL,now()),
+  ('70000000-0000-0000-0000-000000000012','50000000-0000-0000-0000-000000000005',18,NULL,now()),
+  ('70000000-0000-0000-0000-000000000013','50000000-0000-0000-0000-000000000004',19,NULL,now()),
+  ('70000000-0000-0000-0000-000000000014','50000000-0000-0000-0000-000000000005',20,NULL,now());
+
+-- ===============================
+-- RECIPE_STEPS
+-- ===============================
+INSERT INTO recipe_steps (uuid, recipe_id, order_index, instruction, updated_at, deleted_at, server_updated_at) VALUES
+  ('80000000-0000-0000-0000-000000000001','70000000-0000-0000-0000-000000000001',1,'Prepare salmon',1,NULL,now()),
+  ('80000000-0000-0000-0000-000000000002','70000000-0000-0000-0000-000000000001',2,'Cook rice',1,NULL,now()),
+  ('80000000-0000-0000-0000-000000000003','70000000-0000-0000-0000-000000000002',1,'Chop chicken',2,NULL,now()),
+  ('80000000-0000-0000-0000-000000000004','70000000-0000-0000-0000-000000000003',1,'Boil tomatoes',3,NULL,now()),
+  ('80000000-0000-0000-0000-000000000005','70000000-0000-0000-0000-000000000004',1,'Stir fry all veggies',4,NULL,now()),
+  ('80000000-0000-0000-0000-000000000006','70000000-0000-0000-0000-000000000005',1,'Whisk eggs and cheese',5,NULL,now()),
+  ('80000000-0000-0000-0000-000000000007','70000000-0000-0000-0000-000000000006',1,'Mix nuts with spices',6,NULL,now()),
+  ('80000000-0000-0000-0000-000000000008','70000000-0000-0000-0000-000000000007',1,'Cook rice with milk',7,NULL,now()),
+  ('80000000-0000-0000-0000-000000000009','70000000-0000-0000-0000-000000000008',1,'Prepare almond dough',8,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000a','70000000-0000-0000-0000-000000000009',1,'Layer spinach and cheese',9,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000b','70000000-0000-0000-0000-00000000000a',1,'Stir-fry eggs with rice',10,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000c','70000000-0000-0000-0000-00000000000b',1,'Sear chicken with garlic',11,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000d','70000000-0000-0000-0000-00000000000c',1,'Pan-fry tofu and broccoli',12,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000e','70000000-0000-0000-0000-00000000000d',1,'Stir-fry beef with peppers',13,NULL,now()),
+  ('80000000-0000-0000-0000-00000000000f','70000000-0000-0000-0000-00000000000e',1,'Cook shrimp with tomato sauce',14,NULL,now()),
+  ('80000000-0000-0000-0000-000000000010','70000000-0000-0000-0000-00000000000f',1,'Cook oats and fold in spinach',15,NULL,now()),
+  ('80000000-0000-0000-0000-000000000011','70000000-0000-0000-0000-000000000010',1,'Simmer lentils with tomato',16,NULL,now()),
+  ('80000000-0000-0000-0000-000000000012','70000000-0000-0000-0000-000000000011',1,'Assemble chilled yogurt bowl',17,NULL,now()),
+  ('80000000-0000-0000-0000-000000000013','70000000-0000-0000-0000-000000000012',1,'Bake rice and broccoli together',18,NULL,now()),
+  ('80000000-0000-0000-0000-000000000014','70000000-0000-0000-0000-000000000013',1,'Cook omelette and wrap filling',19,NULL,now()),
+  ('80000000-0000-0000-0000-000000000015','70000000-0000-0000-0000-000000000014',1,'Top lentils with pan-seared salmon',20,NULL,now());
+
+-- ===============================
+-- REFRESH TOKENS
+-- ===============================
+INSERT INTO refresh_tokens (uuid, user_id, token_hash, is_revoked, revoked_at, expires_at, created_at) VALUES
+  ('90000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'tokhash1', FALSE, NULL, NOW() + INTERVAL '30 days', now()),
+  ('90000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'tokhash2', FALSE, NULL, NOW() + INTERVAL '30 days', now()),
+  ('90000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000003', 'tokhash3', FALSE, NULL, NOW() + INTERVAL '30 days', now());
+
+-- ===============================
+-- HOME LAYOUT FEATURED RECIPES
+-- These UUIDs are hardcoded in home_layout.json (SDUI). They must be PUBLIC
+-- so any authenticated user can bookmark them.
+-- ===============================
+INSERT INTO recipes (uuid, title, description, image_url, image_url_thumbnail, prep_time_minutes, cook_time_minutes, servings, creator_id, recipe_external_url, privacy, updated_at, deleted_at, server_updated_at) VALUES
+  ('a1b2c3d4-0000-0000-0000-000000000001','Paella','Classic Spanish seafood and rice dish.','https://images.unsplash.com/photo-1534080564393-ab89be02d8d4?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1534080564393-ab89be02d8d4?w=320&h=240&fit=crop&q=80',20,40,4,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',1,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000002','Grilled Chicken','Juicy grilled chicken breast with herbs.','https://images.unsplash.com/photo-1598103442097-be0f2177b6a9?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1598103442097-be0f2177b6a9?w=320&h=240&fit=crop&q=80',10,20,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',2,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000003','Thai Green Curry','Aromatic Thai curry with coconut milk.','https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=320&h=240&fit=crop&q=80',15,25,3,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',3,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000004','Margherita Pizza','Traditional Neapolitan pizza.','https://images.unsplash.com/photo-1513104890138-7c749659a591?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1513104890138-7c749659a591?w=320&h=240&fit=crop&q=80',20,15,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',4,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000005','Beef Stew','Hearty slow-cooked beef and vegetable stew.','https://images.unsplash.com/photo-1504544750208-cee807db49fc?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1504544750208-cee807db49fc?w=320&h=240&fit=crop&q=80',20,90,6,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',5,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000006','Carbonara','Creamy Italian pasta with egg and guanciale.','https://images.unsplash.com/photo-1612929633738-8fe44f7ef9e2?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1612929633738-8fe44f7ef9e2?w=320&h=240&fit=crop&q=80',10,15,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',6,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000007','Lasagna','Layered pasta with meat sauce and béchamel.','https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1574894709920-11b28e7367e3?w=320&h=240&fit=crop&q=80',30,60,6,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',7,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000008','Tuscan Sausage Pasta','Rich pasta with sausage and sun-dried tomato.','https://images.unsplash.com/photo-1563379926898-05f4575a45d4?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1563379926898-05f4575a45d4?w=320&h=240&fit=crop&q=80',10,20,3,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',8,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000009','Salmon Teriyaki','Glazed salmon with teriyaki sauce.','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=320&h=240&fit=crop&q=80',10,15,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',9,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000010','Sushi Nigiris','Hand-pressed sushi with fresh fish.','https://images.unsplash.com/photo-1553621042-f6e147245754?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1553621042-f6e147245754?w=320&h=240&fit=crop&q=80',30,0,4,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',10,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000011','Shrimp Ceviche','Fresh shrimp cured in citrus juice.','https://images.unsplash.com/photo-1567188040759-fb8a883dc6d6?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1567188040759-fb8a883dc6d6?w=320&h=240&fit=crop&q=80',20,0,3,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',11,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000012','Mediterranean Chicken','Grilled chicken with olives and feta.','https://images.unsplash.com/photo-1598511726975-53527e41c1b2?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1598511726975-53527e41c1b2?w=320&h=240&fit=crop&q=80',15,25,3,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',12,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000013','Battered Cod','Crispy beer-battered cod fillets.','https://images.unsplash.com/photo-1580822184713-fc5400e7fe10?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1580822184713-fc5400e7fe10?w=320&h=240&fit=crop&q=80',15,10,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',13,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000014','Chocolate Chip Cookies','Classic soft-baked cookies.','https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1499636136210-6f4ee915583e?w=320&h=240&fit=crop&q=80',15,12,24,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',14,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000015','Blueberry Cheesecake','Creamy cheesecake with blueberry topping.','https://images.unsplash.com/photo-1533134242443-d4fd215305ad?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1533134242443-d4fd215305ad?w=320&h=240&fit=crop&q=80',30,60,8,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',15,NULL,now()),
+  ('a1b2c3d4-0000-0000-0000-000000000016','Ghirardelli Cookies','Rich double-chocolate cookies.','https://images.unsplash.com/photo-1548365328-8c6db3220f4b?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1548365328-8c6db3220f4b?w=320&h=240&fit=crop&q=80',20,11,18,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',16,NULL,now());
+
+-- ===============================
+-- 20 COMPLETE PUBLIC RECIPES (71-90)
+-- Each recipe has ingredients, steps, tags and labels.
+-- Creators rotate across the 5 seed users.
+-- ===============================
+INSERT INTO recipes (uuid, title, description, image_url, image_url_thumbnail, prep_time_minutes, cook_time_minutes, servings, creator_id, recipe_external_url, privacy, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000047','Chicken Tikka Masala','Tender chicken in a rich spiced tomato cream sauce.','https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=320&h=240&fit=crop&q=80',20,30,4,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',71,NULL,now()),
+  ('70000000-0000-0000-0000-000000000048','Beef Tacos','Seasoned ground beef in crispy taco shells with fresh toppings.','https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=320&h=240&fit=crop&q=80',15,15,4,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'PUBLIC',72,NULL,now()),
+  ('70000000-0000-0000-0000-000000000049','Greek Salad','Classic salad with tomato, feta and leafy greens.','https://images.unsplash.com/photo-1515543779278-4087383bb54f?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1515543779278-4087383bb54f?w=320&h=240&fit=crop&q=80',10,0,2,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'PUBLIC',73,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004a','Tomato Cheese Risotto','Creamy Arborio-style risotto with fresh tomato and Parmesan.','https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1476124369491-e7addf5db371?w=320&h=240&fit=crop&q=80',10,30,3,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'PUBLIC',74,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004b','French Onion Soup','Deeply caramelised onion soup topped with melted cheese.','https://images.unsplash.com/photo-1547592180-85f173990554?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1547592180-85f173990554?w=320&h=240&fit=crop&q=80',15,45,4,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'PUBLIC',75,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004c','Chicken Caesar Salad','Grilled chicken over crisp greens with Caesar dressing.','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=320&h=240&fit=crop&q=80',10,15,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',76,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004d','Spicy Vegetable Curry','Aromatic vegan curry with broccoli, spinach and tomato.','https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?w=320&h=240&fit=crop&q=80',10,25,3,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'PUBLIC',77,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004e','Salmon with Broccoli','Oven-baked salmon fillet with garlic-butter broccoli.','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=320&h=240&fit=crop&q=80',10,15,2,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'PUBLIC',78,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004f','Beef Burger Bowl','Juicy beef burger served bowl-style over rice with toppings.','https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=320&h=240&fit=crop&q=80',10,20,2,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'PUBLIC',79,NULL,now()),
+  ('70000000-0000-0000-0000-000000000050','Egg & Spinach Toast','Scrambled eggs with wilted spinach on toasted bread.','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1525351484163-7529414344d8?w=320&h=240&fit=crop&q=80',5,10,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'PUBLIC',80,NULL,now()),
+  ('70000000-0000-0000-0000-000000000051','Chocolate Mousse','Light and airy chocolate mousse with almond shavings.','https://images.unsplash.com/photo-1511381538957-6b2e0e56abfb?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1511381538957-6b2e0e56abfb?w=320&h=240&fit=crop&q=80',20,0,4,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',81,NULL,now()),
+  ('70000000-0000-0000-0000-000000000052','Fluffy Pancakes','Classic stack of golden buttermilk-style pancakes.','https://images.unsplash.com/photo-1528207776546-365bb710ee93?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1528207776546-365bb710ee93?w=320&h=240&fit=crop&q=80',10,15,2,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'PUBLIC',82,NULL,now()),
+  ('70000000-0000-0000-0000-000000000053','Lentil Soup','Hearty vegan lentil soup with tomato and onion.','https://images.unsplash.com/photo-1547592180-85f173990554?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1547592180-85f173990554?w=320&h=240&fit=crop&q=80',10,30,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'PUBLIC',83,NULL,now()),
+  ('70000000-0000-0000-0000-000000000054','Rice & Veggie Bowl','Fluffy rice topped with steamed broccoli and bell pepper.','https://images.unsplash.com/photo-1546069596-600bbf3dbd3a?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1546069596-600bbf3dbd3a?w=320&h=240&fit=crop&q=80',5,15,2,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'PUBLIC',84,NULL,now()),
+  ('70000000-0000-0000-0000-000000000055','Chicken Wrap','Quick chicken, spinach and tomato wrap.','https://images.unsplash.com/photo-1553979459-d1029eb29987?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1553979459-d1029eb29987?w=320&h=240&fit=crop&q=80',5,10,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'PUBLIC',85,NULL,now()),
+  ('70000000-0000-0000-0000-000000000056','Shakshuka','Eggs poached in a spiced tomato and pepper sauce.','https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=320&h=240&fit=crop&q=80',10,20,2,'1ff5c5d2-dda5-4a7d-9df2-0b1d79878fd7',NULL,'PUBLIC',86,NULL,now()),
+  ('70000000-0000-0000-0000-000000000057','Yogurt Almond Bowl','Creamy yogurt with toasted oats and almonds.','https://images.unsplash.com/photo-1488477181483-b5e8f8c28fb6?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1488477181483-b5e8f8c28fb6?w=320&h=240&fit=crop&q=80',5,0,1,'29002be5-01a8-49d8-b2bd-25ad73745d13',NULL,'PUBLIC',87,NULL,now()),
+  ('70000000-0000-0000-0000-000000000058','Stuffed Bell Peppers','Bell peppers filled with seasoned beef and rice, oven-baked.','https://images.unsplash.com/photo-1563834644673-1c1a8d8cf33e?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1563834644673-1c1a8d8cf33e?w=320&h=240&fit=crop&q=80',15,30,4,'d3c3a63a-0705-472a-a97f-d5edfde8aaa1',NULL,'PUBLIC',88,NULL,now()),
+  ('70000000-0000-0000-0000-000000000059','Garlic Shrimp Stir-Fry','Quick shrimp and broccoli stir-fry with garlic soy glaze.','https://images.unsplash.com/photo-1512058564366-18510be2db19?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1512058564366-18510be2db19?w=320&h=240&fit=crop&q=80',5,10,2,'d7773142-d89f-495a-9dda-aa4cd0a2ea84',NULL,'PUBLIC',89,NULL,now()),
+  ('70000000-0000-0000-0000-00000000005a','Overnight Oats','No-cook oats soaked overnight in milk with yogurt.','https://images.unsplash.com/photo-1517673408022-316f9dbd57be?w=1024&h=768&fit=crop&q=80','https://images.unsplash.com/photo-1517673408022-316f9dbd57be?w=320&h=240&fit=crop&q=80',5,0,1,'e69845ff-5a3d-49f8-9ed4-f0f956ec8779',NULL,'PUBLIC',90,NULL,now());
+
+INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit, updated_at, deleted_at, server_updated_at) VALUES
+  -- 47 Chicken Tikka Masala
+  ('70000000-0000-0000-0000-000000000047','60000000-0000-0000-0000-000000000004',300,'g',71,NULL,now()),
+  ('70000000-0000-0000-0000-000000000047','60000000-0000-0000-0000-000000000005',200,'g',71,NULL,now()),
+  ('70000000-0000-0000-0000-000000000047','60000000-0000-0000-0000-00000000000b',15,'g',71,NULL,now()),
+  -- 48 Beef Tacos
+  ('70000000-0000-0000-0000-000000000048','60000000-0000-0000-0000-00000000000f',250,'g',72,NULL,now()),
+  ('70000000-0000-0000-0000-000000000048','60000000-0000-0000-0000-00000000000c',100,'g',72,NULL,now()),
+  ('70000000-0000-0000-0000-000000000048','60000000-0000-0000-0000-00000000000d',80,'g',72,NULL,now()),
+  -- 49 Greek Salad
+  ('70000000-0000-0000-0000-000000000049','60000000-0000-0000-0000-000000000005',200,'g',73,NULL,now()),
+  ('70000000-0000-0000-0000-000000000049','60000000-0000-0000-0000-000000000007',80,'g',73,NULL,now()),
+  ('70000000-0000-0000-0000-000000000049','60000000-0000-0000-0000-000000000006',100,'g',73,NULL,now()),
+  -- 4a Tomato Cheese Risotto
+  ('70000000-0000-0000-0000-00000000004a','60000000-0000-0000-0000-00000000000a',200,'g',74,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004a','60000000-0000-0000-0000-000000000005',150,'g',74,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004a','60000000-0000-0000-0000-000000000007',60,'g',74,NULL,now()),
+  -- 4b French Onion Soup
+  ('70000000-0000-0000-0000-00000000004b','60000000-0000-0000-0000-00000000000c',400,'g',75,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004b','60000000-0000-0000-0000-000000000007',100,'g',75,NULL,now()),
+  -- 4c Chicken Caesar Salad
+  ('70000000-0000-0000-0000-00000000004c','60000000-0000-0000-0000-000000000004',200,'g',76,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004c','60000000-0000-0000-0000-000000000006',150,'g',76,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004c','60000000-0000-0000-0000-000000000007',40,'g',76,NULL,now()),
+  -- 4d Spicy Vegetable Curry
+  ('70000000-0000-0000-0000-00000000004d','60000000-0000-0000-0000-000000000006',100,'g',77,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004d','60000000-0000-0000-0000-000000000005',200,'g',77,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004d','60000000-0000-0000-0000-00000000000e',150,'g',77,NULL,now()),
+  -- 4e Salmon with Broccoli
+  ('70000000-0000-0000-0000-00000000004e','60000000-0000-0000-0000-000000000009',200,'g',78,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004e','60000000-0000-0000-0000-00000000000e',200,'g',78,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004e','60000000-0000-0000-0000-00000000000b',10,'g',78,NULL,now()),
+  -- 4f Beef Burger Bowl
+  ('70000000-0000-0000-0000-00000000004f','60000000-0000-0000-0000-00000000000f',250,'g',79,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004f','60000000-0000-0000-0000-00000000000c',80,'g',79,NULL,now()),
+  ('70000000-0000-0000-0000-00000000004f','60000000-0000-0000-0000-000000000005',120,'g',79,NULL,now()),
+  -- 50 Egg & Spinach Toast
+  ('70000000-0000-0000-0000-000000000050','60000000-0000-0000-0000-000000000002',3,'pcs',80,NULL,now()),
+  ('70000000-0000-0000-0000-000000000050','60000000-0000-0000-0000-000000000006',80,'g',80,NULL,now()),
+  ('70000000-0000-0000-0000-000000000050','60000000-0000-0000-0000-000000000007',30,'g',80,NULL,now()),
+  -- 51 Chocolate Mousse
+  ('70000000-0000-0000-0000-000000000051','60000000-0000-0000-0000-000000000002',4,'pcs',81,NULL,now()),
+  ('70000000-0000-0000-0000-000000000051','60000000-0000-0000-0000-000000000003',100,'ml',81,NULL,now()),
+  ('70000000-0000-0000-0000-000000000051','60000000-0000-0000-0000-000000000008',20,'g',81,NULL,now()),
+  -- 52 Fluffy Pancakes
+  ('70000000-0000-0000-0000-000000000052','60000000-0000-0000-0000-000000000001',150,'g',82,NULL,now()),
+  ('70000000-0000-0000-0000-000000000052','60000000-0000-0000-0000-000000000002',2,'pcs',82,NULL,now()),
+  ('70000000-0000-0000-0000-000000000052','60000000-0000-0000-0000-000000000003',200,'ml',82,NULL,now()),
+  -- 53 Lentil Soup
+  ('70000000-0000-0000-0000-000000000053','60000000-0000-0000-0000-000000000014',200,'g',83,NULL,now()),
+  ('70000000-0000-0000-0000-000000000053','60000000-0000-0000-0000-000000000005',150,'g',83,NULL,now()),
+  ('70000000-0000-0000-0000-000000000053','60000000-0000-0000-0000-00000000000c',100,'g',83,NULL,now()),
+  -- 54 Rice & Veggie Bowl
+  ('70000000-0000-0000-0000-000000000054','60000000-0000-0000-0000-00000000000a',200,'g',84,NULL,now()),
+  ('70000000-0000-0000-0000-000000000054','60000000-0000-0000-0000-00000000000e',150,'g',84,NULL,now()),
+  ('70000000-0000-0000-0000-000000000054','60000000-0000-0000-0000-00000000000d',100,'g',84,NULL,now()),
+  -- 55 Chicken Wrap
+  ('70000000-0000-0000-0000-000000000055','60000000-0000-0000-0000-000000000004',150,'g',85,NULL,now()),
+  ('70000000-0000-0000-0000-000000000055','60000000-0000-0000-0000-000000000006',80,'g',85,NULL,now()),
+  ('70000000-0000-0000-0000-000000000055','60000000-0000-0000-0000-000000000005',100,'g',85,NULL,now()),
+  -- 56 Shakshuka
+  ('70000000-0000-0000-0000-000000000056','60000000-0000-0000-0000-000000000002',4,'pcs',86,NULL,now()),
+  ('70000000-0000-0000-0000-000000000056','60000000-0000-0000-0000-000000000005',300,'g',86,NULL,now()),
+  ('70000000-0000-0000-0000-000000000056','60000000-0000-0000-0000-00000000000d',150,'g',86,NULL,now()),
+  -- 57 Yogurt Almond Bowl
+  ('70000000-0000-0000-0000-000000000057','60000000-0000-0000-0000-000000000012',200,'g',87,NULL,now()),
+  ('70000000-0000-0000-0000-000000000057','60000000-0000-0000-0000-000000000008',30,'g',87,NULL,now()),
+  ('70000000-0000-0000-0000-000000000057','60000000-0000-0000-0000-000000000013',50,'g',87,NULL,now()),
+  -- 58 Stuffed Bell Peppers
+  ('70000000-0000-0000-0000-000000000058','60000000-0000-0000-0000-00000000000d',400,'g',88,NULL,now()),
+  ('70000000-0000-0000-0000-000000000058','60000000-0000-0000-0000-00000000000f',200,'g',88,NULL,now()),
+  ('70000000-0000-0000-0000-000000000058','60000000-0000-0000-0000-00000000000a',100,'g',88,NULL,now()),
+  -- 59 Garlic Shrimp Stir-Fry
+  ('70000000-0000-0000-0000-000000000059','60000000-0000-0000-0000-000000000011',200,'g',89,NULL,now()),
+  ('70000000-0000-0000-0000-000000000059','60000000-0000-0000-0000-00000000000b',15,'g',89,NULL,now()),
+  ('70000000-0000-0000-0000-000000000059','60000000-0000-0000-0000-00000000000e',150,'g',89,NULL,now()),
+  -- 5a Overnight Oats
+  ('70000000-0000-0000-0000-00000000005a','60000000-0000-0000-0000-000000000013',80,'g',90,NULL,now()),
+  ('70000000-0000-0000-0000-00000000005a','60000000-0000-0000-0000-000000000003',200,'ml',90,NULL,now()),
+  ('70000000-0000-0000-0000-00000000005a','60000000-0000-0000-0000-000000000012',100,'g',90,NULL,now());
+
+INSERT INTO recipe_labels (recipe_id, label_id, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000047','40000000-0000-0000-0000-000000000006',71,NULL,now()), -- High Protein
+  ('70000000-0000-0000-0000-000000000048','40000000-0000-0000-0000-000000000006',72,NULL,now()), -- High Protein
+  ('70000000-0000-0000-0000-000000000049','40000000-0000-0000-0000-000000000002',73,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-00000000004a','40000000-0000-0000-0000-000000000002',74,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-00000000004b','40000000-0000-0000-0000-000000000005',75,NULL,now()), -- Nut-Free
+  ('70000000-0000-0000-0000-00000000004c','40000000-0000-0000-0000-000000000006',76,NULL,now()), -- High Protein
+  ('70000000-0000-0000-0000-00000000004d','40000000-0000-0000-0000-000000000001',77,NULL,now()), -- Vegan
+  ('70000000-0000-0000-0000-00000000004e','40000000-0000-0000-0000-000000000009',78,NULL,now()), -- Keto
+  ('70000000-0000-0000-0000-00000000004f','40000000-0000-0000-0000-000000000006',79,NULL,now()), -- High Protein
+  ('70000000-0000-0000-0000-000000000050','40000000-0000-0000-0000-000000000002',80,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-000000000051','40000000-0000-0000-0000-000000000003',81,NULL,now()), -- Gluten-Free
+  ('70000000-0000-0000-0000-000000000052','40000000-0000-0000-0000-000000000002',82,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-000000000053','40000000-0000-0000-0000-000000000001',83,NULL,now()), -- Vegan
+  ('70000000-0000-0000-0000-000000000054','40000000-0000-0000-0000-000000000001',84,NULL,now()), -- Vegan
+  ('70000000-0000-0000-0000-000000000055','40000000-0000-0000-0000-000000000006',85,NULL,now()), -- High Protein
+  ('70000000-0000-0000-0000-000000000056','40000000-0000-0000-0000-000000000002',86,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-000000000057','40000000-0000-0000-0000-000000000002',87,NULL,now()), -- Vegetarian
+  ('70000000-0000-0000-0000-000000000058','40000000-0000-0000-0000-000000000007',88,NULL,now()), -- Low Carb
+  ('70000000-0000-0000-0000-000000000059','40000000-0000-0000-0000-00000000000a',89,NULL,now()), -- Contains Seafood
+  ('70000000-0000-0000-0000-00000000005a','40000000-0000-0000-0000-000000000002',90,NULL,now()); -- Vegetarian
+
+INSERT INTO recipe_tags (recipe_id, tag_id, updated_at, deleted_at, server_updated_at) VALUES
+  ('70000000-0000-0000-0000-000000000047','50000000-0000-0000-0000-000000000006',71,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-000000000048','50000000-0000-0000-0000-000000000006',72,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-000000000049','50000000-0000-0000-0000-000000000005',73,NULL,now()), -- Lunch
+  ('70000000-0000-0000-0000-00000000004a','50000000-0000-0000-0000-000000000006',74,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-00000000004b','50000000-0000-0000-0000-000000000006',75,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-00000000004c','50000000-0000-0000-0000-000000000005',76,NULL,now()), -- Lunch
+  ('70000000-0000-0000-0000-00000000004d','50000000-0000-0000-0000-000000000001',77,NULL,now()), -- Spicy
+  ('70000000-0000-0000-0000-00000000004e','50000000-0000-0000-0000-000000000006',78,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-00000000004f','50000000-0000-0000-0000-000000000006',79,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-000000000050','50000000-0000-0000-0000-000000000004',80,NULL,now()), -- Breakfast
+  ('70000000-0000-0000-0000-000000000051','50000000-0000-0000-0000-000000000008',81,NULL,now()), -- Dessert
+  ('70000000-0000-0000-0000-000000000052','50000000-0000-0000-0000-000000000004',82,NULL,now()), -- Breakfast
+  ('70000000-0000-0000-0000-000000000053','50000000-0000-0000-0000-000000000005',83,NULL,now()), -- Lunch
+  ('70000000-0000-0000-0000-000000000054','50000000-0000-0000-0000-000000000005',84,NULL,now()), -- Lunch
+  ('70000000-0000-0000-0000-000000000055','50000000-0000-0000-0000-00000000000a',85,NULL,now()), -- Quick
+  ('70000000-0000-0000-0000-000000000056','50000000-0000-0000-0000-000000000001',86,NULL,now()), -- Spicy
+  ('70000000-0000-0000-0000-000000000057','50000000-0000-0000-0000-000000000004',87,NULL,now()), -- Breakfast
+  ('70000000-0000-0000-0000-000000000058','50000000-0000-0000-0000-000000000006',88,NULL,now()), -- Dinner
+  ('70000000-0000-0000-0000-000000000059','50000000-0000-0000-0000-00000000000a',89,NULL,now()), -- Quick
+  ('70000000-0000-0000-0000-00000000005a','50000000-0000-0000-0000-000000000004',90,NULL,now()); -- Breakfast
+
+INSERT INTO recipe_steps (uuid, recipe_id, order_index, instruction, updated_at, deleted_at, server_updated_at) VALUES
+  -- 47 Chicken Tikka Masala
+  ('80000000-0000-0000-0000-000000000016','70000000-0000-0000-0000-000000000047',1,'Marinate chicken in yogurt and spices for at least 1 hour',71,NULL,now()),
+  ('80000000-0000-0000-0000-000000000017','70000000-0000-0000-0000-000000000047',2,'Sear chicken, then simmer in tomato-cream sauce until cooked through',71,NULL,now()),
+  -- 48 Beef Tacos
+  ('80000000-0000-0000-0000-000000000018','70000000-0000-0000-0000-000000000048',1,'Brown ground beef with onion, garlic and taco spices',72,NULL,now()),
+  ('80000000-0000-0000-0000-000000000019','70000000-0000-0000-0000-000000000048',2,'Fill shells with beef, top with bell pepper and salsa',72,NULL,now()),
+  -- 49 Greek Salad
+  ('80000000-0000-0000-0000-00000000001a','70000000-0000-0000-0000-000000000049',1,'Chop tomatoes and combine with spinach and cucumber',73,NULL,now()),
+  ('80000000-0000-0000-0000-00000000001b','70000000-0000-0000-0000-000000000049',2,'Crumble feta on top and dress with olive oil and oregano',73,NULL,now()),
+  -- 4a Tomato Cheese Risotto
+  ('80000000-0000-0000-0000-00000000001c','70000000-0000-0000-0000-00000000004a',1,'Toast rice in butter, add warm stock one ladle at a time',74,NULL,now()),
+  ('80000000-0000-0000-0000-00000000001d','70000000-0000-0000-0000-00000000004a',2,'Stir in chopped tomato and finish with Parmesan off the heat',74,NULL,now()),
+  -- 4b French Onion Soup
+  ('80000000-0000-0000-0000-00000000001e','70000000-0000-0000-0000-00000000004b',1,'Slowly caramelise sliced onions in butter over low heat for 40 min',75,NULL,now()),
+  ('80000000-0000-0000-0000-00000000001f','70000000-0000-0000-0000-00000000004b',2,'Pour into oven-safe bowls, top with bread and cheese, grill until bubbling',75,NULL,now()),
+  -- 4c Chicken Caesar Salad
+  ('80000000-0000-0000-0000-000000000020','70000000-0000-0000-0000-00000000004c',1,'Season and grill chicken breast until cooked through, then slice',76,NULL,now()),
+  ('80000000-0000-0000-0000-000000000021','70000000-0000-0000-0000-00000000004c',2,'Toss spinach with Caesar dressing, top with chicken and shaved Parmesan',76,NULL,now()),
+  -- 4d Spicy Vegetable Curry
+  ('80000000-0000-0000-0000-000000000022','70000000-0000-0000-0000-00000000004d',1,'Fry curry paste with garlic and ginger until fragrant',77,NULL,now()),
+  ('80000000-0000-0000-0000-000000000023','70000000-0000-0000-0000-00000000004d',2,'Add tomatoes, broccoli and spinach; simmer 20 min in coconut milk',77,NULL,now()),
+  -- 4e Salmon with Broccoli
+  ('80000000-0000-0000-0000-000000000024','70000000-0000-0000-0000-00000000004e',1,'Season salmon with garlic, lemon and olive oil; bake at 200°C for 15 min',78,NULL,now()),
+  ('80000000-0000-0000-0000-000000000025','70000000-0000-0000-0000-00000000004e',2,'Steam broccoli and toss with garlic butter; serve alongside salmon',78,NULL,now()),
+  -- 4f Beef Burger Bowl
+  ('80000000-0000-0000-0000-000000000026','70000000-0000-0000-0000-00000000004f',1,'Season beef, form into patty and grill 4 min each side',79,NULL,now()),
+  ('80000000-0000-0000-0000-000000000027','70000000-0000-0000-0000-00000000004f',2,'Serve over cooked rice with diced tomato and onion',79,NULL,now()),
+  -- 50 Egg & Spinach Toast
+  ('80000000-0000-0000-0000-000000000028','70000000-0000-0000-0000-000000000050',1,'Wilt spinach in a pan with a pinch of salt for 2 min',80,NULL,now()),
+  ('80000000-0000-0000-0000-000000000029','70000000-0000-0000-0000-000000000050',2,'Scramble eggs into the spinach, serve on toast and top with cheese',80,NULL,now()),
+  -- 51 Chocolate Mousse
+  ('80000000-0000-0000-0000-00000000002a','70000000-0000-0000-0000-000000000051',1,'Melt chocolate with milk over a bain-marie, cool slightly',81,NULL,now()),
+  ('80000000-0000-0000-0000-00000000002b','70000000-0000-0000-0000-000000000051',2,'Fold whipped egg whites into chocolate; chill 2 hours, top with almonds',81,NULL,now()),
+  -- 52 Fluffy Pancakes
+  ('80000000-0000-0000-0000-00000000002c','70000000-0000-0000-0000-000000000052',1,'Whisk flour, eggs and milk into a smooth batter; rest 5 min',82,NULL,now()),
+  ('80000000-0000-0000-0000-00000000002d','70000000-0000-0000-0000-000000000052',2,'Cook in a buttered pan over medium heat, 2 min each side until golden',82,NULL,now()),
+  -- 53 Lentil Soup
+  ('80000000-0000-0000-0000-00000000002e','70000000-0000-0000-0000-000000000053',1,'Sauté onion and garlic until soft; add lentils and stock',83,NULL,now()),
+  ('80000000-0000-0000-0000-00000000002f','70000000-0000-0000-0000-000000000053',2,'Stir in tomatoes and simmer 25 min until lentils are tender',83,NULL,now()),
+  -- 54 Rice & Veggie Bowl
+  ('80000000-0000-0000-0000-000000000030','70000000-0000-0000-0000-000000000054',1,'Cook rice according to package instructions',84,NULL,now()),
+  ('80000000-0000-0000-0000-000000000031','70000000-0000-0000-0000-000000000054',2,'Steam broccoli and bell pepper; arrange over rice with soy sauce drizzle',84,NULL,now()),
+  -- 55 Chicken Wrap
+  ('80000000-0000-0000-0000-000000000032','70000000-0000-0000-0000-000000000055',1,'Season and pan-fry chicken strips until golden, about 8 min',85,NULL,now()),
+  ('80000000-0000-0000-0000-000000000033','70000000-0000-0000-0000-000000000055',2,'Layer spinach and tomato in a tortilla with chicken; wrap tightly',85,NULL,now()),
+  -- 56 Shakshuka
+  ('80000000-0000-0000-0000-000000000034','70000000-0000-0000-0000-000000000056',1,'Sauté bell pepper with spices and garlic; add crushed tomatoes',86,NULL,now()),
+  ('80000000-0000-0000-0000-000000000035','70000000-0000-0000-0000-000000000056',2,'Make wells, crack in eggs, cover and cook 10 min until whites are set',86,NULL,now()),
+  -- 57 Yogurt Almond Bowl
+  ('80000000-0000-0000-0000-000000000036','70000000-0000-0000-0000-000000000057',1,'Spoon yogurt into a bowl',87,NULL,now()),
+  ('80000000-0000-0000-0000-000000000037','70000000-0000-0000-0000-000000000057',2,'Top with toasted oats, sliced almonds and a drizzle of honey',87,NULL,now()),
+  -- 58 Stuffed Bell Peppers
+  ('80000000-0000-0000-0000-000000000038','70000000-0000-0000-0000-000000000058',1,'Mix cooked beef and rice with tomato sauce and spices',88,NULL,now()),
+  ('80000000-0000-0000-0000-000000000039','70000000-0000-0000-0000-000000000058',2,'Stuff into halved peppers and bake at 190°C for 25 min until tender',88,NULL,now()),
+  -- 59 Garlic Shrimp Stir-Fry
+  ('80000000-0000-0000-0000-00000000003a','70000000-0000-0000-0000-000000000059',1,'Heat oil, add minced garlic and shrimp; stir-fry 3 min',89,NULL,now()),
+  ('80000000-0000-0000-0000-00000000003b','70000000-0000-0000-0000-000000000059',2,'Add broccoli and soy sauce; toss 2 more min until broccoli is tender-crisp',89,NULL,now()),
+  -- 5a Overnight Oats
+  ('80000000-0000-0000-0000-00000000003c','70000000-0000-0000-0000-00000000005a',1,'Combine oats, milk, yogurt and a pinch of salt in a jar or bowl',90,NULL,now()),
+  ('80000000-0000-0000-0000-00000000003d','70000000-0000-0000-0000-00000000005a',2,'Cover and refrigerate overnight; top with fruit or nuts before serving',90,NULL,now());
+
+-- All sample data inserted.
+
+-- ===============================
+-- EXTENDED REFERENCE DATA (additional allergens, source classifications, ingredients)
+-- ===============================
+-- =============================================================
+-- ALLERGENS  (extending the existing 10: Peanuts → Mustard)
+-- =============================================================
+INSERT INTO allergens (uuid, display_name, updated_at, deleted_at, server_updated_at) VALUES
+  ('20000000-0000-0000-0000-00000000000b', 'Celery',    11, NULL, now()),
+  ('20000000-0000-0000-0000-00000000000c', 'Lupin',     12, NULL, now()),
+  ('20000000-0000-0000-0000-00000000000d', 'Sulphites', 13, NULL, now()),
+  ('20000000-0000-0000-0000-00000000000e', 'Molluscs',  14, NULL, now())
+ON CONFLICT (uuid) DO NOTHING;
+
+-- =============================================================
+-- SOURCE CLASSIFICATIONS  (extending the existing 10)
+-- =============================================================
+INSERT INTO source_classifications (uuid, category, subcategory, updated_at, deleted_at, server_updated_at) VALUES
+  ('30000000-0000-0000-0000-00000000000b', 'Herb',       'Fresh',       11, NULL, now()),
+  ('30000000-0000-0000-0000-00000000000c', 'Spice',      'Dried',       12, NULL, now()),
+  ('30000000-0000-0000-0000-00000000000d', 'Oil',        'Fat',         13, NULL, now()),
+  ('30000000-0000-0000-0000-00000000000e', 'Condiment',  NULL,          14, NULL, now()),
+  ('30000000-0000-0000-0000-00000000000f', 'Grain',      'Processed',   15, NULL, now()),
+  ('30000000-0000-0000-0000-000000000010', 'Nut',        NULL,          16, NULL, now()),
+  ('30000000-0000-0000-0000-000000000011', 'Seed',       NULL,          17, NULL, now()),
+  ('30000000-0000-0000-0000-000000000012', 'Fungus',     'Mushroom',    18, NULL, now()),
+  ('30000000-0000-0000-0000-000000000013', 'Sweetener',  NULL,          19, NULL, now()),
+  ('30000000-0000-0000-0000-000000000014', 'Fruit',      'Citrus',      20, NULL, now()),
+  ('30000000-0000-0000-0000-000000000015', 'Fruit',      'Berry',       21, NULL, now()),
+  ('30000000-0000-0000-0000-000000000016', 'Fruit',      'Tropical',    22, NULL, now()),
+  ('30000000-0000-0000-0000-000000000017', 'Fruit',      'Stone',       23, NULL, now()),
+  ('30000000-0000-0000-0000-000000000018', 'Vegetable',  'Allium',      24, NULL, now()),
+  ('30000000-0000-0000-0000-000000000019', 'Vegetable',  'Cruciferous', 25, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001a', 'Vegetable',  'Nightshade',  26, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001b', 'Vegetable',  'Other',       27, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001c', 'Meat',       'Pork',        28, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001d', 'Meat',       'Game',        29, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001e', 'Meat',       'Processed',   30, NULL, now()),
+  ('30000000-0000-0000-0000-00000000001f', 'Dairy',      'Fat',         31, NULL, now()),
+  ('30000000-0000-0000-0000-000000000020', 'Beverage',   NULL,          32, NULL, now()),
+  ('30000000-0000-0000-0000-000000000021', 'Baking',     NULL,          33, NULL, now()),
+  ('30000000-0000-0000-0000-000000000022', 'Shellfish',  'Mollusc',     34, NULL, now())
+ON CONFLICT (uuid) DO NOTHING;
+
+-- =============================================================
+-- INGREDIENTS  (IDs 0x15 → 0x12c; 280 new entries)
+-- allergen_id    → FK to allergens.uuid  (NULL = none)
+-- source_primary_id → plain UUID stored as text (no FK)
+-- =============================================================
+INSERT INTO ingredients (uuid, display_name, allergen_id, source_primary_id, updated_at, deleted_at, server_updated_at) VALUES
+
+  -- ── Vegetables: Root ─────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000015', 'Carrot',               NULL,                                         '30000000-0000-0000-0000-000000000001', 100, NULL, now()),
+  ('60000000-0000-0000-0000-000000000016', 'Potato',               NULL,                                         '30000000-0000-0000-0000-000000000001', 101, NULL, now()),
+  ('60000000-0000-0000-0000-000000000017', 'Sweet Potato',         NULL,                                         '30000000-0000-0000-0000-000000000001', 102, NULL, now()),
+  ('60000000-0000-0000-0000-000000000018', 'Beetroot',             NULL,                                         '30000000-0000-0000-0000-000000000001', 103, NULL, now()),
+  ('60000000-0000-0000-0000-000000000019', 'Turnip',               NULL,                                         '30000000-0000-0000-0000-000000000001', 104, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001a', 'Parsnip',              NULL,                                         '30000000-0000-0000-0000-000000000001', 105, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001b', 'Celeriac',             '20000000-0000-0000-0000-00000000000b',        '30000000-0000-0000-0000-000000000001', 106, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001c', 'Radish',               NULL,                                         '30000000-0000-0000-0000-000000000001', 107, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001d', 'Yam',                  NULL,                                         '30000000-0000-0000-0000-000000000001', 108, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001e', 'Ginger Root',          NULL,                                         '30000000-0000-0000-0000-000000000001', 109, NULL, now()),
+  ('60000000-0000-0000-0000-00000000001f', 'Turmeric Root',        NULL,                                         '30000000-0000-0000-0000-000000000001', 110, NULL, now()),
+  ('60000000-0000-0000-0000-000000000020', 'Horseradish',          NULL,                                         '30000000-0000-0000-0000-000000000001', 111, NULL, now()),
+
+  -- ── Vegetables: Leafy ────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000021', 'Kale',                 NULL,                                         '30000000-0000-0000-0000-000000000002', 112, NULL, now()),
+  ('60000000-0000-0000-0000-000000000022', 'Lettuce',              NULL,                                         '30000000-0000-0000-0000-000000000002', 113, NULL, now()),
+  ('60000000-0000-0000-0000-000000000023', 'Arugula',              NULL,                                         '30000000-0000-0000-0000-000000000002', 114, NULL, now()),
+  ('60000000-0000-0000-0000-000000000024', 'Bok Choy',             NULL,                                         '30000000-0000-0000-0000-000000000002', 115, NULL, now()),
+  ('60000000-0000-0000-0000-000000000025', 'Swiss Chard',          NULL,                                         '30000000-0000-0000-0000-000000000002', 116, NULL, now()),
+  ('60000000-0000-0000-0000-000000000026', 'Cabbage',              NULL,                                         '30000000-0000-0000-0000-000000000002', 117, NULL, now()),
+  ('60000000-0000-0000-0000-000000000027', 'Watercress',           NULL,                                         '30000000-0000-0000-0000-000000000002', 118, NULL, now()),
+  ('60000000-0000-0000-0000-000000000028', 'Collard Greens',       NULL,                                         '30000000-0000-0000-0000-000000000002', 119, NULL, now()),
+  ('60000000-0000-0000-0000-000000000029', 'Radicchio',            NULL,                                         '30000000-0000-0000-0000-000000000002', 120, NULL, now()),
+  ('60000000-0000-0000-0000-00000000002a', 'Endive',               NULL,                                         '30000000-0000-0000-0000-000000000002', 121, NULL, now()),
+
+  -- ── Vegetables: Cruciferous ──────────────────────────────────
+  ('60000000-0000-0000-0000-00000000002b', 'Cauliflower',          NULL,                                         '30000000-0000-0000-0000-000000000019', 122, NULL, now()),
+  ('60000000-0000-0000-0000-00000000002c', 'Brussels Sprouts',     NULL,                                         '30000000-0000-0000-0000-000000000019', 123, NULL, now()),
+
+  -- ── Vegetables: Allium ───────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000002d', 'Leek',                 NULL,                                         '30000000-0000-0000-0000-000000000018', 124, NULL, now()),
+  ('60000000-0000-0000-0000-00000000002e', 'Shallot',              NULL,                                         '30000000-0000-0000-0000-000000000018', 125, NULL, now()),
+  ('60000000-0000-0000-0000-00000000002f', 'Spring Onion',         NULL,                                         '30000000-0000-0000-0000-000000000018', 126, NULL, now()),
+  ('60000000-0000-0000-0000-000000000030', 'Chives',               NULL,                                         '30000000-0000-0000-0000-000000000018', 127, NULL, now()),
+
+  -- ── Vegetables: Nightshade ───────────────────────────────────
+  ('60000000-0000-0000-0000-000000000031', 'Eggplant',             NULL,                                         '30000000-0000-0000-0000-00000000001a', 128, NULL, now()),
+  ('60000000-0000-0000-0000-000000000032', 'Jalapeño',             NULL,                                         '30000000-0000-0000-0000-00000000001a', 129, NULL, now()),
+  ('60000000-0000-0000-0000-000000000033', 'Chili Pepper',         NULL,                                         '30000000-0000-0000-0000-00000000001a', 130, NULL, now()),
+  ('60000000-0000-0000-0000-000000000034', 'Cherry Tomato',        NULL,                                         '30000000-0000-0000-0000-00000000001a', 131, NULL, now()),
+
+  -- ── Vegetables: Other ────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000035', 'Zucchini',             NULL,                                         '30000000-0000-0000-0000-00000000001b', 132, NULL, now()),
+  ('60000000-0000-0000-0000-000000000036', 'Cucumber',             NULL,                                         '30000000-0000-0000-0000-00000000001b', 133, NULL, now()),
+  ('60000000-0000-0000-0000-000000000037', 'Celery',               '20000000-0000-0000-0000-00000000000b',        '30000000-0000-0000-0000-00000000001b', 134, NULL, now()),
+  ('60000000-0000-0000-0000-000000000038', 'Asparagus',            NULL,                                         '30000000-0000-0000-0000-00000000001b', 135, NULL, now()),
+  ('60000000-0000-0000-0000-000000000039', 'Artichoke',            NULL,                                         '30000000-0000-0000-0000-00000000001b', 136, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003a', 'Corn',                 NULL,                                         '30000000-0000-0000-0000-00000000001b', 137, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003b', 'Peas',                 NULL,                                         '30000000-0000-0000-0000-00000000001b', 138, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003c', 'Green Beans',          NULL,                                         '30000000-0000-0000-0000-00000000001b', 139, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003d', 'Snap Peas',            NULL,                                         '30000000-0000-0000-0000-00000000001b', 140, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003e', 'Pumpkin',              NULL,                                         '30000000-0000-0000-0000-00000000001b', 141, NULL, now()),
+  ('60000000-0000-0000-0000-00000000003f', 'Butternut Squash',     NULL,                                         '30000000-0000-0000-0000-00000000001b', 142, NULL, now()),
+  ('60000000-0000-0000-0000-000000000040', 'Fennel Bulb',          NULL,                                         '30000000-0000-0000-0000-00000000001b', 143, NULL, now()),
+
+  -- ── Mushrooms ────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000041', 'Mushroom',             NULL,                                         '30000000-0000-0000-0000-000000000012', 144, NULL, now()),
+  ('60000000-0000-0000-0000-000000000042', 'Shiitake Mushroom',    NULL,                                         '30000000-0000-0000-0000-000000000012', 145, NULL, now()),
+  ('60000000-0000-0000-0000-000000000043', 'Portobello Mushroom',  NULL,                                         '30000000-0000-0000-0000-000000000012', 146, NULL, now()),
+  ('60000000-0000-0000-0000-000000000044', 'Oyster Mushroom',      NULL,                                         '30000000-0000-0000-0000-000000000012', 147, NULL, now()),
+
+  -- ── Fruits: Citrus ───────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000045', 'Lemon',                NULL,                                         '30000000-0000-0000-0000-000000000014', 148, NULL, now()),
+  ('60000000-0000-0000-0000-000000000046', 'Lime',                 NULL,                                         '30000000-0000-0000-0000-000000000014', 149, NULL, now()),
+  ('60000000-0000-0000-0000-000000000047', 'Orange',               NULL,                                         '30000000-0000-0000-0000-000000000014', 150, NULL, now()),
+  ('60000000-0000-0000-0000-000000000048', 'Grapefruit',           NULL,                                         '30000000-0000-0000-0000-000000000014', 151, NULL, now()),
+  ('60000000-0000-0000-0000-000000000049', 'Clementine',           NULL,                                         '30000000-0000-0000-0000-000000000014', 152, NULL, now()),
+
+  -- ── Fruits: Berry ────────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000004a', 'Strawberry',           NULL,                                         '30000000-0000-0000-0000-000000000015', 153, NULL, now()),
+  ('60000000-0000-0000-0000-00000000004b', 'Blueberry',            NULL,                                         '30000000-0000-0000-0000-000000000015', 154, NULL, now()),
+  ('60000000-0000-0000-0000-00000000004c', 'Raspberry',            NULL,                                         '30000000-0000-0000-0000-000000000015', 155, NULL, now()),
+  ('60000000-0000-0000-0000-00000000004d', 'Blackberry',           NULL,                                         '30000000-0000-0000-0000-000000000015', 156, NULL, now()),
+  ('60000000-0000-0000-0000-00000000004e', 'Cranberry',            NULL,                                         '30000000-0000-0000-0000-000000000015', 157, NULL, now()),
+
+  -- ── Fruits: Tropical ─────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000004f', 'Mango',                NULL,                                         '30000000-0000-0000-0000-000000000016', 158, NULL, now()),
+  ('60000000-0000-0000-0000-000000000050', 'Pineapple',            NULL,                                         '30000000-0000-0000-0000-000000000016', 159, NULL, now()),
+  ('60000000-0000-0000-0000-000000000051', 'Banana',               NULL,                                         '30000000-0000-0000-0000-000000000016', 160, NULL, now()),
+  ('60000000-0000-0000-0000-000000000052', 'Papaya',               NULL,                                         '30000000-0000-0000-0000-000000000016', 161, NULL, now()),
+  ('60000000-0000-0000-0000-000000000053', 'Coconut',              NULL,                                         '30000000-0000-0000-0000-000000000016', 162, NULL, now()),
+  ('60000000-0000-0000-0000-000000000054', 'Guava',                NULL,                                         '30000000-0000-0000-0000-000000000016', 163, NULL, now()),
+  ('60000000-0000-0000-0000-000000000055', 'Passion Fruit',        NULL,                                         '30000000-0000-0000-0000-000000000016', 164, NULL, now()),
+
+  -- ── Fruits: Stone / Other ────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000056', 'Apple',                NULL,                                         '30000000-0000-0000-0000-000000000003', 165, NULL, now()),
+  ('60000000-0000-0000-0000-000000000057', 'Pear',                 NULL,                                         '30000000-0000-0000-0000-000000000003', 166, NULL, now()),
+  ('60000000-0000-0000-0000-000000000058', 'Peach',                NULL,                                         '30000000-0000-0000-0000-000000000017', 167, NULL, now()),
+  ('60000000-0000-0000-0000-000000000059', 'Plum',                 NULL,                                         '30000000-0000-0000-0000-000000000017', 168, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005a', 'Cherry',               NULL,                                         '30000000-0000-0000-0000-000000000017', 169, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005b', 'Apricot',              NULL,                                         '30000000-0000-0000-0000-000000000017', 170, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005c', 'Grape',                NULL,                                         '30000000-0000-0000-0000-000000000003', 171, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005d', 'Watermelon',           NULL,                                         '30000000-0000-0000-0000-000000000003', 172, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005e', 'Melon',                NULL,                                         '30000000-0000-0000-0000-000000000003', 173, NULL, now()),
+  ('60000000-0000-0000-0000-00000000005f', 'Fig',                  NULL,                                         '30000000-0000-0000-0000-000000000003', 174, NULL, now()),
+  ('60000000-0000-0000-0000-000000000060', 'Date',                 NULL,                                         '30000000-0000-0000-0000-000000000003', 175, NULL, now()),
+  ('60000000-0000-0000-0000-000000000061', 'Pomegranate',          NULL,                                         '30000000-0000-0000-0000-000000000003', 176, NULL, now()),
+  ('60000000-0000-0000-0000-000000000062', 'Avocado',              NULL,                                         '30000000-0000-0000-0000-000000000003', 177, NULL, now()),
+
+  -- ── Meat: Red ────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000063', 'Lamb',                 NULL,                                         '30000000-0000-0000-0000-000000000006', 178, NULL, now()),
+  ('60000000-0000-0000-0000-000000000064', 'Veal',                 NULL,                                         '30000000-0000-0000-0000-000000000006', 179, NULL, now()),
+  ('60000000-0000-0000-0000-000000000065', 'Venison',              NULL,                                         '30000000-0000-0000-0000-00000000001d', 180, NULL, now()),
+  ('60000000-0000-0000-0000-000000000066', 'Rabbit',               NULL,                                         '30000000-0000-0000-0000-00000000001d', 181, NULL, now()),
+
+  -- ── Meat: Pork ───────────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000067', 'Pork',                 NULL,                                         '30000000-0000-0000-0000-00000000001c', 182, NULL, now()),
+  ('60000000-0000-0000-0000-000000000068', 'Pork Belly',           NULL,                                         '30000000-0000-0000-0000-00000000001c', 183, NULL, now()),
+  ('60000000-0000-0000-0000-000000000069', 'Pork Chop',            NULL,                                         '30000000-0000-0000-0000-00000000001c', 184, NULL, now()),
+
+  -- ── Meat: White (poultry) ────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000006a', 'Turkey',               NULL,                                         '30000000-0000-0000-0000-000000000007', 185, NULL, now()),
+  ('60000000-0000-0000-0000-00000000006b', 'Duck',                 NULL,                                         '30000000-0000-0000-0000-000000000007', 186, NULL, now()),
+
+  -- ── Meat: Processed ──────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000006c', 'Bacon',                NULL,                                         '30000000-0000-0000-0000-00000000001e', 187, NULL, now()),
+  ('60000000-0000-0000-0000-00000000006d', 'Ham',                  NULL,                                         '30000000-0000-0000-0000-00000000001e', 188, NULL, now()),
+  ('60000000-0000-0000-0000-00000000006e', 'Sausage',              NULL,                                         '30000000-0000-0000-0000-00000000001e', 189, NULL, now()),
+  ('60000000-0000-0000-0000-00000000006f', 'Chorizo',              NULL,                                         '30000000-0000-0000-0000-00000000001e', 190, NULL, now()),
+  ('60000000-0000-0000-0000-000000000070', 'Pancetta',             NULL,                                         '30000000-0000-0000-0000-00000000001e', 191, NULL, now()),
+  ('60000000-0000-0000-0000-000000000071', 'Prosciutto',           NULL,                                         '30000000-0000-0000-0000-00000000001e', 192, NULL, now()),
+  ('60000000-0000-0000-0000-000000000072', 'Pepperoni',            NULL,                                         '30000000-0000-0000-0000-00000000001e', 193, NULL, now()),
+  ('60000000-0000-0000-0000-000000000073', 'Salami',               NULL,                                         '30000000-0000-0000-0000-00000000001e', 194, NULL, now()),
+
+  -- ── Fish ─────────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000074', 'Tuna',                 '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 195, NULL, now()),
+  ('60000000-0000-0000-0000-000000000075', 'Cod',                  '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 196, NULL, now()),
+  ('60000000-0000-0000-0000-000000000076', 'Tilapia',              '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 197, NULL, now()),
+  ('60000000-0000-0000-0000-000000000077', 'Sea Bass',             '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 198, NULL, now()),
+  ('60000000-0000-0000-0000-000000000078', 'Mackerel',             '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 199, NULL, now()),
+  ('60000000-0000-0000-0000-000000000079', 'Sardines',             '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 200, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007a', 'Trout',                '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 201, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007b', 'Halibut',              '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 202, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007c', 'Swordfish',            '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 203, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007d', 'Anchovy',              '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 204, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007e', 'Herring',              '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 205, NULL, now()),
+  ('60000000-0000-0000-0000-00000000007f', 'Mahi-Mahi',            '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 206, NULL, now()),
+  ('60000000-0000-0000-0000-000000000080', 'Snapper',              '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-000000000008', 207, NULL, now()),
+
+  -- ── Shellfish: Crustacean ────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000081', 'Crab',                 '20000000-0000-0000-0000-000000000007',        '30000000-0000-0000-0000-000000000009', 208, NULL, now()),
+  ('60000000-0000-0000-0000-000000000082', 'Lobster',              '20000000-0000-0000-0000-000000000007',        '30000000-0000-0000-0000-000000000009', 209, NULL, now()),
+  ('60000000-0000-0000-0000-000000000083', 'Langoustine',          '20000000-0000-0000-0000-000000000007',        '30000000-0000-0000-0000-000000000009', 210, NULL, now()),
+
+  -- ── Shellfish: Mollusc ───────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000084', 'Mussels',              '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 211, NULL, now()),
+  ('60000000-0000-0000-0000-000000000085', 'Clams',                '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 212, NULL, now()),
+  ('60000000-0000-0000-0000-000000000086', 'Oysters',              '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 213, NULL, now()),
+  ('60000000-0000-0000-0000-000000000087', 'Scallops',             '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 214, NULL, now()),
+  ('60000000-0000-0000-0000-000000000088', 'Squid',                '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 215, NULL, now()),
+  ('60000000-0000-0000-0000-000000000089', 'Octopus',              '20000000-0000-0000-0000-00000000000e',        '30000000-0000-0000-0000-000000000022', 216, NULL, now()),
+
+  -- ── Legumes ──────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000008a', 'Chickpeas',            NULL,                                         '30000000-0000-0000-0000-00000000000a', 217, NULL, now()),
+  ('60000000-0000-0000-0000-00000000008b', 'Black Beans',          NULL,                                         '30000000-0000-0000-0000-00000000000a', 218, NULL, now()),
+  ('60000000-0000-0000-0000-00000000008c', 'Kidney Beans',         NULL,                                         '30000000-0000-0000-0000-00000000000a', 219, NULL, now()),
+  ('60000000-0000-0000-0000-00000000008d', 'White Beans',          NULL,                                         '30000000-0000-0000-0000-00000000000a', 220, NULL, now()),
+  ('60000000-0000-0000-0000-00000000008e', 'Edamame',              '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000a', 221, NULL, now()),
+  ('60000000-0000-0000-0000-00000000008f', 'Split Peas',           NULL,                                         '30000000-0000-0000-0000-00000000000a', 222, NULL, now()),
+  ('60000000-0000-0000-0000-000000000090', 'Mung Beans',           NULL,                                         '30000000-0000-0000-0000-00000000000a', 223, NULL, now()),
+  ('60000000-0000-0000-0000-000000000091', 'Black-Eyed Peas',      NULL,                                         '30000000-0000-0000-0000-00000000000a', 224, NULL, now()),
+  ('60000000-0000-0000-0000-000000000092', 'Pinto Beans',          NULL,                                         '30000000-0000-0000-0000-00000000000a', 225, NULL, now()),
+  ('60000000-0000-0000-0000-000000000093', 'Cannellini Beans',     NULL,                                         '30000000-0000-0000-0000-00000000000a', 226, NULL, now()),
+  ('60000000-0000-0000-0000-000000000094', 'Fava Beans',           NULL,                                         '30000000-0000-0000-0000-00000000000a', 227, NULL, now()),
+  ('60000000-0000-0000-0000-000000000095', 'Butter Beans',         NULL,                                         '30000000-0000-0000-0000-00000000000a', 228, NULL, now()),
+  ('60000000-0000-0000-0000-000000000096', 'Peanut',               '20000000-0000-0000-0000-000000000001',        '30000000-0000-0000-0000-00000000000a', 229, NULL, now()),
+  ('60000000-0000-0000-0000-000000000097', 'Tempeh',               '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000a', 230, NULL, now()),
+  ('60000000-0000-0000-0000-000000000098', 'Seitan',               '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 231, NULL, now()),
+
+  -- ── Dairy: Milk & Alternatives ───────────────────────────────
+  ('60000000-0000-0000-0000-000000000099', 'Whole Milk',           '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 232, NULL, now()),
+  ('60000000-0000-0000-0000-00000000009a', 'Skimmed Milk',         '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 233, NULL, now()),
+  ('60000000-0000-0000-0000-00000000009b', 'Oat Milk',             NULL,                                         '30000000-0000-0000-0000-00000000000f', 234, NULL, now()),
+  ('60000000-0000-0000-0000-00000000009c', 'Almond Milk',          '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000005', 235, NULL, now()),
+  ('60000000-0000-0000-0000-00000000009d', 'Soy Milk',             '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-000000000005', 236, NULL, now()),
+  ('60000000-0000-0000-0000-00000000009e', 'Coconut Milk',         NULL,                                         '30000000-0000-0000-0000-000000000016', 237, NULL, now()),
+
+  -- ── Dairy: Cheese ────────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000009f', 'Cheddar',              '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 238, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a0', 'Mozzarella',           '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 239, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a1', 'Parmesan',             '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 240, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a2', 'Ricotta',              '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 241, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a3', 'Cream Cheese',         '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 242, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a4', 'Feta',                 '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 243, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a5', 'Gouda',                '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 244, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a6', 'Brie',                 '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 245, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a7', 'Gorgonzola',           '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 246, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a8', 'Gruyère',              '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 247, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000a9', 'Paneer',               '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000005', 248, NULL, now()),
+
+  -- ── Dairy: Fat ───────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000aa', 'Butter',               '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-00000000001f', 249, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ab', 'Heavy Cream',          '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-00000000001f', 250, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ac', 'Sour Cream',           '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-00000000001f', 251, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ad', 'Crème Fraîche',        '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-00000000001f', 252, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ae', 'Ghee',                 '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-00000000001f', 253, NULL, now()),
+
+  -- ── Grains: Whole ────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000af', 'Wheat',                '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 254, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b0', 'Whole Wheat Flour',    '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 255, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b1', 'Cornmeal',             NULL,                                         '30000000-0000-0000-0000-000000000004', 256, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b2', 'Quinoa',               NULL,                                         '30000000-0000-0000-0000-000000000004', 257, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b3', 'Barley',               '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 258, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b4', 'Bulgur Wheat',         '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 259, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b5', 'Couscous',             '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 260, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b6', 'Polenta',              NULL,                                         '30000000-0000-0000-0000-000000000004', 261, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b7', 'Cornstarch',           NULL,                                         '30000000-0000-0000-0000-000000000004', 262, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b8', 'Rye',                  '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 263, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000b9', 'Spelt',                '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000004', 264, NULL, now()),
+
+  -- ── Grains: Processed ────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000ba', 'Pasta',                '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 265, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000bb', 'Spaghetti',            '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 266, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000bc', 'Penne',                '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 267, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000bd', 'Bread',                '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 268, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000be', 'Sourdough Bread',      '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 269, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000bf', 'Tortilla',             '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 270, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c0', 'Noodles',              '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 271, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c1', 'Rice Noodles',         NULL,                                         '30000000-0000-0000-0000-00000000000f', 272, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c2', 'Udon Noodles',         '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 273, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c3', 'Ramen Noodles',        '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 274, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c4', 'Breadcrumbs',          '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 275, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c5', 'Crackers',             '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-00000000000f', 276, NULL, now()),
+
+  -- ── Nuts ─────────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000c6', 'Walnut',               '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 277, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c7', 'Cashew',               '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 278, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c8', 'Pecan',                '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 279, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000c9', 'Pistachio',            '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 280, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ca', 'Hazelnut',             '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 281, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000cb', 'Macadamia Nut',        '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 282, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000cc', 'Brazil Nut',           '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 283, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000cd', 'Pine Nut',             '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 284, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ce', 'Chestnut',             '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-000000000010', 285, NULL, now()),
+
+  -- ── Seeds ────────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000cf', 'Sunflower Seeds',      NULL,                                         '30000000-0000-0000-0000-000000000011', 286, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d0', 'Pumpkin Seeds',        NULL,                                         '30000000-0000-0000-0000-000000000011', 287, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d1', 'Flaxseeds',            NULL,                                         '30000000-0000-0000-0000-000000000011', 288, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d2', 'Chia Seeds',           NULL,                                         '30000000-0000-0000-0000-000000000011', 289, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d3', 'Sesame Seeds',         '20000000-0000-0000-0000-000000000009',        '30000000-0000-0000-0000-000000000011', 290, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d4', 'Poppy Seeds',          NULL,                                         '30000000-0000-0000-0000-000000000011', 291, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d5', 'Hemp Seeds',           NULL,                                         '30000000-0000-0000-0000-000000000011', 292, NULL, now()),
+
+  -- ── Herbs: Fresh ─────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000d6', 'Basil',                NULL,                                         '30000000-0000-0000-0000-00000000000b', 293, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d7', 'Parsley',              NULL,                                         '30000000-0000-0000-0000-00000000000b', 294, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d8', 'Cilantro',             NULL,                                         '30000000-0000-0000-0000-00000000000b', 295, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000d9', 'Mint',                 NULL,                                         '30000000-0000-0000-0000-00000000000b', 296, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000da', 'Thyme',                NULL,                                         '30000000-0000-0000-0000-00000000000b', 297, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000db', 'Rosemary',             NULL,                                         '30000000-0000-0000-0000-00000000000b', 298, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000dc', 'Oregano',              NULL,                                         '30000000-0000-0000-0000-00000000000b', 299, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000dd', 'Sage',                 NULL,                                         '30000000-0000-0000-0000-00000000000b', 300, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000de', 'Dill',                 NULL,                                         '30000000-0000-0000-0000-00000000000b', 301, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000df', 'Tarragon',             NULL,                                         '30000000-0000-0000-0000-00000000000b', 302, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e0', 'Bay Leaf',             NULL,                                         '30000000-0000-0000-0000-00000000000b', 303, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e1', 'Lemongrass',           NULL,                                         '30000000-0000-0000-0000-00000000000b', 304, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e2', 'Kaffir Lime Leaves',   NULL,                                         '30000000-0000-0000-0000-00000000000b', 305, NULL, now()),
+
+  -- ── Spices: Dried ────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000e3', 'Black Pepper',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 306, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e4', 'White Pepper',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 307, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e5', 'Cumin',                NULL,                                         '30000000-0000-0000-0000-00000000000c', 308, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e6', 'Coriander (ground)',   NULL,                                         '30000000-0000-0000-0000-00000000000c', 309, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e7', 'Paprika',              NULL,                                         '30000000-0000-0000-0000-00000000000c', 310, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e8', 'Smoked Paprika',       NULL,                                         '30000000-0000-0000-0000-00000000000c', 311, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000e9', 'Cinnamon',             NULL,                                         '30000000-0000-0000-0000-00000000000c', 312, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ea', 'Nutmeg',               NULL,                                         '30000000-0000-0000-0000-00000000000c', 313, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000eb', 'Cloves',               NULL,                                         '30000000-0000-0000-0000-00000000000c', 314, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ec', 'Cardamom',             NULL,                                         '30000000-0000-0000-0000-00000000000c', 315, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ed', 'Star Anise',           NULL,                                         '30000000-0000-0000-0000-00000000000c', 316, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ee', 'Fennel Seeds',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 317, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ef', 'Caraway Seeds',        NULL,                                         '30000000-0000-0000-0000-00000000000c', 318, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f0', 'Allspice',             NULL,                                         '30000000-0000-0000-0000-00000000000c', 319, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f1', 'Cayenne Pepper',       NULL,                                         '30000000-0000-0000-0000-00000000000c', 320, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f2', 'Chili Flakes',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 321, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f3', 'Curry Powder',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 322, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f4', 'Garam Masala',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 323, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f5', 'Five Spice',           NULL,                                         '30000000-0000-0000-0000-00000000000c', 324, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f6', 'Sumac',                NULL,                                         '30000000-0000-0000-0000-00000000000c', 325, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f7', 'Saffron',              NULL,                                         '30000000-0000-0000-0000-00000000000c', 326, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f8', 'Turmeric (ground)',    NULL,                                         '30000000-0000-0000-0000-00000000000c', 327, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000f9', 'Vanilla Bean',         NULL,                                         '30000000-0000-0000-0000-00000000000c', 328, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000fa', 'Za''atar',             '20000000-0000-0000-0000-000000000009',        '30000000-0000-0000-0000-00000000000c', 329, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000fb', 'Ras el Hanout',        NULL,                                         '30000000-0000-0000-0000-00000000000c', 330, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000fc', 'Salt',                 NULL,                                         '30000000-0000-0000-0000-00000000000c', 331, NULL, now()),
+
+  -- ── Oils & Fats ──────────────────────────────────────────────
+  ('60000000-0000-0000-0000-0000000000fd', 'Olive Oil',            NULL,                                         '30000000-0000-0000-0000-00000000000d', 332, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000fe', 'Vegetable Oil',        NULL,                                         '30000000-0000-0000-0000-00000000000d', 333, NULL, now()),
+  ('60000000-0000-0000-0000-0000000000ff', 'Coconut Oil',          NULL,                                         '30000000-0000-0000-0000-00000000000d', 334, NULL, now()),
+  ('60000000-0000-0000-0000-000000000100', 'Sesame Oil',           '20000000-0000-0000-0000-000000000009',        '30000000-0000-0000-0000-00000000000d', 335, NULL, now()),
+  ('60000000-0000-0000-0000-000000000101', 'Avocado Oil',          NULL,                                         '30000000-0000-0000-0000-00000000000d', 336, NULL, now()),
+  ('60000000-0000-0000-0000-000000000102', 'Sunflower Oil',        NULL,                                         '30000000-0000-0000-0000-00000000000d', 337, NULL, now()),
+  ('60000000-0000-0000-0000-000000000103', 'Canola Oil',           NULL,                                         '30000000-0000-0000-0000-00000000000d', 338, NULL, now()),
+  ('60000000-0000-0000-0000-000000000104', 'Lard',                 NULL,                                         '30000000-0000-0000-0000-00000000000d', 339, NULL, now()),
+
+  -- ── Condiments & Sauces ──────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000105', 'Soy Sauce',            '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000e', 340, NULL, now()),
+  ('60000000-0000-0000-0000-000000000106', 'Fish Sauce',           '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-00000000000e', 341, NULL, now()),
+  ('60000000-0000-0000-0000-000000000107', 'Oyster Sauce',         '20000000-0000-0000-0000-000000000007',        '30000000-0000-0000-0000-00000000000e', 342, NULL, now()),
+  ('60000000-0000-0000-0000-000000000108', 'Worcestershire Sauce', '20000000-0000-0000-0000-000000000006',        '30000000-0000-0000-0000-00000000000e', 343, NULL, now()),
+  ('60000000-0000-0000-0000-000000000109', 'Hot Sauce',            NULL,                                         '30000000-0000-0000-0000-00000000000e', 344, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010a', 'Ketchup',              NULL,                                         '30000000-0000-0000-0000-00000000000e', 345, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010b', 'Yellow Mustard',       '20000000-0000-0000-0000-00000000000a',        '30000000-0000-0000-0000-00000000000e', 346, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010c', 'Dijon Mustard',        '20000000-0000-0000-0000-00000000000a',        '30000000-0000-0000-0000-00000000000e', 347, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010d', 'Mayonnaise',           '20000000-0000-0000-0000-000000000005',        '30000000-0000-0000-0000-00000000000e', 348, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010e', 'White Vinegar',        NULL,                                         '30000000-0000-0000-0000-00000000000e', 349, NULL, now()),
+  ('60000000-0000-0000-0000-00000000010f', 'Balsamic Vinegar',     '20000000-0000-0000-0000-00000000000d',        '30000000-0000-0000-0000-00000000000e', 350, NULL, now()),
+  ('60000000-0000-0000-0000-000000000110', 'Apple Cider Vinegar',  NULL,                                         '30000000-0000-0000-0000-00000000000e', 351, NULL, now()),
+  ('60000000-0000-0000-0000-000000000111', 'Tahini',               '20000000-0000-0000-0000-000000000009',        '30000000-0000-0000-0000-00000000000e', 352, NULL, now()),
+  ('60000000-0000-0000-0000-000000000112', 'Miso Paste',           '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000e', 353, NULL, now()),
+  ('60000000-0000-0000-0000-000000000113', 'Sriracha',             NULL,                                         '30000000-0000-0000-0000-00000000000e', 354, NULL, now()),
+  ('60000000-0000-0000-0000-000000000114', 'Teriyaki Sauce',       '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000e', 355, NULL, now()),
+  ('60000000-0000-0000-0000-000000000115', 'Hoisin Sauce',         '20000000-0000-0000-0000-000000000002',        '30000000-0000-0000-0000-00000000000e', 356, NULL, now()),
+  ('60000000-0000-0000-0000-000000000116', 'Tomato Paste',         NULL,                                         '30000000-0000-0000-0000-00000000000e', 357, NULL, now()),
+  ('60000000-0000-0000-0000-000000000117', 'Barbecue Sauce',       NULL,                                         '30000000-0000-0000-0000-00000000000e', 358, NULL, now()),
+  ('60000000-0000-0000-0000-000000000118', 'Harissa Paste',        NULL,                                         '30000000-0000-0000-0000-00000000000e', 359, NULL, now()),
+  ('60000000-0000-0000-0000-000000000119', 'Pesto',                '20000000-0000-0000-0000-000000000008',        '30000000-0000-0000-0000-00000000000e', 360, NULL, now()),
+
+  -- ── Sweeteners ───────────────────────────────────────────────
+  ('60000000-0000-0000-0000-00000000011a', 'Sugar',                NULL,                                         '30000000-0000-0000-0000-000000000013', 361, NULL, now()),
+  ('60000000-0000-0000-0000-00000000011b', 'Brown Sugar',          NULL,                                         '30000000-0000-0000-0000-000000000013', 362, NULL, now()),
+  ('60000000-0000-0000-0000-00000000011c', 'Honey',                NULL,                                         '30000000-0000-0000-0000-000000000013', 363, NULL, now()),
+  ('60000000-0000-0000-0000-00000000011d', 'Maple Syrup',          NULL,                                         '30000000-0000-0000-0000-000000000013', 364, NULL, now()),
+  ('60000000-0000-0000-0000-00000000011e', 'Agave Syrup',          NULL,                                         '30000000-0000-0000-0000-000000000013', 365, NULL, now()),
+  ('60000000-0000-0000-0000-00000000011f', 'Powdered Sugar',       NULL,                                         '30000000-0000-0000-0000-000000000013', 366, NULL, now()),
+  ('60000000-0000-0000-0000-000000000120', 'Molasses',             NULL,                                         '30000000-0000-0000-0000-000000000013', 367, NULL, now()),
+
+  -- ── Baking ───────────────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000121', 'Baking Powder',        NULL,                                         '30000000-0000-0000-0000-000000000021', 368, NULL, now()),
+  ('60000000-0000-0000-0000-000000000122', 'Baking Soda',          NULL,                                         '30000000-0000-0000-0000-000000000021', 369, NULL, now()),
+  ('60000000-0000-0000-0000-000000000123', 'Active Dry Yeast',     NULL,                                         '30000000-0000-0000-0000-000000000021', 370, NULL, now()),
+  ('60000000-0000-0000-0000-000000000124', 'Cocoa Powder',         NULL,                                         '30000000-0000-0000-0000-000000000021', 371, NULL, now()),
+  ('60000000-0000-0000-0000-000000000125', 'Dark Chocolate',       '20000000-0000-0000-0000-000000000003',        '30000000-0000-0000-0000-000000000021', 372, NULL, now()),
+  ('60000000-0000-0000-0000-000000000126', 'Vanilla Extract',      NULL,                                         '30000000-0000-0000-0000-000000000021', 373, NULL, now()),
+  ('60000000-0000-0000-0000-000000000127', 'Cream of Tartar',      NULL,                                         '30000000-0000-0000-0000-000000000021', 374, NULL, now()),
+
+  -- ── Beverages / Stock ────────────────────────────────────────
+  ('60000000-0000-0000-0000-000000000128', 'Red Wine',             '20000000-0000-0000-0000-00000000000d',        '30000000-0000-0000-0000-000000000020', 375, NULL, now()),
+  ('60000000-0000-0000-0000-000000000129', 'White Wine',           '20000000-0000-0000-0000-00000000000d',        '30000000-0000-0000-0000-000000000020', 376, NULL, now()),
+  ('60000000-0000-0000-0000-00000000012a', 'Beer',                 '20000000-0000-0000-0000-000000000004',        '30000000-0000-0000-0000-000000000020', 377, NULL, now()),
+  ('60000000-0000-0000-0000-00000000012b', 'Vegetable Stock',      NULL,                                         '30000000-0000-0000-0000-000000000020', 378, NULL, now()),
+  ('60000000-0000-0000-0000-00000000012c', 'Chicken Stock',        NULL,                                         '30000000-0000-0000-0000-000000000020', 379, NULL, now()),
+  ('60000000-0000-0000-0000-00000000012d', 'Beef Stock',           NULL,                                         '30000000-0000-0000-0000-000000000020', 380, NULL, now()),
+  ('60000000-0000-0000-0000-00000000012e', 'Coconut Water',        NULL,                                         '30000000-0000-0000-0000-000000000020', 381, NULL, now())
+
+ON CONFLICT (uuid) DO NOTHING;
