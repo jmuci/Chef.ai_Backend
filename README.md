@@ -202,9 +202,7 @@ To start both the DB and the service, run:
 To reset and reseed the local database from scratch, run these three scripts in order against the running Postgres container:
 
 ```bash
-psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/drop_tables.sql
-psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/create_tables.sql
-psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/seed.sql
+psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/drop_tables.sql -f src/main/resources/sql/create_tables.sql -f src/main/resources/sql/seed.sql
 ```
 
 | Script | Purpose |
