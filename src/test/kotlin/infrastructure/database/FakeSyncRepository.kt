@@ -3,10 +3,13 @@ package com.tenmilelabs.infrastructure.database
 import com.tenmilelabs.application.dto.SyncBookmark
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
+import com.tenmilelabs.application.dto.SyncMealPlanDayDto
+import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.application.dto.SyncUser
+import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import kotlinx.datetime.Instant
@@ -27,6 +30,10 @@ class FakeSyncRepository : SyncRepository {
     private val bookmarkServerTs = mutableMapOf<Pair<UUID, UUID>, Long>()
     // accessible recipe ids (by default, all seeded recipes are accessible)
     private val inaccessibleRecipes = mutableSetOf<UUID>()
+    // meal plans: key=planId, value=record with server timestamp
+    private val mealPlans = mutableMapOf<UUID, SyncMealPlanRecord>()
+    // candidate recipe IDs for generation (injectable per-test)
+    private val candidateRecipeIds = mutableListOf<UUID>()
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -89,6 +96,17 @@ class FakeSyncRepository : SyncRepository {
 
     fun makeRecipeInaccessible(recipeId: UUID) {
         inaccessibleRecipes += recipeId
+    }
+
+    fun seedMealPlan(plan: SyncMealPlanDto, serverUpdatedAtMillis: Long = 0L): UUID {
+        val uuid = UUID.fromString(plan.uuid)
+        mealPlans[uuid] = SyncMealPlanRecord(plan = plan, serverUpdatedAtMillis = serverUpdatedAtMillis)
+        return uuid
+    }
+
+    fun seedCandidateRecipe(uuid: UUID = UUID.randomUUID()): UUID {
+        candidateRecipeIds += uuid
+        return uuid
     }
 
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
@@ -173,4 +191,41 @@ class FakeSyncRepository : SyncRepository {
                 key.first == userId && (bookmarkServerTs[key] ?: 0L) > sinceMillis
             }
             .map { it.value }
+
+    // ── Meal Plans ────────────────────────────────────────────────────────────
+
+    override suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord? =
+        mealPlans[uuid]
+
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant) {
+        mealPlans[UUID.fromString(plan.uuid)] = SyncMealPlanRecord(
+            plan = plan,
+            serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
+        )
+    }
+
+    override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
+        mealPlans.values
+            .filter { it.serverUpdatedAtMillis > sinceMillis }
+            .sortedBy { it.serverUpdatedAtMillis }
+
+    override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant) {
+        val existing = mealPlans[planId] ?: return
+        mealPlans[planId] = existing.copy(
+            plan = existing.plan.copy(status = status),
+            serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
+        )
+    }
+
+    override suspend fun replaceMealPlanDays(planId: UUID, days: List<SyncMealPlanDayDto>) {
+        val existing = mealPlans[planId] ?: return
+        mealPlans[planId] = existing.copy(plan = existing.plan.copy(days = days))
+    }
+
+    override suspend fun findCandidateRecipeIds(
+        userId: UUID,
+        recipeSource: String,
+        dietaryRestrictionTags: List<String>,
+        maxPrepTimeMinutes: Int?
+    ): List<UUID> = candidateRecipeIds.toList()
 }

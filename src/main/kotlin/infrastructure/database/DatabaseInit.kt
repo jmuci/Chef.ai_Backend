@@ -8,6 +8,8 @@ import com.tenmilelabs.infrastructure.database.tables.AllergenTable
 import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
 import com.tenmilelabs.infrastructure.database.tables.IngredientTable
 import com.tenmilelabs.infrastructure.database.tables.LabelTable
+import com.tenmilelabs.infrastructure.database.tables.MealPlanDayTable
+import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeIngredientTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeLabelTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeStepTable
@@ -37,7 +39,9 @@ fun initDatabaseAndSchema() {
             RefreshTokenTable,
             SourceClassificationTable,
             TagTable,
-            BookmarkedRecipeTable
+            BookmarkedRecipeTable,
+            MealPlanTable,
+            MealPlanDayTable
         )
     }
 }
