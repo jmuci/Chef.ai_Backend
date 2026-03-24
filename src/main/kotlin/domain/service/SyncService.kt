@@ -6,8 +6,11 @@ import com.tenmilelabs.application.dto.BookmarkPushError
 import com.tenmilelabs.application.dto.BookmarkPushResult
 import com.tenmilelabs.application.dto.ConflictEntity
 import com.tenmilelabs.application.dto.ConflictReasons
+import com.tenmilelabs.application.dto.MealPlanPushResult
+import com.tenmilelabs.application.dto.MealPlanPushResults
 import com.tenmilelabs.application.dto.SyncError
 import com.tenmilelabs.application.dto.SyncErrors
+import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPushResponse
@@ -134,6 +137,7 @@ class SyncService(
         }
 
         val (bookmarkResults, bookmarkErrors) = processBookmarks(userId, request)
+        val mealPlanResults = processMealPlans(userId, request.mealPlans)
 
         return SyncPushResponse(
             accepted = accepted,
@@ -142,8 +146,40 @@ class SyncService(
             serverTimestamp = Clock.System.now().toEpochMilliseconds(),
             referenceData = conflictReferenceData,
             bookmarkedRecipes = bookmarkResults,
-            bookmarkErrors = bookmarkErrors
+            bookmarkErrors = bookmarkErrors,
+            mealPlans = mealPlanResults
         )
+    }
+
+    private suspend fun processMealPlans(
+        userId: UUID,
+        mealPlans: List<SyncMealPlanDto>
+    ): MealPlanPushResults {
+        if (mealPlans.isEmpty()) return MealPlanPushResults()
+
+        val accepted = mutableListOf<MealPlanPushResult>()
+        val conflicts = mutableListOf<String>()
+        val errors = mutableListOf<SyncError>()
+
+        mealPlans.forEach { plan ->
+            val planUuid = parseUuid(plan.uuid) {
+                errors += SyncError(plan.uuid, SyncErrors.INVALID_UUID, SyncErrors.INVALID_UUID.message)
+            } ?: return@forEach
+
+            val existing = syncRepository.getMealPlanForUser(planUuid, userId)
+            if (existing != null && existing.serverUpdatedAtMillis > plan.updatedAt) {
+                conflicts += plan.uuid
+                log.info("Meal plan push conflict for user $userId, planId=${plan.uuid}: server is newer")
+                return@forEach
+            }
+
+            val now = Clock.System.now()
+            syncRepository.upsertMealPlan(plan, userId, now)
+            accepted += MealPlanPushResult(uuid = plan.uuid, serverUpdatedAt = now.toEpochMilliseconds())
+            log.info("Meal plan push accepted for user $userId, planId=${plan.uuid}")
+        }
+
+        return MealPlanPushResults(accepted = accepted, conflicts = conflicts, errors = errors)
     }
 
     private suspend fun processBookmarks(
@@ -259,13 +295,14 @@ class SyncService(
         )
 
         val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
+        val mealPlans = syncRepository.findDeltaMealPlans(userId, sinceMillis)
 
         log.info(
             "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
                 "ingredients=${refData.ingredients.size}, allergens=${refData.allergens.size}, " +
                 "sourceClassifications=${refData.sourceClassifications.size}, " +
                 "tags=${refData.tags.size}, labels=${refData.labels.size}, " +
-                "bookmarks=${bookmarks.size}"
+                "bookmarks=${bookmarks.size}, mealPlans=${mealPlans.size}"
         )
 
         return SyncPullResponse(
@@ -277,6 +314,7 @@ class SyncService(
             tags = refData.tags,
             labels = refData.labels,
             bookmarkedRecipes = bookmarks,
+            mealPlans = mealPlans.map { it.plan },
             serverTimestamp = cursor,
             hasMore = hasMore
         )

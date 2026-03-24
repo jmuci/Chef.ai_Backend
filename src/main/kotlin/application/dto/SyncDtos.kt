@@ -7,7 +7,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class SyncPushRequest(
     val recipes: List<SyncRecipe>,
-    val bookmarkedRecipes: List<SyncBookmark> = emptyList()
+    val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
+    val mealPlans: List<SyncMealPlanDto> = emptyList()
 )
 
 @Serializable
@@ -55,7 +56,8 @@ data class SyncPushResponse(
     /** Reference entities required to resolve every [ConflictEntity.serverVersion] locally. */
     val referenceData: SyncReferenceData,
     @EncodeDefault val bookmarkedRecipes: List<BookmarkPushResult> = emptyList(),
-    @EncodeDefault val bookmarkErrors: List<BookmarkPushError> = emptyList()
+    @EncodeDefault val bookmarkErrors: List<BookmarkPushError> = emptyList(),
+    @EncodeDefault val mealPlans: MealPlanPushResults = MealPlanPushResults()
 )
 
 @Serializable
@@ -203,6 +205,49 @@ data class SyncPullResponse(
     val tags: List<SyncTag>,
     val labels: List<SyncLabel>,
     @EncodeDefault val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
+    @EncodeDefault val mealPlans: List<SyncMealPlanDto> = emptyList(),
     val serverTimestamp: Long,
     val hasMore: Boolean
+)
+
+// ── Meal Plan DTOs ──────────────────────────────────────────────────────────
+
+@Serializable
+data class SyncMealPlanDto(
+    val uuid: String,
+    val name: String,
+    val status: String,
+    val preferencesJson: String,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val deletedAt: Long?,
+    val days: List<SyncMealPlanDayDto>
+)
+
+@Serializable
+data class SyncMealPlanDayDto(
+    val uuid: String,
+    val dayIndex: Int,
+    val dinnerRecipeId: String?,
+    val lunchRecipeId: String?
+)
+
+@Serializable
+data class MealPlanPushResult(
+    val uuid: String,
+    val serverUpdatedAt: Long
+)
+
+@Serializable
+data class MealPlanPushResults(
+    val accepted: List<MealPlanPushResult> = emptyList(),
+    val conflicts: List<String> = emptyList(),
+    val errors: List<SyncError> = emptyList()
+)
+
+@Serializable
+data class GenerateMealPlanResponse(
+    val uuid: String,
+    val status: String,
+    val updatedAt: Long
 )
