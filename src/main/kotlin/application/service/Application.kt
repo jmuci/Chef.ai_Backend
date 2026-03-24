@@ -5,6 +5,7 @@ import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.JwtService
+import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SoftDeletePurgeConfig
 import com.tenmilelabs.domain.service.SoftDeletePurgeService
@@ -40,6 +41,7 @@ fun Application.module(
         },
         log = log,
     ),
+    mealPlanGenerationService: MealPlanGenerationService? = null,
     configureDatabase: Boolean = true,
 ) {
     val recipeRepository = recipeRepository
@@ -57,6 +59,12 @@ fun Application.module(
     val softDeletePurgeService = SoftDeletePurgeService(recipeRepository, log)
     val syncService = SyncService(syncRepository, log)
 
+    val resolvedMealPlanGenerationService = mealPlanGenerationService ?: run {
+        val generationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        monitor.subscribe(ApplicationStopping) { generationScope.cancel() }
+        MealPlanGenerationService(syncRepository, generationScope, log)
+    }
+
     // Set up plugins
     if (configureDatabase) {
         configureDatabases()
@@ -68,6 +76,7 @@ fun Application.module(
         authService = authService,
         syncService = syncService,
         homeLayoutService = homeLayoutService,
+        mealPlanGenerationService = resolvedMealPlanGenerationService,
     )
 
     val purgeConfig = softDeletePurgeConfig()
