@@ -6,9 +6,10 @@ import org.jsoup.nodes.Document
 class MetaTagExtractor {
 
     fun extract(document: Document, sourceUrl: String): ExtractedRecipe? {
+        // Require at least title from structured meta tags (og: or twitter:)
+        // Don't fall back to generic <title> — too many false positives
         val title = metaContent(document, "og:title")
             ?: metaContent(document, "twitter:title")
-            ?: document.title().takeIf { it.isNotBlank() }
             ?: return null
 
         val description = metaContent(document, "og:description")

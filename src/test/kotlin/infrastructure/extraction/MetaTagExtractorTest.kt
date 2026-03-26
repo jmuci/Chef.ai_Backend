@@ -48,19 +48,19 @@ class MetaTagExtractorTest {
     }
 
     @Test
-    fun fallsBackToTitleTag() {
+    fun returnsNullWithoutStructuredMetaTags() {
+        // Even with <title> and standard meta description, if there's no og: or twitter: tags,
+        // it's likely not a recipe page (too many false positives like google.com)
         val html = """
         <html><head>
-            <title>My Recipe Page</title>
+            <title>My Page</title>
             <meta name="description" content="A description">
         </head><body></body></html>
         """.trimIndent()
 
         val result = extractor.extract(Jsoup.parse(html), sourceUrl)
 
-        assertNotNull(result)
-        assertEquals("My Recipe Page", result.title)
-        assertEquals("A description", result.description)
+        assertNull(result)
     }
 
     @Test
