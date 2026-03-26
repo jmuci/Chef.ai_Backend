@@ -22,6 +22,7 @@ Core architecture and protocol documentation:
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
 | [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, caching and ETag behavior |
+| [Recipe Extraction](docs/recipe-extraction.md) | Deterministic recipe scraping from URLs (JSON-LD, Microdata, Meta tags) |
 
 ## Features
 
