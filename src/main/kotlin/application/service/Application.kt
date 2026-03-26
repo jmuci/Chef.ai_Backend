@@ -1,10 +1,12 @@
 package com.tenmilelabs.application.service
 
+import com.tenmilelabs.domain.extraction.RecipeExtractor
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.JwtService
+import com.tenmilelabs.domain.service.RecipeExtractionService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SoftDeletePurgeConfig
 import com.tenmilelabs.domain.service.SoftDeletePurgeService
@@ -16,6 +18,11 @@ import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRefreshTok
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresSyncRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresUserRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
+import com.tenmilelabs.infrastructure.extraction.HtmlFetcher
+import com.tenmilelabs.infrastructure.extraction.JsonLdExtractor
+import com.tenmilelabs.infrastructure.extraction.JsoupRecipeExtractor
+import com.tenmilelabs.infrastructure.extraction.MetaTagExtractor
+import com.tenmilelabs.infrastructure.extraction.MicrodataExtractor
 import com.tenmilelabs.domain.repository.UserRepository
 import com.tenmilelabs.presentation.routes.configureRouting
 import io.ktor.server.application.*
@@ -40,6 +47,9 @@ fun Application.module(
         },
         log = log,
     ),
+    recipeExtractor: RecipeExtractor = JsoupRecipeExtractor(
+        HtmlFetcher(), JsonLdExtractor(), MicrodataExtractor(), MetaTagExtractor()
+    ),
     configureDatabase: Boolean = true,
 ) {
     val recipeRepository = recipeRepository
@@ -56,6 +66,7 @@ fun Application.module(
     val recipesService = RecipesService(recipeRepository, log)
     val softDeletePurgeService = SoftDeletePurgeService(recipeRepository, log)
     val syncService = SyncService(syncRepository, log)
+    val extractionService = RecipeExtractionService(recipeExtractor, log)
 
     // Set up plugins
     if (configureDatabase) {
@@ -68,6 +79,7 @@ fun Application.module(
         authService = authService,
         syncService = syncService,
         homeLayoutService = homeLayoutService,
+        extractionService = extractionService,
     )
 
     val purgeConfig = softDeletePurgeConfig()

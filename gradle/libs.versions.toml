@@ -8,6 +8,7 @@ ktor = "3.2.3"
 logback = "1.5.13"
 postgres-version = "42.7.4"
 bcrypt-version = "0.10.2"
+jsoup-version = "1.18.3"
 
 
 [libraries]
@@ -40,6 +41,7 @@ junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", vers
 
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
 bcrypt = { module = "at.favre.lib:bcrypt", version.ref = "bcrypt-version" }
+jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup-version" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }

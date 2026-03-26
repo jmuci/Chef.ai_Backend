@@ -7,6 +7,7 @@ import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.RecipesService
+import com.tenmilelabs.domain.service.RecipeExtractionService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
 import io.ktor.http.*
@@ -34,6 +35,7 @@ fun Application.configureRouting(
     authService: AuthService,
     syncService: SyncService,
     homeLayoutService: HomeLayoutService,
+    extractionService: RecipeExtractionService,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -79,6 +81,7 @@ fun Application.configureRouting(
         authenticate("auth-jwt") {
             homeRoutes(homeLayoutService)
             syncRoutes(syncService)
+            extractionRoutes(extractionService)
             route("/recipes") {
 
                 get {
