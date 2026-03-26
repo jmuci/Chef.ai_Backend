@@ -74,10 +74,10 @@ fun Application.configureRouting(
         }
         // Public authentication routes
         authRoutes(authService)
-        homeRoutes(homeLayoutService)
 
         // Protected routes - require authentication
         authenticate("auth-jwt") {
+            homeRoutes(homeLayoutService)
             syncRoutes(syncService)
             route("/recipes") {
 
@@ -97,10 +97,6 @@ fun Application.configureRouting(
                     handleDeleteRecipe(call, log, recipesService)
                 }
             }
-        }
-
-        get("/error-test") {
-            throw IllegalStateException("Too Busy")
         }
     }
 }
