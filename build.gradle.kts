@@ -52,6 +52,9 @@ dependencies {
     // Security
     implementation(libs.bcrypt)
 
+    // HTML parsing
+    implementation(libs.jsoup)
+
     // Tests
     testImplementation(libs.json.path)
     testImplementation(libs.ktor.client.content.negotiation)

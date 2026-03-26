@@ -1,0 +1,48 @@
+package com.tenmilelabs.infrastructure.extraction
+
+import com.tenmilelabs.domain.model.ExtractedRecipe
+import org.jsoup.nodes.Document
+
+class MetaTagExtractor {
+
+    fun extract(document: Document, sourceUrl: String): ExtractedRecipe? {
+        // Require at least title from structured meta tags (og: or twitter:)
+        // Don't fall back to generic <title> — too many false positives
+        val title = metaContent(document, "og:title")
+            ?: metaContent(document, "twitter:title")
+            ?: return null
+
+        val description = metaContent(document, "og:description")
+            ?: metaContent(document, "twitter:description")
+            ?: metaContent(document, "description")
+
+        // Last-resort: only title and description, no structured recipe data
+        return ExtractedRecipe(
+            title = title,
+            description = description,
+            servings = null,
+            prepTimeMinutes = null,
+            cookTimeMinutes = null,
+            totalTimeMinutes = null,
+            ingredients = emptyList(),
+            steps = emptyList(),
+            tags = emptyList(),
+            yieldAmount = null,
+            sourceUrl = sourceUrl
+        )
+    }
+
+    private fun metaContent(document: Document, name: String): String? {
+        // Try property attribute (Open Graph)
+        val byProperty = document.selectFirst("meta[property=$name]")
+        if (byProperty != null) {
+            return byProperty.attr("content").ifBlank { null }
+        }
+        // Try name attribute (standard meta, twitter)
+        val byName = document.selectFirst("meta[name=$name]")
+        if (byName != null) {
+            return byName.attr("content").ifBlank { null }
+        }
+        return null
+    }
+}

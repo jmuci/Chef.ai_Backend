@@ -145,6 +145,24 @@ Bookmark errors are **per-item** — other bookmarks and all recipes in the same
 
 ---
 
+## Extraction Exceptions
+
+```kotlin
+sealed class ExtractionException(message: String) : Exception(message)
+
+├── InvalidUrlException              // 400 Bad Request
+├── FetchFailedException             // 502 Bad Gateway
+└── NoRecipeDataException            // 422 Unprocessable Entity
+```
+
+| Exception | HTTP Status | When |
+|-----------|-------------|------|
+| `InvalidUrlException` | 400 Bad Request | URL blank, malformed, non-HTTP scheme, or missing host |
+| `FetchFailedException` | 502 Bad Gateway | Target site returned error, timed out, or unreachable |
+| `NoRecipeDataException` | 422 Unprocessable Entity | Page fetched but contains no structured recipe data |
+
+See [Recipe Extraction](recipe-extraction.md) for full endpoint documentation.
+
 ## Future Enhancements
 
 - Custom exception handler plugin for consistent error responses
