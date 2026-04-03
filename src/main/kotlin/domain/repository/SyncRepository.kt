@@ -1,6 +1,8 @@
 package com.tenmilelabs.domain.repository
 
 import com.tenmilelabs.application.dto.SyncBookmark
+import com.tenmilelabs.application.dto.SyncMealPlanDto
+import com.tenmilelabs.application.dto.SyncMealPlanDayDto
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncUser
@@ -9,6 +11,11 @@ import java.util.UUID
 
 data class SyncRecipeRecord(
     val recipe: SyncRecipe,
+    val serverUpdatedAtMillis: Long
+)
+
+data class SyncMealPlanRecord(
+    val plan: SyncMealPlanDto,
     val serverUpdatedAtMillis: Long
 )
 
@@ -126,4 +133,58 @@ interface SyncRepository {
      * Includes tombstones (deleted_at non-null) so the client can handle removals.
      */
     suspend fun findDeltaBookmarks(userId: UUID, sinceMillis: Long): List<SyncBookmark>
+
+    // ── Meal Plans ────────────────────────────────────────────────────────────
+
+    /**
+     * Loads a single meal plan by [uuid] scoped to [userId].
+     * Returns null if not found or owned by a different user.
+     */
+    suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord?
+
+    /**
+     * Upserts a meal plan using last-writer-wins semantics on [updated_at].
+     * Replaces all [meal_plan_days] rows atomically (delete + re-insert).
+     * When [plan.deletedAt] is non-null the plan is soft-deleted.
+     */
+    suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant)
+
+    /**
+     * Returns meal plans for [userId] whose [server_updated_at] is after [sinceMillis].
+     * Includes soft-deleted plans (deletedAt non-null) so the client can tombstone them.
+     * Days are nested inside each returned plan.
+     */
+    suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord>
+
+    /**
+     * Sets the [status] field and bumps [server_updated_at] on the given plan.
+     * Used by the generation pipeline to transition DRAFT → GENERATING → READY.
+     */
+    suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant)
+
+    /**
+     * Replaces all day rows for [planId] atomically.
+     * Used by the generation pipeline after recipe assignment is complete.
+     */
+    suspend fun replaceMealPlanDays(planId: UUID, days: List<SyncMealPlanDayDto>)
+
+    /**
+     * Returns recipe UUIDs that are candidates for meal plan generation given
+     * the provided filter criteria.
+     *
+     * [recipeSource] — "COLLECTION_ONLY" limits to bookmarked recipes; "INCLUDE_PUBLIC"
+     * includes all recipes owned by [userId] or marked PUBLIC.
+     *
+     * [dietaryRestrictionTags] — tag display names (e.g. "VEGAN", "GLUTEN_FREE") that
+     * a candidate recipe must ALL be tagged with. Empty list means no restriction.
+     *
+     * [maxPrepTimeMinutes] — upper bound on prep_time_minutes + cook_time_minutes.
+     * Null means no time constraint.
+     */
+    suspend fun findCandidateRecipeIds(
+        userId: UUID,
+        recipeSource: String,
+        dietaryRestrictionTags: List<String>,
+        maxPrepTimeMinutes: Int?
+    ): List<UUID>
 }

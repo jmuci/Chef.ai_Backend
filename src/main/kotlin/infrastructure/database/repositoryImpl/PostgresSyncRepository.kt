@@ -1,16 +1,7 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
-import com.tenmilelabs.application.dto.SyncAllergen
-import com.tenmilelabs.application.dto.SyncBookmark
-import com.tenmilelabs.application.dto.SyncIngredient
-import com.tenmilelabs.application.dto.SyncLabel
-import com.tenmilelabs.application.dto.SyncRecipe
-import com.tenmilelabs.application.dto.SyncRecipeIngredient
-import com.tenmilelabs.application.dto.SyncRecipeStep
-import com.tenmilelabs.application.dto.SyncReferenceData
-import com.tenmilelabs.application.dto.SyncSourceClassification
-import com.tenmilelabs.application.dto.SyncTag
-import com.tenmilelabs.application.dto.SyncUser
+import com.tenmilelabs.application.dto.*
+import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
@@ -454,6 +445,198 @@ class PostgresSyncRepository : SyncRepository {
                     deletedAt = row[BookmarkedRecipeTable.deleted_at]?.toEpochMilliseconds()
                 )
             }
+    }
+
+    // ── Meal Plans ────────────────────────────────────────────────────────────
+
+    override suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord? = suspendTransaction {
+        val planRow = MealPlanTable
+            .selectAll()
+            .where {
+                (MealPlanTable.id eq uuid) and (MealPlanTable.user_id eq EntityID(userId, UserTable))
+            }
+            .firstOrNull() ?: return@suspendTransaction null
+        toSyncMealPlanRecord(planRow)
+    }
+
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant) =
+        suspendTransaction {
+            val planUuid = UUID.fromString(plan.uuid)
+            val planEntityId = EntityID(planUuid, MealPlanTable)
+
+            val exists = MealPlanTable
+                .selectAll()
+                .where { MealPlanTable.id eq planUuid }
+                .limit(1)
+                .any()
+
+            if (exists) {
+                MealPlanTable.update({ MealPlanTable.id eq planUuid }) {
+                    it[name] = plan.name
+                    it[status] = plan.status
+                    it[preferences] = plan.preferencesJson
+                    it[updated_at] = plan.updatedAt
+                    it[deleted_at] = plan.deletedAt
+                    it[MealPlanTable.server_updated_at] = serverUpdatedAt
+                }
+            } else {
+                MealPlanTable.insert {
+                    it[id] = planEntityId
+                    it[user_id] = EntityID(userId, UserTable)
+                    it[name] = plan.name
+                    it[status] = plan.status
+                    it[preferences] = plan.preferencesJson
+                    it[created_at] = plan.createdAt
+                    it[updated_at] = plan.updatedAt
+                    it[deleted_at] = plan.deletedAt
+                    it[MealPlanTable.server_updated_at] = serverUpdatedAt
+                }
+            }
+
+            // Replace days atomically
+            MealPlanDayTable.deleteWhere { MealPlanDayTable.meal_plan_id eq planEntityId }
+            plan.days.forEach { day ->
+                MealPlanDayTable.insert {
+                    it[MealPlanDayTable.id] = EntityID(UUID.fromString(day.uuid), MealPlanDayTable)
+                    it[meal_plan_id] = planEntityId
+                    it[day_index] = day.dayIndex
+                    it[dinner_recipe_id] = day.dinnerRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+                    it[lunch_recipe_id] = day.lunchRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+                }
+            }
+        }
+
+    override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
+        suspendTransaction {
+            val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+            MealPlanTable
+                .selectAll()
+                .where {
+                    (MealPlanTable.user_id eq EntityID(userId, UserTable)) and
+                        (MealPlanTable.server_updated_at greater sinceInstant)
+                }
+                .orderBy(MealPlanTable.server_updated_at to SortOrder.ASC)
+                .map(::toSyncMealPlanRecord)
+        }
+
+    override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant): Unit =
+        suspendTransaction {
+            MealPlanTable.update({ MealPlanTable.id eq planId }) {
+                it[MealPlanTable.status] = status
+                it[MealPlanTable.server_updated_at] = serverUpdatedAt
+            }
+        }
+
+    override suspend fun replaceMealPlanDays(planId: UUID, days: List<SyncMealPlanDayDto>): Unit =
+        suspendTransaction {
+            val planEntityId = EntityID(planId, MealPlanTable)
+            MealPlanDayTable.deleteWhere { MealPlanDayTable.meal_plan_id eq planEntityId }
+            days.forEach { day ->
+                MealPlanDayTable.insert {
+                    it[MealPlanDayTable.id] = EntityID(UUID.fromString(day.uuid), MealPlanDayTable)
+                    it[meal_plan_id] = planEntityId
+                    it[day_index] = day.dayIndex
+                    it[dinner_recipe_id] = day.dinnerRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+                    it[lunch_recipe_id] = day.lunchRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+                }
+            }
+        }
+
+    override suspend fun findCandidateRecipeIds(
+        userId: UUID,
+        recipeSource: String,
+        dietaryRestrictionTags: List<String>,
+        maxPrepTimeMinutes: Int?
+    ): List<UUID> = suspendTransaction {
+        // Step 1: Resolve tag IDs for dietary restrictions (match by display_name, case-insensitive)
+        val restrictionTagIds: List<EntityID<UUID>> = if (dietaryRestrictionTags.isEmpty()) {
+            emptyList()
+        } else {
+            val upperNames = dietaryRestrictionTags.map { it.uppercase() }
+            TagTable.selectAll()
+                .where { TagTable.display_name.upperCase() inList upperNames }
+                .map { it[TagTable.id] }
+        }
+
+        // Step 2: Build the base set of accessible recipe IDs per recipeSource
+        val accessibleIds: Set<UUID> = when (recipeSource) {
+            "COLLECTION_ONLY" -> BookmarkedRecipeTable
+                .selectAll()
+                .where {
+                    (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
+                        BookmarkedRecipeTable.deleted_at.isNull()
+                }
+                .map { it[BookmarkedRecipeTable.recipe_id].value }
+                .toSet()
+            else -> RecipeTable
+                .selectAll()
+                .where {
+                    (RecipeTable.deleted_at.isNull()) and
+                        ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
+                }
+                .map { it[RecipeTable.id].value }
+                .toSet()
+        }
+
+        if (accessibleIds.isEmpty()) return@suspendTransaction emptyList()
+
+        // Step 3: Intersect with dietary restriction tag filters (AND logic — must have ALL tags)
+        var candidateIds = accessibleIds
+        for (tagEntityId in restrictionTagIds) {
+            val taggedIds = RecipeTagTable
+                .selectAll()
+                .where { RecipeTagTable.tagId eq tagEntityId }
+                .map { it[RecipeTagTable.recipeId].value }
+                .toSet()
+            candidateIds = candidateIds.intersect(taggedIds)
+            if (candidateIds.isEmpty()) return@suspendTransaction emptyList()
+        }
+
+        // Step 4: Apply time constraint
+        if (maxPrepTimeMinutes == null) {
+            candidateIds.toList()
+        } else {
+            val entityIds = candidateIds.map { EntityID(it, RecipeTable) }
+            RecipeTable
+                .selectAll()
+                .where {
+                    (RecipeTable.id inList entityIds) and
+                        ((RecipeTable.prep_time_minutes + RecipeTable.cook_time_minutes) lessEq maxPrepTimeMinutes)
+                }
+                .map { it[RecipeTable.id].value }
+        }
+    }
+
+    private fun toSyncMealPlanRecord(planRow: ResultRow): SyncMealPlanRecord {
+        val planId = planRow[MealPlanTable.id].value
+        val planEntityId = EntityID(planId, MealPlanTable)
+
+        val days = MealPlanDayTable
+            .selectAll()
+            .where { MealPlanDayTable.meal_plan_id eq planEntityId }
+            .orderBy(MealPlanDayTable.day_index to SortOrder.ASC)
+            .map { dayRow ->
+                SyncMealPlanDayDto(
+                    uuid = dayRow[MealPlanDayTable.id].value.toString(),
+                    dayIndex = dayRow[MealPlanDayTable.day_index],
+                    dinnerRecipeId = dayRow[MealPlanDayTable.dinner_recipe_id]?.value?.toString(),
+                    lunchRecipeId = dayRow[MealPlanDayTable.lunch_recipe_id]?.value?.toString()
+                )
+            }
+
+        return SyncMealPlanRecord(
+            plan = SyncMealPlanDto(
+                uuid = planId.toString(),
+                name = planRow[MealPlanTable.name],
+                status = planRow[MealPlanTable.status],
+                preferencesJson = planRow[MealPlanTable.preferences],
+                createdAt = planRow[MealPlanTable.created_at],
+                updatedAt = planRow[MealPlanTable.updated_at],
+                deletedAt = planRow[MealPlanTable.deleted_at],
+                days = days
+            ),
+            serverUpdatedAtMillis = planRow[MealPlanTable.server_updated_at].toEpochMilliseconds()
+        )
     }
 
     /**

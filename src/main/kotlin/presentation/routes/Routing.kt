@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
+import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
@@ -34,6 +35,7 @@ fun Application.configureRouting(
     authService: AuthService,
     syncService: SyncService,
     homeLayoutService: HomeLayoutService,
+    mealPlanGenerationService: MealPlanGenerationService,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -79,6 +81,7 @@ fun Application.configureRouting(
         authenticate("auth-jwt") {
             homeRoutes(homeLayoutService)
             syncRoutes(syncService)
+            mealPlanRoutes(mealPlanGenerationService)
             route("/recipes") {
 
                 get {
