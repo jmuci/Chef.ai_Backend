@@ -1,15 +1,18 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.application.dto.*
+import com.tenmilelabs.domain.repository.RecipeRankingMetadata
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
+import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.*
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
 import java.util.*
 
 class PostgresSyncRepository : SyncRepository {
@@ -634,6 +637,90 @@ class PostgresSyncRepository : SyncRepository {
                 .map { it[RecipeTable.id].value }
         }
     }
+
+    override suspend fun findRecipeRankingMetadata(recipeIds: Set<UUID>): Map<UUID, RecipeRankingMetadata> =
+        suspendTransaction {
+            if (recipeIds.isEmpty()) return@suspendTransaction emptyMap()
+            val entityIds = recipeIds.map { EntityID(it, RecipeTable) }
+
+            val servingsByRecipe = RecipeTable
+                .selectAll()
+                .where { RecipeTable.id inList entityIds }
+                .associate { it[RecipeTable.id].value to it[RecipeTable.servings] }
+
+            // Manual multi-step join (not a typed Exposed join): IngredientTable.source_primary_id
+            // is a plain uuid() column, not a reference(), so it can't be compared directly against
+            // SourceClassificationTable.id in the DSL.
+            val ingredientRowsByRecipe = RecipeIngredientTable
+                .selectAll()
+                .where { (RecipeIngredientTable.recipeId inList entityIds) and RecipeIngredientTable.deletedAt.isNull() }
+                .map { it[RecipeIngredientTable.recipeId].value to it[RecipeIngredientTable.ingredientId].value }
+                .groupBy({ it.first }, { it.second })
+
+            val allIngredientIds = ingredientRowsByRecipe.values.flatten().toSet()
+            val categoryByIngredientId = if (allIngredientIds.isEmpty()) {
+                emptyMap()
+            } else {
+                val ingredientEntityIds = allIngredientIds.map { EntityID(it, IngredientTable) }
+                val sourceIdByIngredientId = IngredientTable
+                    .selectAll()
+                    .where { IngredientTable.id inList ingredientEntityIds }
+                    .mapNotNull { row ->
+                        row[IngredientTable.source_primary_id]?.let { row[IngredientTable.id].value to it }
+                    }
+                    .toMap()
+
+                val sourceIds = sourceIdByIngredientId.values.toSet()
+                val categoryBySourceId = if (sourceIds.isEmpty()) {
+                    emptyMap()
+                } else {
+                    SourceClassificationTable
+                        .selectAll()
+                        .where { SourceClassificationTable.id inList sourceIds.map { EntityID(it, SourceClassificationTable) } }
+                        .associate { it[SourceClassificationTable.id].value to it[SourceClassificationTable.category] }
+                }
+
+                sourceIdByIngredientId.mapNotNull { (ingredientId, sourceId) ->
+                    categoryBySourceId[sourceId]?.let { ingredientId to it }
+                }.toMap()
+            }
+
+            recipeIds.associateWith { recipeId ->
+                val categories = ingredientRowsByRecipe[recipeId].orEmpty().mapNotNull { categoryByIngredientId[it] }
+                val counts = categories.groupingBy { it }.eachCount()
+                val maxCount = counts.values.maxOrNull()
+                // Ties broken alphabetically for determinism.
+                val dominantCategory = counts.filterValues { it == maxCount }.keys.minOrNull()
+
+                RecipeRankingMetadata(
+                    servings = servingsByRecipe[recipeId] ?: 0,
+                    dominantCategory = dominantCategory
+                )
+            }
+        }
+
+    override suspend fun findRecentlyUsedRecipeIds(userId: UUID, excludePlanId: UUID, limit: Int): Set<UUID> =
+        suspendTransaction {
+            val recentPlanIds = MealPlanTable
+                .selectAll()
+                .where {
+                    (MealPlanTable.user_id eq EntityID(userId, UserTable)) and
+                        (MealPlanTable.status eq MealPlanGenerationService.STATUS_READY) and
+                        (MealPlanTable.deleted_at.isNull()) and
+                        (MealPlanTable.id neq EntityID(excludePlanId, MealPlanTable))
+                }
+                .orderBy(MealPlanTable.created_at to SortOrder.DESC)
+                .limit(limit)
+                .map { it[MealPlanTable.id] }
+
+            if (recentPlanIds.isEmpty()) return@suspendTransaction emptySet()
+
+            MealPlanDayTable
+                .selectAll()
+                .where { MealPlanDayTable.meal_plan_id inList recentPlanIds }
+                .flatMap { row -> listOfNotNull(row[MealPlanDayTable.dinner_recipe_id]?.value, row[MealPlanDayTable.lunch_recipe_id]?.value) }
+                .toSet()
+        }
 
     /** Uppercases and folds spaces/hyphens to underscore, so "Gluten-Free" and "GLUTEN_FREE" compare equal. */
     private fun normalizeDietaryToken(raw: String): String =

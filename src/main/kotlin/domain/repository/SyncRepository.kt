@@ -188,4 +188,24 @@ interface SyncRepository {
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?
     ): List<UUID>
+
+    /**
+     * Batched ranking metadata for [recipeIds], used by [assignRecipesToDays][com.tenmilelabs.domain.service.MealPlanGenerationService]
+     * to bias day assignment. [RecipeRankingMetadata.dominantCategory] is the mode (most frequent,
+     * ties broken alphabetically) of [SourceClassificationTable.category] across a recipe's
+     * classified ingredients — null when none of its ingredients are classified.
+     */
+    suspend fun findRecipeRankingMetadata(recipeIds: Set<UUID>): Map<UUID, RecipeRankingMetadata>
+
+    /**
+     * Recipe UUIDs (dinner or lunch) assigned across [userId]'s last [limit] `READY` meal plans,
+     * excluding [excludePlanId] (the plan currently being generated) and soft-deleted plans.
+     * Used to softly deprioritize — never hard-exclude — recently-served recipes in a new plan.
+     */
+    suspend fun findRecentlyUsedRecipeIds(userId: UUID, excludePlanId: UUID, limit: Int): Set<UUID>
 }
+
+data class RecipeRankingMetadata(
+    val servings: Int,
+    val dominantCategory: String?
+)

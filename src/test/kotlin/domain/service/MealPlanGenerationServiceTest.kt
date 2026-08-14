@@ -1,5 +1,6 @@
 package domain.service
 
+import com.tenmilelabs.domain.repository.RecipeRankingMetadata
 import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.MealPlanPreferences
 import com.tenmilelabs.domain.service.MealType
@@ -186,6 +187,109 @@ class MealPlanGenerationServiceTest {
         assertEquals(days[2].dinnerRecipeId, days[3].dinnerRecipeId)
     }
 
+    // ── Phase 4: ranking signals ─────────────────────────────────────────────
+
+    @Test
+    fun `leftoverFriendly favors the higher-servings candidate on the first pick`() {
+        val service = makeService(FakeSyncRepository())
+        val bigServings = UUID.randomUUID()
+        val smallServingsCandidates = (1..3).map { UUID.randomUUID() }
+        val candidates = listOf(bigServings) + smallServingsCandidates
+        val rankingMetadata = mapOf(bigServings to RecipeRankingMetadata(servings = 6, dominantCategory = null)) +
+            smallServingsCandidates.associateWith { RecipeRankingMetadata(servings = 1, dominantCategory = null) }
+        val prefs = defaultPrefs(planLengthDays = 1, variety = VarietyPreference.HIGH, leftoverFriendly = true)
+            .copy(servingsPerMeal = 2)
+
+        val days = service.assignRecipesToDays(candidates, prefs, rankingMetadata)
+
+        assertEquals(bigServings.toString(), days.single().dinnerRecipeId)
+    }
+
+    @Test
+    fun `dominant category is not repeated on the next day when a different-category candidate exists`() {
+        val service = makeService(FakeSyncRepository())
+        val meatA = UUID.randomUUID()
+        val meatB = UUID.randomUUID()
+        val vegA = UUID.randomUUID()
+        val vegB = UUID.randomUUID()
+        val candidates = listOf(meatA, meatB, vegA, vegB)
+        val rankingMetadata = mapOf(
+            meatA to RecipeRankingMetadata(servings = 2, dominantCategory = "Meat"),
+            meatB to RecipeRankingMetadata(servings = 2, dominantCategory = "Meat"),
+            vegA to RecipeRankingMetadata(servings = 2, dominantCategory = "Vegetable"),
+            vegB to RecipeRankingMetadata(servings = 2, dominantCategory = "Vegetable")
+        )
+        val prefs = defaultPrefs(planLengthDays = 2, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(candidates, prefs, rankingMetadata)
+
+        val day0Category = rankingMetadata[UUID.fromString(days[0].dinnerRecipeId)]?.dominantCategory
+        val day1Category = rankingMetadata[UUID.fromString(days[1].dinnerRecipeId)]?.dominantCategory
+        assertTrue(day0Category != day1Category, "Expected day 1 to avoid day 0's dominant category")
+    }
+
+    @Test
+    fun `dominant category repetition is soft, never leaving a slot empty`() {
+        val service = makeService(FakeSyncRepository())
+        val recipeA = UUID.randomUUID()
+        val recipeB = UUID.randomUUID()
+        val rankingMetadata = mapOf(
+            recipeA to RecipeRankingMetadata(servings = 2, dominantCategory = "Meat"),
+            recipeB to RecipeRankingMetadata(servings = 2, dominantCategory = "Meat")
+        )
+        val prefs = defaultPrefs(planLengthDays = 2, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(listOf(recipeA, recipeB), prefs, rankingMetadata)
+
+        assertTrue(days.all { it.dinnerRecipeId != null })
+    }
+
+    @Test
+    fun `recentlyUsedElsewhere is deprioritized when an alternative exists`() {
+        val service = makeService(FakeSyncRepository())
+        val recentlyUsed = UUID.randomUUID()
+        val freshCandidates = (1..2).map { UUID.randomUUID() }
+        val prefs = defaultPrefs(planLengthDays = 1, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(
+            listOf(recentlyUsed) + freshCandidates,
+            prefs,
+            recentlyUsedElsewhere = setOf(recentlyUsed)
+        )
+
+        assertTrue(days.single().dinnerRecipeId != recentlyUsed.toString())
+    }
+
+    @Test
+    fun `recentlyUsedElsewhere is used rather than leaving a slot empty when it's the only candidate`() {
+        val service = makeService(FakeSyncRepository())
+        val onlyCandidate = UUID.randomUUID()
+        val prefs = defaultPrefs(planLengthDays = 1, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(
+            listOf(onlyCandidate),
+            prefs,
+            recentlyUsedElsewhere = setOf(onlyCandidate)
+        )
+
+        assertEquals(onlyCandidate.toString(), days.single().dinnerRecipeId)
+    }
+
+    @Test
+    fun `LOW variety ignores category and recency ranking, staying pure round-robin`() {
+        val service = makeService(FakeSyncRepository())
+        val candidates = listOf(UUID.randomUUID(), UUID.randomUUID())
+        val rankingMetadata = candidates.associateWith { RecipeRankingMetadata(servings = 2, dominantCategory = "Meat") }
+        val prefs = defaultPrefs(planLengthDays = 4, variety = VarietyPreference.LOW)
+
+        val days = service.assignRecipesToDays(candidates, prefs, rankingMetadata, recentlyUsedElsewhere = setOf(candidates[0]))
+
+        // Pure round-robin over 2 candidates across 4 days: index 0,1,0,1 of the same base order.
+        assertEquals(days[0].dinnerRecipeId, days[2].dinnerRecipeId)
+        assertEquals(days[1].dinnerRecipeId, days[3].dinnerRecipeId)
+        assertTrue(days.all { it.dinnerRecipeId != null })
+    }
+
     @Test
     fun `empty candidates returns days with all null slots`() {
         val service = makeService(FakeSyncRepository())
@@ -235,7 +339,8 @@ class MealPlanGenerationServiceTest {
         planLengthDays: Int = 5,
         mealType: MealType = MealType.DINNER,
         variety: VarietyPreference = VarietyPreference.HIGH,
-        batchCooking: Boolean = false
+        batchCooking: Boolean = false,
+        leftoverFriendly: Boolean = false
     ) = MealPlanPreferences(
         planLengthDays = planLengthDays,
         mealType = mealType,
@@ -244,7 +349,7 @@ class MealPlanGenerationServiceTest {
         maxPrepTimeMinutes = null,
         servingsPerMeal = 2,
         batchCooking = batchCooking,
-        leftoverFriendly = false,
+        leftoverFriendly = leftoverFriendly,
         varietyPreference = variety
     )
 
