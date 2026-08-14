@@ -18,4 +18,6 @@ object RecipeTable : UUIDTable("recipes", "uuid") {
     val updated_at = long("updated_at")
     val deleted_at = long("deleted_at").nullable()
     val server_updated_at = timestamp("server_updated_at").index()
+    /** Content hash of the blob in [ImageBlobTable], not a foreign key — see ADR-011 Stage 2. */
+    val image_blob_id = text("image_blob_id").nullable()
 }

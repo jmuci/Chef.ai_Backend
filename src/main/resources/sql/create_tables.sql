@@ -111,11 +111,34 @@ CREATE TABLE IF NOT EXISTS recipes (
     updated_at          BIGINT NOT NULL,
     deleted_at          BIGINT,
     server_updated_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    image_blob_id       TEXT,
     CONSTRAINT fk_recipes_creator FOREIGN KEY (creator_id) REFERENCES users(uuid) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_recipes_creator_id        ON recipes(creator_id);
 CREATE INDEX IF NOT EXISTS idx_recipes_server_updated_at ON recipes(server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_recipes_deleted_at_not_null ON recipes(deleted_at) WHERE deleted_at IS NOT NULL;
+
+-- ===============================
+-- IMAGE_BLOBS
+-- ===============================
+-- Recipe hero image bytes, scoped per-user (not deduplicated across users).
+-- recipes.image_blob_id stores the content_hash directly (an opaque change-token),
+-- not a foreign key to this table's id — see docs/prompts/recipe-image-upload-backend-prompt.md.
+CREATE TABLE IF NOT EXISTS image_blobs (
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id             UUID    NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    content_hash        TEXT    NOT NULL,
+    provenance          TEXT    NOT NULL,
+    mime_type           TEXT    NOT NULL,
+    byte_size           BIGINT  NOT NULL,
+    storage_key         TEXT    NOT NULL,
+    created_at          BIGINT  NOT NULL,
+    unreferenced_since  BIGINT  NULL,
+    UNIQUE (user_id, content_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_image_blobs_user_id            ON image_blobs(user_id);
+CREATE INDEX IF NOT EXISTS idx_image_blobs_unreferenced_since ON image_blobs(unreferenced_since)
+    WHERE unreferenced_since IS NOT NULL;
 
 -- ===============================
 -- RECIPE_INGREDIENTS
