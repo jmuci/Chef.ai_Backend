@@ -46,7 +46,7 @@ fun Route.recipeImageRoutes(recipeImageService: RecipeImageService, config: Imag
                 }
 
                 // Enforced while streaming so an oversized body is never buffered in full —
-                // see docs/prompts/recipe-image-upload-backend-prompt.md §3a check 4.
+                // see docs/recipe-image-architecture.md § Upload Flow, validation order.
                 val bytes = readBodyCapped(call.receiveChannel(), config.maxUploadBytes)
                 if (bytes == null) {
                     call.respond(HttpStatusCode.PayloadTooLarge, ErrorResponse("Image exceeds maximum upload size"))
