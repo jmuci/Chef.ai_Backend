@@ -167,6 +167,7 @@ fun pullIncludesGapTagReferencedByReturnedRecipe() = testApplication {
 - `docs/auth-architecture.md` — JWT, refresh tokens, auth flow
 - `docs/auth-quick-start.md` — Quick endpoint reference
 - `docs/exception-handling.md` — Error codes and patterns
+- `docs/recipe-image-architecture.md` — Recipe hero image blob upload/serving/reclamation: class diagram, upload/serve sequence diagrams, error states, app startup changes
 - `README.md` — Quick start, smoke tests, build commands
 
 ---
@@ -387,11 +388,12 @@ src/test/kotlin/
 └── infrastructure/database/ ← Fake repositories
 
 docs/
-├── sync-protocol.md         ← Cursor-based sync, conflicts, examples
-├── auth-architecture.md     ← JWT, refresh, auth flow
-├── auth-quick-start.md      ← Endpoint reference
-├── exception-handling.md    ← Error codes
-└── README.md                ← Build, run, smoke tests
+├── sync-protocol.md            ← Cursor-based sync, conflicts, examples
+├── auth-architecture.md        ← JWT, refresh, auth flow
+├── auth-quick-start.md         ← Endpoint reference
+├── exception-handling.md       ← Error codes
+├── recipe-image-architecture.md ← Image blob upload/serving/reclamation, diagrams
+└── README.md                   ← Build, run, smoke tests
 ```
 
 ---

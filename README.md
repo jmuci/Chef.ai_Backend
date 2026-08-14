@@ -22,6 +22,7 @@ Core architecture and protocol documentation:
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
 | [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, caching and ETag behavior |
+| [Recipe Image Architecture](docs/recipe-image-architecture.md) | Recipe hero image blob upload/serving/reclamation — class diagram, upload/serve sequence diagrams, error states, app startup changes |
 
 ## Features
 
@@ -150,6 +151,41 @@ Expected outcomes:
 - Validate pull pagination behavior (`limit`, `hasMore`, `serverTimestamp` cursor).
 - Validate pull includes bookmark deltas and tombstones alongside recipe deltas.
 
+### Recipe Image Smoke Test
+
+See [Recipe Image Architecture](docs/recipe-image-architecture.md) for the full flow, error
+states, and diagrams. Quick manual check against a running server:
+
+1. Push a recipe (reuse step 2 of the [Sync Endpoints Smoke Test](#sync-endpoints-smoke-test) above), then upload an image for it:
+```bash
+IMAGE_BYTES=$(printf '\xff\xd8\xff\xe0\x00\x10JFIF')
+HASH=$(printf '%s' "$IMAGE_BYTES" | shasum -a 256 | cut -d' ' -f1)
+curl -s -X PUT "http://localhost:8080/recipes/11111111-1111-1111-1111-111111111111/image" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: image/jpeg" \
+  -H "X-Content-SHA256: $HASH" \
+  --data-binary "$IMAGE_BYTES"
+```
+
+2. Fetch it back:
+```bash
+curl -s -i "http://localhost:8080/recipes/11111111-1111-1111-1111-111111111111/image" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+3. Clear it:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X DELETE \
+  "http://localhost:8080/recipes/11111111-1111-1111-1111-111111111111/image" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+Expected outcomes:
+- Upload returns `200` with `{"imageBlobId", "updatedAt"}`; re-running the same upload is a no-op (`updatedAt` doesn't change).
+- Fetch returns `200` with the exact bytes, an `ETag` header, and `Cache-Control: private, max-age=31536000, immutable`.
+- A subsequent pull (`GET /sync/pull?...`) includes `imageBlobId` on the recipe.
+- Clear returns `204`; a fetch after that returns `404`.
+
 ## Test Users
 
 | Email          | Password  |
@@ -179,6 +215,18 @@ If the server starts successfully, you'll see the following output:
 2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
 2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
 ```
+
+Two background jobs also log their state at startup — both disabled by default outside
+`application.yaml`'s checked-in dev config:
+
+```
+Soft-delete purge job started with config=SoftDeletePurgeConfig(...)
+Image blob reclamation job started with config=ImageBlobReclamationConfig(...)
+```
+
+(or `... is disabled`, if `cleanup.softDelete.enabled` / `imageBlob.reclamation.enabled` is
+`false`). See [Recipe Image Architecture § Application Startup Changes](docs/recipe-image-architecture.md#application-startup-changes)
+for what's new there and the `IMAGE_BLOB_STORAGE_ROOT` env var.
 
 **NOTE**: The service requires the DB to be running (see [next section](#docker-compose))
 
