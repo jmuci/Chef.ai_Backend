@@ -6,7 +6,9 @@ import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
+import com.tenmilelabs.domain.service.ImageBlobConfig
 import com.tenmilelabs.domain.service.MealPlanGenerationService
+import com.tenmilelabs.domain.service.RecipeImageService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
@@ -16,6 +18,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.http.content.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -25,6 +28,7 @@ import io.ktor.util.logging.*
 import kotlinx.serialization.json.Json
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
 import java.util.*
+import kotlin.time.Duration.Companion.seconds
 
 private const val ACCEPT_APP_JSON = "application/json"
 private const val ACCEPT_WILDCARD = "*/*"
@@ -36,6 +40,8 @@ fun Application.configureRouting(
     syncService: SyncService,
     homeLayoutService: HomeLayoutService,
     mealPlanGenerationService: MealPlanGenerationService,
+    recipeImageService: RecipeImageService,
+    imageBlobConfig: ImageBlobConfig,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -65,6 +71,12 @@ fun Application.configureRouting(
             characterEncoding = "utf-8"
         })
     }
+    install(RateLimit) {
+        register(RECIPE_IMAGE_UPLOAD_RATE_LIMIT_NAME) {
+            rateLimiter(limit = imageBlobConfig.uploadRateLimitPerMinute, refillPeriod = 60.seconds)
+            requestKey { call -> call.userId ?: "anonymous" }
+        }
+    }
 
     routing {
         application.log.info("Setting up routes")
@@ -82,6 +94,7 @@ fun Application.configureRouting(
             homeRoutes(homeLayoutService)
             syncRoutes(syncService)
             mealPlanRoutes(mealPlanGenerationService)
+            recipeImageRoutes(recipeImageService, imageBlobConfig)
             route("/recipes") {
 
                 get {

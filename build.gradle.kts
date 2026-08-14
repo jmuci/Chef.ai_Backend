@@ -40,6 +40,7 @@ dependencies {
     implementation(libs.ktor.server.thymeleaf)
     implementation(libs.ktor.server.auth)
     implementation(libs.ktor.server.auth.jwt)
+    implementation(libs.ktor.server.rate.limit)
 
     // Database
     implementation(libs.exposed.core)
