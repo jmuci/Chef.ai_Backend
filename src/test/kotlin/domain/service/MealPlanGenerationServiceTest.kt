@@ -84,7 +84,7 @@ class MealPlanGenerationServiceTest {
     }
 
     @Test
-    fun `HIGH variety with fewer candidates than days produces partial fill`() {
+    fun `HIGH variety with fewer candidates than days fills every slot via round-robin`() {
         val service = makeService(FakeSyncRepository())
         val candidates = listOf(UUID.randomUUID(), UUID.randomUUID())
         val prefs = defaultPrefs(planLengthDays = 5, variety = VarietyPreference.HIGH)
@@ -92,8 +92,21 @@ class MealPlanGenerationServiceTest {
         val days = service.assignRecipesToDays(candidates, prefs)
 
         assertEquals(5, days.size)
-        val filledCount = days.count { it.dinnerRecipeId != null }
-        assertEquals(2, filledCount)
+        assertTrue(days.all { it.dinnerRecipeId != null })
+    }
+
+    @Test
+    fun `HIGH variety with 5 candidates over 7 days uses each once then round-robins`() {
+        val service = makeService(FakeSyncRepository())
+        val candidates = (1..5).map { UUID.randomUUID() }
+        val prefs = defaultPrefs(planLengthDays = 7, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(candidates, prefs)
+
+        assertEquals(7, days.size)
+        val usedIds = days.map { it.dinnerRecipeId }.filterNotNull()
+        assertEquals(7, usedIds.size)
+        assertEquals(candidates.map { it.toString() }.toSet(), usedIds.toSet())
     }
 
     @Test

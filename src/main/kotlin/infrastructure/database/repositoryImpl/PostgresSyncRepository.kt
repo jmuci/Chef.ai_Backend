@@ -578,14 +578,24 @@ class PostgresSyncRepository : SyncRepository {
 
         // Step 2: Build the base set of accessible recipe IDs per recipeSource
         val accessibleIds: Set<UUID> = when (recipeSource) {
-            "COLLECTION_ONLY" -> BookmarkedRecipeTable
-                .selectAll()
-                .where {
-                    (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
-                        BookmarkedRecipeTable.deleted_at.isNull()
-                }
-                .map { it[BookmarkedRecipeTable.recipe_id].value }
-                .toSet()
+            "COLLECTION_ONLY" -> {
+                val bookmarked = BookmarkedRecipeTable
+                    .selectAll()
+                    .where {
+                        (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
+                            BookmarkedRecipeTable.deleted_at.isNull()
+                    }
+                    .map { it[BookmarkedRecipeTable.recipe_id].value }
+                    .toSet()
+                val authored = RecipeTable
+                    .selectAll()
+                    .where {
+                        (RecipeTable.creator_id eq EntityID(userId, UserTable)) and RecipeTable.deleted_at.isNull()
+                    }
+                    .map { it[RecipeTable.id].value }
+                    .toSet()
+                bookmarked + authored
+            }
             else -> RecipeTable
                 .selectAll()
                 .where {

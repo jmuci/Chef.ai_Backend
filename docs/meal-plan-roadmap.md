@@ -1,7 +1,7 @@
 # Meal Plan Generation — Incremental Roadmap
 
 **Status**: Living document — update as phases complete.
-**Last updated**: 2026-08-14
+**Last updated**: 2026-08-14 (Phase 2 done)
 
 This document tracks how meal-plan generation evolves from the current
 rule-based pipeline toward something smarter, and sequences the prerequisite
@@ -63,8 +63,9 @@ algorithm — no LLM involved yet (see Phase 5).
   `findCandidateRecipeIds`: resolves `recipeSource`
   (`COLLECTION_ONLY` / else own-or-public), intersects with dietary
   restriction tags, applies `maxPrepTimeMinutes`.
-- Day assignment: `HIGH` variety never repeats a recipe (partial-fills once
-  candidates run out); `MEDIUM` allows a repeat after a 3-day gap; `LOW`
+- Day assignment: `HIGH` variety never repeats a recipe until every candidate
+  has been used once, then round-robins (see Phase 2 — this used to
+  partial-fill instead); `MEDIUM` allows a repeat after a 3-day gap; `LOW`
   round-robins freely. `batchCooking` reuses the previous day's recipe on
   odd-indexed days.
 - Delivered to the client via the existing sync pull, not a dedicated
@@ -95,6 +96,19 @@ psql -h localhost -U postgres -d chefai_db \
   -f src/main/resources/sql/seed.sql \
   -f src/main/resources/sql/seed_themealdb.sql
 ```
+
+**Running it again.** `./gradlew importTheMealDb` re-fetches fresh from
+TheMealDB every time and overwrites `seed_themealdb.sql` in place — it's not
+additive across runs. Applying the (re)generated file via `psql` is safe to
+repeat: every insert is `ON CONFLICT ... DO NOTHING` against deterministic
+UUIDs (derived from TheMealDB's `idMeal` for recipes, from normalized names
+for new ingredients/tags/labels), so a second apply produces zero duplicate
+rows and no errors. The one nuance worth knowing: `DO NOTHING` is not
+`DO UPDATE` — if a recipe's content changes upstream on TheMealDB between two
+runs, the already-imported row is **not** refreshed; the first import
+silently wins because its `INSERT` for that UUID gets skipped on conflict.
+Picking up an upstream change requires deleting the existing row(s) first (or
+a future enhancement switching that path to `DO UPDATE`).
 
 `importTheMealDb` (new Gradle task, `src/main/kotlin/tools/themealdb/`)
 fetches TheMealDB's catalog via a 26-request a–z scan of `search.php?f=`,
@@ -192,27 +206,53 @@ microdata fallback) is the pattern to reuse — already implemented once as
 the `:recipe-scraper` Kotlin Multiplatform module (Ksoup-based) in the
 Android repo.
 
-## Phase 2 — Fix the "my recipes only" gap
+## Phase 2 — Done: fix the "my recipes only" gap
 
-The client's `RecipeSource.COLLECTION_ONLY` is labeled **"My collection
-only."** On the backend, `findCandidateRecipeIds` implements
+**Status: built.** The client's `RecipeSource.COLLECTION_ONLY` is labeled
+**"My collection only."** `findCandidateRecipeIds` used to implement
 `COLLECTION_ONLY` as strictly `BookmarkedRecipeTable` rows. Neither the
 backend (`RecipesService`) nor the Android client auto-bookmarks a recipe
-when its creator authors it — so a user who writes 5 recipes but never
-explicitly bookmarks them gets an **empty candidate pool** under "my
-collection only," silently contradicting the wizard's own label. This is a
-concrete bug to fix, not a hypothetical:
+when its creator authors it — so a user who wrote 5 recipes but never
+explicitly bookmarked them got an **empty candidate pool** under "my
+collection only," silently contradicting the wizard's own label. This was a
+real bug, not a hypothetical, and it directly broke the "5 recipes for 5
+days, my own recipes only" scenario this roadmap exists to support.
 
-- **Recommended fix**: make `COLLECTION_ONLY` match `creator_id == userId`
-  **or** bookmarked, so "my collection" means what the label says. (Splitting
-  into two explicit modes — authored-only vs. bookmarked-only — is a valid
-  alternative if product intent wants them distinguished; default to the
-  combined interpretation unless told otherwise.)
-- Add/extend test coverage for a small-pool case (exactly 5 own recipes
-  over a 5-day plan) across each `VarietyPreference`, confirming
-  `LOW`/`MEDIUM` round-robin correctly and deciding whether `HIGH` should
-  also fall back to round-robin instead of leaving slots empty when the
-  pool is smaller than the plan length.
+**Two fixes**, both in
+[`domain/service/MealPlanGenerationService.kt`](../src/main/kotlin/domain/service/MealPlanGenerationService.kt)
+and
+[`infrastructure/database/repositoryImpl/PostgresSyncRepository.kt`](../src/main/kotlin/infrastructure/database/repositoryImpl/PostgresSyncRepository.kt):
+
+1. **`COLLECTION_ONLY` now unions bookmarked and authored recipes.**
+   `findCandidateRecipeIds`'s `"COLLECTION_ONLY"` branch matches
+   `BookmarkedRecipeTable` rows **or** `RecipeTable.creator_id == userId`, so
+   "my collection" means what the label says regardless of whether the user
+   bothered to bookmark their own recipes. KDoc on
+   `SyncRepository.findCandidateRecipeIds` updated to match.
+   Regression test:
+   `PostgresSyncRepositoryIntegrationTest.findCandidateRecipeIdsCollectionOnlyIncludesAuthoredAndBookmarked`
+   (authored-but-unbookmarked, bookmarked-but-authored-by-another-user, and
+   an untouched PUBLIC recipe from another user — only the first two should
+   be candidates).
+2. **`HIGH` variety falls back to round-robin once candidates run out**,
+   instead of leaving days empty. Previously, a 5-recipe collection over a
+   7-day `HIGH`-variety plan left 2 days with a null `dinnerRecipeId` purely
+   because strict no-repeat had no headroom left — even though the pool
+   itself was non-empty. `pickFrom`'s `HIGH` branch now falls back to
+   `candidates[history.size % candidates.size]` (the same round-robin used by
+   `LOW`) once every candidate has appeared once, so a plan is only ever
+   partially filled when the candidate pool is empty, never merely for lack
+   of variety headroom. Unit tests in
+   `MealPlanGenerationServiceTest`: `HIGH variety with fewer candidates than
+   days fills every slot via round-robin` and `HIGH variety with 5
+   candidates over 7 days uses each once then round-robins`.
+
+**End-to-end scenario this now supports**: register a user, create 5
+recipes without bookmarking any, push a `DRAFT` plan with
+`recipeSource: "COLLECTION_ONLY"`, `planLengthDays: 7`,
+`varietyPreference: "HIGH"`, call `/generate`, pull — status comes back
+`READY` with all 7 days filled (5 distinct recipes + 2 repeats), instead of
+the previous empty-pool / partial-fill behavior.
 
 ## Phase 3 — Persist preference defaults
 

@@ -88,8 +88,9 @@ class MealPlanGenerationService(
      * Assigns candidate recipe UUIDs to plan days according to [prefs].
      *
      * Variety rules:
-     * - HIGH: no recipe repeats across all slots in the plan. Slots are left null when
-     *   candidates are exhausted (partial fill — status still set to READY).
+     * - HIGH: no recipe repeats until every candidate has been used once, then round-robins.
+     *   A plan is only ever partially filled when [candidateIds] itself is empty — never merely
+     *   for lack of variety headroom.
      * - MEDIUM: a recipe may reappear only after a 3-day gap; cycles when all are blocked.
      * - LOW: free repetition — cycles round-robin through the candidate list.
      *
@@ -140,7 +141,8 @@ class MealPlanGenerationService(
      * Picks the next recipe from [candidates] without consuming the list, using [history]
      * to track previously assigned recipes.
      *
-     * - HIGH: must not appear anywhere in history; returns null when all candidates are used.
+     * - HIGH: must not appear anywhere in history; once all candidates are used, falls back to
+     *   round-robin via `history.size % candidates.size` — always succeeds when candidates is non-empty.
      * - MEDIUM: must not appear in the last 3 history entries; cycles when all are blocked.
      * - LOW: round-robin via `history.size % candidates.size` — always succeeds.
      */
@@ -161,6 +163,7 @@ class MealPlanGenerationService(
             VarietyPreference.HIGH -> {
                 val used = history.toSet()
                 candidates.firstOrNull { it !in used }
+                    ?: candidates[history.size % candidates.size]
             }
         }
     }

@@ -6,8 +6,10 @@ import com.tenmilelabs.application.dto.SyncRecipeStep
 import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresSyncRepository
 import com.tenmilelabs.infrastructure.database.tables.AllergenTable
+import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
 import com.tenmilelabs.infrastructure.database.tables.IngredientTable
 import com.tenmilelabs.infrastructure.database.tables.LabelTable
+import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.SourceClassificationTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
@@ -294,5 +296,82 @@ class PostgresSyncRepositoryIntegrationTest {
             maxPrepTimeMinutes = null
         )
         assertEquals(setOf(glutenFreeRecipeId), glutenFreeCandidates.toSet())
+    }
+
+    @Test
+    fun findCandidateRecipeIdsCollectionOnlyIncludesAuthoredAndBookmarked() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val userId = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(userId, UserTable)
+                it[user_name] = "user"
+                it[email] = "user-${userId}@example.com"
+                it[display_name] = "User"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+            UserTable.insert {
+                it[UserTable.id] = EntityID(otherUserId, UserTable)
+                it[user_name] = "other"
+                it[email] = "other-${otherUserId}@example.com"
+                it[display_name] = "Other"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+        }
+
+        fun pushRecipe(id: UUID, title: String, creatorId: UUID, privacy: String) = runBlocking {
+            repo.upsertRecipeAggregate(
+                SyncRecipe(
+                    uuid = id.toString(),
+                    title = title,
+                    description = "desc",
+                    imageUrl = "https://example.com/i.jpg",
+                    imageUrlThumbnail = "https://example.com/t.jpg",
+                    prepTimeMinutes = 10,
+                    cookTimeMinutes = 10,
+                    servings = 2,
+                    creatorId = creatorId.toString(),
+                    recipeExternalUrl = null,
+                    privacy = privacy,
+                    updatedAt = 1_000L,
+                    deletedAt = null,
+                    steps = emptyList(),
+                    ingredients = emptyList(),
+                    tagIds = emptyList(),
+                    labelIds = emptyList()
+                ),
+                Instant.fromEpochMilliseconds(2_000L)
+            )
+        }
+
+        val authoredNotBookmarkedId = UUID.randomUUID()
+        val bookmarkedFromOtherUserId = UUID.randomUUID()
+        val neitherId = UUID.randomUUID()
+
+        pushRecipe(authoredNotBookmarkedId, "My Own Recipe", creatorId = userId, privacy = "PRIVATE")
+        pushRecipe(bookmarkedFromOtherUserId, "Bookmarked From Other", creatorId = otherUserId, privacy = "PUBLIC")
+        pushRecipe(neitherId, "Public Untouched", creatorId = otherUserId, privacy = "PUBLIC")
+
+        transaction {
+            BookmarkedRecipeTable.insert {
+                it[BookmarkedRecipeTable.user_id] = EntityID(userId, UserTable)
+                it[BookmarkedRecipeTable.recipe_id] = EntityID(bookmarkedFromOtherUserId, RecipeTable)
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(2_000L)
+            }
+        }
+
+        val candidates = repo.findCandidateRecipeIds(
+            userId = userId,
+            recipeSource = "COLLECTION_ONLY",
+            dietaryRestrictionTags = emptyList(),
+            maxPrepTimeMinutes = null
+        )
+
+        assertEquals(setOf(authoredNotBookmarkedId, bookmarkedFromOtherUserId), candidates.toSet())
     }
 }

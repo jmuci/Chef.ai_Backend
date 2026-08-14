@@ -172,7 +172,8 @@ interface SyncRepository {
      * Returns recipe UUIDs that are candidates for meal plan generation given
      * the provided filter criteria.
      *
-     * [recipeSource] — "COLLECTION_ONLY" limits to bookmarked recipes; "INCLUDE_PUBLIC"
+     * [recipeSource] — "COLLECTION_ONLY" limits to recipes bookmarked by [userId] or authored
+     * by [userId] (so a user's own recipes are always usable, even unbookmarked); "INCLUDE_PUBLIC"
      * includes all recipes owned by [userId] or marked PUBLIC.
      *
      * [dietaryRestrictionTags] — tag display names (e.g. "VEGAN", "GLUTEN_FREE") that
