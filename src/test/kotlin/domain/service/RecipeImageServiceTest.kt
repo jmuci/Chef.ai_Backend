@@ -18,7 +18,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private val JPEG_BYTES = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x01, 0x02, 0x03)
+private val JPEG_BYTES_2 = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0x99.toByte(), 0x88.toByte(), 0x77.toByte())
 private val PNG_BYTES = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+private val WEBP_BYTES = "RIFF????WEBP".toByteArray(Charsets.US_ASCII).also {
+    // "????" stands in for the 4-byte little-endian file size — never inspected by the sniffer.
+    it[4] = 0; it[5] = 0; it[6] = 0; it[7] = 0
+}
 
 private fun sha256Hex(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -57,6 +62,51 @@ class RecipeImageServiceTest {
         val result = service.uploadImage(userId, recipeId, "image/jpeg", hash, PNG_BYTES)
 
         assertEquals(ImageUploadResult.UnsupportedMediaType, result)
+    }
+
+    @Test
+    fun uploadAcceptsAWebpImage() = withService { service, repo, store ->
+        val userId = UUID.randomUUID()
+        val recipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val hash = sha256Hex(WEBP_BYTES)
+
+        val result = service.uploadImage(userId, recipeId, "image/webp", hash, WEBP_BYTES)
+
+        val success = assertIs<ImageUploadResult.Success>(result)
+        assertEquals(hash, success.imageBlobId)
+        assertTrue(store.contains("$userId/$hash"))
+    }
+
+    @Test
+    fun uploadRejectsAContentTypeOutsideTheAllowedThree() = withService { service, repo, _ ->
+        val userId = UUID.randomUUID()
+        val recipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val hash = sha256Hex(JPEG_BYTES)
+
+        val result = service.uploadImage(userId, recipeId, "image/gif", hash, JPEG_BYTES)
+
+        assertEquals(ImageUploadResult.UnsupportedMediaType, result)
+    }
+
+    @Test
+    fun uploadRejectsAMissingDeclaredHash() = withService { service, repo, _ ->
+        val userId = UUID.randomUUID()
+        val recipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+
+        val result = service.uploadImage(userId, recipeId, "image/jpeg", null, JPEG_BYTES)
+
+        assertEquals(ImageUploadResult.HashMismatch, result)
+    }
+
+    @Test
+    fun uploadHashComparisonIsCaseInsensitive() = withService { service, repo, _ ->
+        val userId = UUID.randomUUID()
+        val recipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val hash = sha256Hex(JPEG_BYTES)
+
+        val result = service.uploadImage(userId, recipeId, "image/jpeg", hash.uppercase(), JPEG_BYTES)
+
+        assertIs<ImageUploadResult.Success>(result)
     }
 
     @Test
@@ -149,6 +199,45 @@ class RecipeImageServiceTest {
         )
 
         assertEquals(first.updatedAtMillis, second.updatedAtMillis)
+        assertEquals(1, store.listAllKeys().size)
+    }
+
+    @Test
+    fun uploadingDifferentBytesRepointsAndDereferencesThePreviousBlob() = withService { service, repo, store ->
+        val userId = UUID.randomUUID()
+        val recipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val firstHash = sha256Hex(JPEG_BYTES)
+        assertIs<ImageUploadResult.Success>(
+            service.uploadImage(userId, recipeId, "image/jpeg", firstHash, JPEG_BYTES)
+        )
+
+        val secondHash = sha256Hex(JPEG_BYTES_2)
+        val result = service.uploadImage(userId, recipeId, "image/jpeg", secondHash, JPEG_BYTES_2)
+
+        val success = assertIs<ImageUploadResult.Success>(result)
+        assertEquals(secondHash, success.imageBlobId)
+        assertEquals(secondHash, repo.findRecipeForImage(recipeId)?.imageBlobId)
+        // Nothing else points at the first blob anymore, so it's now a reclamation candidate.
+        assertEquals(success.updatedAtMillis, repo.blobFor(userId, firstHash)?.unreferencedSince)
+        assertTrue(store.contains("$userId/$firstHash"))
+        assertTrue(store.contains("$userId/$secondHash"))
+    }
+
+    @Test
+    fun uploadingTheSameBytesForAnotherRecipeReusesTheBlobWithoutRewritingIt() = withService { service, repo, store ->
+        val userId = UUID.randomUUID()
+        val firstRecipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val secondRecipeId = repo.seedRecipe(ownerId = userId, imageUrl = "")
+        val hash = sha256Hex(JPEG_BYTES)
+        assertIs<ImageUploadResult.Success>(
+            service.uploadImage(userId, firstRecipeId, "image/jpeg", hash, JPEG_BYTES)
+        )
+
+        val result = service.uploadImage(userId, secondRecipeId, "image/jpeg", hash, JPEG_BYTES)
+
+        val success = assertIs<ImageUploadResult.Success>(result)
+        assertEquals(hash, success.imageBlobId)
+        assertEquals(hash, repo.findRecipeForImage(secondRecipeId)?.imageBlobId)
         assertEquals(1, store.listAllKeys().size)
     }
 
