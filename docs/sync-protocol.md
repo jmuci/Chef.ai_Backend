@@ -794,9 +794,9 @@ GET    /recipes/{recipeId}/image   — serve (ETag / 304 support)
 DELETE /recipes/{recipeId}/image   — clear the pointer
 ```
 
-See `docs/prompts/recipe-image-upload-backend-prompt.md` for the full endpoint contract
-(validation order, provenance, quota, reclamation). The sync-protocol-relevant surface is just
-one field:
+See [`docs/recipe-image-architecture.md`](recipe-image-architecture.md) for the full endpoint
+contract (validation order, provenance, quota, reclamation, diagrams). The sync-protocol-relevant
+surface is just one field:
 
 ```diff
  {
