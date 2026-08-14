@@ -6,7 +6,10 @@ import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
 import com.tenmilelabs.application.dto.ConflictReasons
 import com.tenmilelabs.application.dto.SyncErrors
+import com.tenmilelabs.application.dto.SyncMealPlanDayDto
+import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.domain.service.SyncService
+import com.tenmilelabs.infrastructure.database.FakeUserPreferencesRepository
 import io.ktor.server.testing.TestApplicationBuilder
 import io.ktor.server.testing.testApplication
 import io.ktor.util.logging.KtorSimpleLogger
@@ -231,6 +234,49 @@ class SyncServiceTest {
         assertEquals(SyncErrors.INVALID_TAG.message, response.errors.first().message)
     }
 
+    @Test
+    fun pushingAMealPlanUpdatesStoredUserPreferences() {
+        testApplication {
+            val syncRepo = FakeSyncRepository()
+            val prefsRepo = FakeUserPreferencesRepository()
+            val service = SyncService(syncRepo, KtorSimpleLogger("SyncServiceTest"), prefsRepo)
+            val userId = UUID.randomUUID()
+            val planId = UUID.randomUUID()
+            val preferencesJson = """{"planLengthDays":5,"mealType":"DINNER","recipeSource":"COLLECTION_ONLY"}"""
+
+            val response = service.pushRecipes(
+                userId,
+                SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, preferencesJson = preferencesJson)))
+            )
+
+            assertEquals(1, response.mealPlans.accepted.size)
+            assertEquals(preferencesJson, prefsRepo.getUserPreferences(userId))
+        }
+    }
+
+    @Test
+    fun conflictedMealPlanPushDoesNotUpdateStoredUserPreferences() {
+        testApplication {
+            val syncRepo = FakeSyncRepository()
+            val prefsRepo = FakeUserPreferencesRepository()
+            val service = SyncService(syncRepo, KtorSimpleLogger("SyncServiceTest"), prefsRepo)
+            val userId = UUID.randomUUID()
+            val planId = UUID.randomUUID()
+
+            // Server already has a newer version of this plan
+            syncRepo.seedMealPlan(buildMealPlan(planId, updatedAt = 9000L), serverUpdatedAtMillis = 9000L)
+
+            val staleJson = """{"planLengthDays":1,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}"""
+            val response = service.pushRecipes(
+                userId,
+                SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, preferencesJson = staleJson)))
+            )
+
+            assertEquals(1, response.mealPlans.conflicts.size)
+            assertEquals(null, prefsRepo.getUserPreferences(userId))
+        }
+    }
+
     private fun sampleRecipe(
         uuid: UUID,
         creatorId: UUID,
@@ -260,8 +306,23 @@ class SyncServiceTest {
     private fun withService(block: suspend TestApplicationBuilder.(SyncService, FakeSyncRepository) -> Unit) {
         testApplication {
             val repo = FakeSyncRepository()
-            val service = SyncService(repo, KtorSimpleLogger("SyncServiceTest"))
+            val service = SyncService(repo, KtorSimpleLogger("SyncServiceTest"), FakeUserPreferencesRepository())
             block(service, repo)
         }
     }
+
+    private fun buildMealPlan(
+        planId: UUID,
+        updatedAt: Long,
+        preferencesJson: String = """{"planLengthDays":3,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}"""
+    ) = SyncMealPlanDto(
+        uuid = planId.toString(),
+        name = "Week Plan",
+        status = "DRAFT",
+        preferencesJson = preferencesJson,
+        createdAt = updatedAt,
+        updatedAt = updatedAt,
+        deletedAt = null,
+        days = listOf(SyncMealPlanDayDto(uuid = UUID.randomUUID().toString(), dayIndex = 0, dinnerRecipeId = null, lunchRecipeId = null))
+    )
 }

@@ -19,6 +19,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.RefreshTokenTable
 import com.tenmilelabs.infrastructure.database.tables.SourceClassificationTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
+import com.tenmilelabs.infrastructure.database.tables.UserPreferencesTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
 
 /**
@@ -47,7 +48,8 @@ fun initDatabaseAndSchema() {
             BookmarkedRecipeTable,
             MealPlanTable,
             MealPlanDayTable,
-            ImageBlobTable
+            ImageBlobTable,
+            UserPreferencesTable
         )
     }
 }

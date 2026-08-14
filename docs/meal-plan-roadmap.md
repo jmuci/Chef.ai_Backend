@@ -1,7 +1,7 @@
 # Meal Plan Generation — Incremental Roadmap
 
 **Status**: Living document — update as phases complete.
-**Last updated**: 2026-08-14 (Phase 2 done)
+**Last updated**: 2026-08-14 (Phase 3 done)
 
 This document tracks how meal-plan generation evolves from the current
 rule-based pipeline toward something smarter, and sequences the prerequisite
@@ -254,16 +254,52 @@ recipes without bookmarking any, push a `DRAFT` plan with
 `READY` with all 7 days filled (5 distinct recipes + 2 repeats), instead of
 the previous empty-pool / partial-fill behavior.
 
-## Phase 3 — Persist preference defaults
+## Phase 3 — Done: persist preference defaults
 
-The wizard already collects everything `MealPlanPreferences` needs, per
-plan — there's no missing "onboarding" step, just no persisted user-level
-default. Add a small `UserPreferencesTable` + domain model + repository
-interface/impl (following this repo's existing Clean Architecture
-conventions: interface in `domain/repository`, impl in
-`infrastructure/database/repositoryImpl`) capturing the same fields as
-`MealPlanPreferences`. New meal plans default from it; the wizard pre-fills
-from the user's last plan instead of starting blank every time.
+**Status: built.** The wizard already collects everything
+`MealPlanPreferences` needs, per plan — there's no missing "onboarding"
+step, just no persisted user-level default. Added a small
+`UserPreferencesTable` + domain repository interface/impl (following this
+repo's existing Clean Architecture conventions: interface in
+`domain/repository`, impl in `infrastructure/database/repositoryImpl`)
+capturing the same `preferencesJson` shape as `MealPlanTable.preferences`.
+
+- **`UserPreferencesTable`**
+  (`infrastructure/database/tables/UserPreferencesTable.kt`) — one row per
+  user (`PrimaryKey(user_id)`), a single `preferences` text column (same
+  JSON blob shape as `meal_plans.preferences`), and `updated_at`.
+  `UserPreferencesRepository` (`domain/repository/UserPreferencesRepository.kt`)
+  / `PostgresUserPreferencesRepository`
+  (`infrastructure/database/repositoryImpl/PostgresUserPreferencesRepository.kt`)
+  follow the same suspendTransaction/select-then-branch upsert pattern as
+  `PostgresSyncRepository.upsertBookmark`.
+- **Kept in sync automatically, no separate "save defaults" action**:
+  `SyncService.processMealPlans` upserts the stored preferences from
+  `plan.preferencesJson` immediately after every *accepted* meal-plan push
+  (not on conflicts — a push that lost a conflict never actually took
+  effect). So "the user's last plan" and "their stored defaults" are always
+  the same thing, with zero new UI required for it on the client.
+- **`GET /user/preferences`**
+  (`presentation/routes/UserPreferencesRoutes.kt`), JWT-authenticated like
+  every other private route: `200` with a `UserPreferencesResponse` body
+  (`application/dto/UserPreferencesDto.kt`) when the user has pushed at
+  least one plan, `204 No Content` when they haven't yet — absence is a
+  normal first-time-user state, not an error, matching the "no missing
+  onboarding step" framing above. Chose a dedicated REST endpoint over
+  extending the sync push/pull protocol: every resource in
+  `docs/sync-protocol.md` today is a delta/gap list keyed by UUID, and a
+  singleton per-user record doesn't fit that shape or need its union
+  semantics — a small new route keeps the well-tested sync core untouched.
+- Tests: `PostgresUserPreferencesRepositoryIntegrationTest` (null before
+  first upsert, overwrite-not-duplicate on a second upsert);
+  `SyncServiceTest.pushingAMealPlanUpdatesStoredUserPreferences` /
+  `conflictedMealPlanPushDoesNotUpdateStoredUserPreferences`;
+  `UserPreferencesIntegrationTest` (401 unauthenticated, 204 before any
+  plan, 200 with the exact fields from the last pushed plan).
+
+**Explicitly out of scope for this phase** (client-side, in `jmuci/ChefAI`,
+not this repo): actually wiring the wizard to call `GET /user/preferences`
+and pre-fill its fields from the response.
 
 ## Phase 4 — Smarter deterministic ranking
 

@@ -17,13 +17,15 @@ import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.domain.repository.SyncRepository
+import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import io.ktor.util.logging.Logger
 import kotlinx.datetime.Clock
 import java.util.UUID
 
 class SyncService(
     private val syncRepository: SyncRepository,
-    private val log: Logger
+    private val log: Logger,
+    private val userPreferencesRepository: UserPreferencesRepository
 ) {
     /**
      * Processes client dirty recipe aggregates for authenticated user.
@@ -175,6 +177,7 @@ class SyncService(
 
             val now = Clock.System.now()
             syncRepository.upsertMealPlan(plan, userId, now)
+            userPreferencesRepository.upsertUserPreferences(userId, plan.preferencesJson, now)
             accepted += MealPlanPushResult(uuid = plan.uuid, serverUpdatedAt = now.toEpochMilliseconds())
             log.info("Meal plan push accepted for user $userId, planId=${plan.uuid}")
         }
