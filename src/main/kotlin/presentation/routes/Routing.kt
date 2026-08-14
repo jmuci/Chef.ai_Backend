@@ -4,6 +4,7 @@ import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.dto.ErrorResponse
 import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.RecipesRepository
+import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.ImageBlobConfig
@@ -42,6 +43,7 @@ fun Application.configureRouting(
     mealPlanGenerationService: MealPlanGenerationService,
     recipeImageService: RecipeImageService,
     imageBlobConfig: ImageBlobConfig,
+    userPreferencesRepository: UserPreferencesRepository,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -94,6 +96,7 @@ fun Application.configureRouting(
             homeRoutes(homeLayoutService)
             syncRoutes(syncService)
             mealPlanRoutes(mealPlanGenerationService)
+            userPreferencesRoutes(userPreferencesRepository, mealPlanGenerationService)
             recipeImageRoutes(recipeImageService, imageBlobConfig)
             route("/recipes") {
 

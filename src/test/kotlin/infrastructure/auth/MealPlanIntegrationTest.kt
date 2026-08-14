@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.infrastructure.database.FakeRecipesRepository
 import com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.FakeSyncRepository
+import com.tenmilelabs.infrastructure.database.FakeUserPreferencesRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -38,7 +39,8 @@ class MealPlanIntegrationTest {
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
-                syncRepository = syncRepository
+                syncRepository = syncRepository,
+                userPreferencesRepository = FakeUserPreferencesRepository()
             )
         }
 
@@ -92,7 +94,8 @@ class MealPlanIntegrationTest {
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
-                syncRepository = syncRepository
+                syncRepository = syncRepository,
+                userPreferencesRepository = FakeUserPreferencesRepository()
             )
         }
 
@@ -133,7 +136,8 @@ class MealPlanIntegrationTest {
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
-                syncRepository = FakeSyncRepository()
+                syncRepository = FakeSyncRepository(),
+                userPreferencesRepository = FakeUserPreferencesRepository()
             )
         }
 
@@ -165,7 +169,8 @@ class MealPlanIntegrationTest {
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
                 syncRepository = syncRepository,
-                mealPlanGenerationService = generationService
+                mealPlanGenerationService = generationService,
+                userPreferencesRepository = FakeUserPreferencesRepository()
             )
         }
 
@@ -228,7 +233,8 @@ class MealPlanIntegrationTest {
                 recipeRepository = FakeRecipesRepository(),
                 userRepository = FakeUserRepository(),
                 refreshTokenRepository = FakeRefreshTokenRepository(),
-                syncRepository = syncRepository
+                syncRepository = syncRepository,
+                userPreferencesRepository = FakeUserPreferencesRepository()
             )
         }
 
