@@ -22,6 +22,18 @@ cleanup:
     batchSize: 500
     dryRun: false
 
+imageBlob:
+  allowScrapedImageUpload: true
+  serveScrapedBlobsToNonOwners: true
+  maxUploadBytes: 5242880 # 5 MiB
+  perUserQuotaBytes: 524288000 # 500 MiB
+  unreferencedRetentionDays: 30
+  uploadRateLimitPerMinute: 60
+  reclamation:
+    enabled: true
+    intervalHours: 24
+    batchSize: 100
+
 # WARNING - For prod use env variables:
 # Look at https://ktor.io/docs/rsa-keys-generation.html#defining-the-private-key for key gen
 #  secret: "${JWT_SECRET}"  # Use environment variable
