@@ -29,7 +29,14 @@ data class SyncRecipe(
     val steps: List<SyncRecipeStep>,
     val ingredients: List<SyncRecipeIngredient>,
     val tagIds: List<String>,
-    val labelIds: List<String>
+    val labelIds: List<String>,
+    /**
+     * Content hash of the uploaded hero image blob, or null if none. Set exclusively by
+     * `PUT /recipes/{id}/image` and cleared exclusively by `DELETE /recipes/{id}/image` —
+     * a client-supplied value is always ignored on push and the server's own value echoed
+     * back instead. See docs/prompts/recipe-image-upload-backend-prompt.md §4.
+     */
+    val imageBlobId: String? = null
 )
 
 @Serializable
