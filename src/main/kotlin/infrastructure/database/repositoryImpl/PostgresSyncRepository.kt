@@ -560,14 +560,20 @@ class PostgresSyncRepository : SyncRepository {
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?
     ): List<UUID> = suspendTransaction {
-        // Step 1: Resolve tag IDs for dietary restrictions (match by display_name, case-insensitive)
-        val restrictionTagIds: List<EntityID<UUID>> = if (dietaryRestrictionTags.isEmpty()) {
+        // Step 1: Resolve dietary restrictions against LABELS, not tags — the dietary vocabulary
+        // (Vegan, Vegetarian, Gluten-Free, Dairy-Free, Keto, Paleo, Low Carb, ...) lives in
+        // LabelTable. Tags are for cuisine/meal-type ("Spicy", "Breakfast", "Dinner"). Matching
+        // against TagTable here previously meant no dietary restriction ever matched anything,
+        // so the filter silently no-opped. Comparison is normalized (uppercase, spaces/hyphens ->
+        // underscore) so client enum values like "GLUTEN_FREE" match the label "Gluten-Free".
+        val restrictionLabelIds: List<EntityID<UUID>> = if (dietaryRestrictionTags.isEmpty()) {
             emptyList()
         } else {
-            val upperNames = dietaryRestrictionTags.map { it.uppercase() }
-            TagTable.selectAll()
-                .where { TagTable.display_name.upperCase() inList upperNames }
-                .map { it[TagTable.id] }
+            val requestedNormalized = dietaryRestrictionTags.map(::normalizeDietaryToken).toSet()
+            LabelTable.selectAll()
+                .where { LabelTable.deleted_at.isNull() }
+                .filter { normalizeDietaryToken(it[LabelTable.display_name]) in requestedNormalized }
+                .map { it[LabelTable.id] }
         }
 
         // Step 2: Build the base set of accessible recipe IDs per recipeSource
@@ -592,15 +598,15 @@ class PostgresSyncRepository : SyncRepository {
 
         if (accessibleIds.isEmpty()) return@suspendTransaction emptyList()
 
-        // Step 3: Intersect with dietary restriction tag filters (AND logic — must have ALL tags)
+        // Step 3: Intersect with dietary restriction label filters (AND logic — must have ALL labels)
         var candidateIds = accessibleIds
-        for (tagEntityId in restrictionTagIds) {
-            val taggedIds = RecipeTagTable
+        for (labelEntityId in restrictionLabelIds) {
+            val labeledIds = RecipeLabelTable
                 .selectAll()
-                .where { RecipeTagTable.tagId eq tagEntityId }
-                .map { it[RecipeTagTable.recipeId].value }
+                .where { (RecipeLabelTable.labelId eq labelEntityId) and RecipeLabelTable.deletedAt.isNull() }
+                .map { it[RecipeLabelTable.recipeId].value }
                 .toSet()
-            candidateIds = candidateIds.intersect(taggedIds)
+            candidateIds = candidateIds.intersect(labeledIds)
             if (candidateIds.isEmpty()) return@suspendTransaction emptyList()
         }
 
@@ -618,6 +624,10 @@ class PostgresSyncRepository : SyncRepository {
                 .map { it[RecipeTable.id].value }
         }
     }
+
+    /** Uppercases and folds spaces/hyphens to underscore, so "Gluten-Free" and "GLUTEN_FREE" compare equal. */
+    private fun normalizeDietaryToken(raw: String): String =
+        raw.trim().uppercase().replace(Regex("[\\s-]+"), "_")
 
     private fun toSyncMealPlanRecord(planRow: ResultRow): SyncMealPlanRecord {
         val planId = planRow[MealPlanTable.id].value

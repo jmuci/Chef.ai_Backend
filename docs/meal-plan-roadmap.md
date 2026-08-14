@@ -82,8 +82,59 @@ plus `RecipeSourceSelector`, `DietaryChipGroup`, `MealTypeSelector`,
 
 ## Phase 1 — Recipe catalog growth (~300 recipes, $0, one-off)
 
-Only 106 recipes exist today, all from `src/main/resources/sql/seed.sql`.
-Generation quality can't really be evaluated until the catalog is bigger.
+**Status: built, one manual step remaining.** The importer, mapper, and two
+companion bug fixes below are implemented and tested. What's *not* done is
+the actual network fetch — the sandboxed session that built this blocks
+outbound HTTPS to arbitrary hosts by policy, so `www.themealdb.com` couldn't
+be reached from there. Run the fetch yourself, from any machine/CI with
+normal internet access:
+
+```
+./gradlew importTheMealDb
+psql -h localhost -U postgres -d chefai_db \
+  -f src/main/resources/sql/seed.sql \
+  -f src/main/resources/sql/seed_themealdb.sql
+```
+
+`importTheMealDb` (new Gradle task, `src/main/kotlin/tools/themealdb/`)
+fetches TheMealDB's catalog via a 26-request a–z scan of `search.php?f=`,
+maps it onto this schema (`TheMealDbMapper` — deterministic UUIDs, ingredient
+catalog dedup against the existing ~302 ingredients, free-text measure
+parsing, dietary-category → label mapping), and writes an idempotent
+`src/main/resources/sql/seed_themealdb.sql` (every statement is
+`ON CONFLICT ... DO NOTHING`, safe to re-run). No DB connection needed for
+this step — it only reads `seed.sql` (to dedup against the existing catalog)
+and writes a file. Covered by unit tests in
+`src/test/kotlin/tools/themealdb/` (measure parsing, instruction splitting,
+UUID determinism, catalog reuse, SQL escaping) — no network in tests.
+
+**Two real bugs were found and fixed while building this**, both verified
+live against a real Postgres instance + running server, not just unit
+tests — without them the import would have been mostly inert:
+
+1. **Recipe privacy casing.** `seed.sql` wrote `'public'`/`'private'`
+   (lowercase) for the original 70 recipes and `'PUBLIC'` for the rest, but
+   every query that matters (`findCandidateRecipeIds`, `publicRecipes()`,
+   `findDeltaRecipes`) filters `privacy = 'PUBLIC'` exactly — and
+   `daoToModel`'s `enumValueOf(dao.privacy)` **throws** on lowercase. Fixed
+   in `seed.sql` directly; `src/main/resources/sql/fix_privacy_casing.sql`
+   is a one-line idempotent migration for any database seeded before this
+   fix. Usable public recipes went from 36 → 90 of the 106 seeded.
+2. **Dietary restrictions were a silent no-op.** The dietary vocabulary
+   (Vegan, Vegetarian, Gluten-Free, ...) lives in `LabelTable`, but
+   `findCandidateRecipeIds` resolved `dietaryRestrictionTags` against
+   `TagTable` — whose rows are things like `Spicy`/`Breakfast`. No tag ever
+   matched, so the filter silently returned every recipe regardless of
+   requested diet. Fixed in `PostgresSyncRepository.findCandidateRecipeIds`
+   to resolve against `LabelTable` with normalized comparison (uppercase,
+   spaces/hyphens → underscore, so `GLUTEN_FREE` matches `Gluten-Free`).
+   Regression test:
+   `PostgresSyncRepositoryIntegrationTest.findCandidateRecipeIdsFiltersByDietaryLabelNotTag`
+   (includes a same-named decoy tag to prove it isn't accidentally matching
+   the old way). End-to-end verified: a pushed `DRAFT` plan with
+   `dietaryRestrictions: ["VEGAN"]`, generated against the live seed data,
+   came back `READY` with every assigned recipe carrying the Vegan label.
+
 Because generation always reads our own `recipes` table (never calls an
 external API live), sourcing is a **one-time import job**, not an ongoing
 per-request dependency — cost scales with catalog size, not user count.

@@ -197,4 +197,102 @@ class PostgresSyncRepositoryIntegrationTest {
             repo.existingLabelIds(setOf(knownLabelId, unknownLabelId))
         )
     }
+
+    @Test
+    fun findCandidateRecipeIdsFiltersByDietaryLabelNotTag() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val ownerId = UUID.randomUUID()
+        val veganLabelId = UUID.randomUUID()
+        val glutenFreeLabelId = UUID.randomUUID()
+        // A tag that happens to be named "Vegan" too — the fix must not fall back to matching this.
+        val decoyVeganTagId = UUID.randomUUID()
+
+        val refUpdatedAt = 10L
+        val refServerUpdatedAt = Instant.fromEpochMilliseconds(20L)
+
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(ownerId, UserTable)
+                it[user_name] = "owner"
+                it[email] = "owner-${ownerId}@example.com"
+                it[display_name] = "Owner"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+            LabelTable.insert {
+                it[LabelTable.id] = EntityID(veganLabelId, LabelTable)
+                it[display_name] = "Vegan"
+                it[updated_at] = refUpdatedAt
+                it[deleted_at] = null
+                it[server_updated_at] = refServerUpdatedAt
+            }
+            LabelTable.insert {
+                it[LabelTable.id] = EntityID(glutenFreeLabelId, LabelTable)
+                it[display_name] = "Gluten-Free"
+                it[updated_at] = refUpdatedAt
+                it[deleted_at] = null
+                it[server_updated_at] = refServerUpdatedAt
+            }
+            TagTable.insert {
+                it[TagTable.id] = EntityID(decoyVeganTagId, TagTable)
+                it[display_name] = "Vegan"
+                it[updated_at] = refUpdatedAt
+                it[deleted_at] = null
+                it[server_updated_at] = refServerUpdatedAt
+            }
+        }
+
+        fun pushPublicRecipe(id: UUID, title: String, labelIds: List<UUID>, tagIds: List<UUID>) = runBlocking {
+            repo.upsertRecipeAggregate(
+                SyncRecipe(
+                    uuid = id.toString(),
+                    title = title,
+                    description = "desc",
+                    imageUrl = "https://example.com/i.jpg",
+                    imageUrlThumbnail = "https://example.com/t.jpg",
+                    prepTimeMinutes = 10,
+                    cookTimeMinutes = 10,
+                    servings = 2,
+                    creatorId = ownerId.toString(),
+                    recipeExternalUrl = null,
+                    privacy = "PUBLIC",
+                    updatedAt = 1_000L,
+                    deletedAt = null,
+                    steps = emptyList(),
+                    ingredients = emptyList(),
+                    tagIds = tagIds.map { it.toString() },
+                    labelIds = labelIds.map { it.toString() }
+                ),
+                Instant.fromEpochMilliseconds(2_000L)
+            )
+        }
+
+        val veganRecipeId = UUID.randomUUID()
+        val glutenFreeRecipeId = UUID.randomUUID()
+        val decoyTaggedOnlyRecipeId = UUID.randomUUID()
+        val plainRecipeId = UUID.randomUUID()
+
+        pushPublicRecipe(veganRecipeId, "Vegan Chili", labelIds = listOf(veganLabelId), tagIds = emptyList())
+        pushPublicRecipe(glutenFreeRecipeId, "GF Bread", labelIds = listOf(glutenFreeLabelId), tagIds = emptyList())
+        pushPublicRecipe(decoyTaggedOnlyRecipeId, "Tagged Vegan Only", labelIds = emptyList(), tagIds = listOf(decoyVeganTagId))
+        pushPublicRecipe(plainRecipeId, "Plain Stew", labelIds = emptyList(), tagIds = emptyList())
+
+        // "VEGAN" (client enum form) must match the "Vegan" label, not the same-named tag.
+        val veganCandidates = repo.findCandidateRecipeIds(
+            userId = ownerId,
+            recipeSource = "INCLUDE_PUBLIC",
+            dietaryRestrictionTags = listOf("VEGAN"),
+            maxPrepTimeMinutes = null
+        )
+        assertEquals(setOf(veganRecipeId), veganCandidates.toSet())
+
+        // "GLUTEN_FREE" (underscore form) must match the "Gluten-Free" (hyphenated) label.
+        val glutenFreeCandidates = repo.findCandidateRecipeIds(
+            userId = ownerId,
+            recipeSource = "INCLUDE_PUBLIC",
+            dietaryRestrictionTags = listOf("GLUTEN_FREE"),
+            maxPrepTimeMinutes = null
+        )
+        assertEquals(setOf(glutenFreeRecipeId), glutenFreeCandidates.toSet())
+    }
 }
