@@ -782,6 +782,48 @@ This ensures no bookmark deltas are re-fetched on the next pull.
 
 ---
 
+## Recipe Images (Hero Image Blobs)
+
+Unlike bookmarks, image bytes do **not** ride `/sync/push` — that payload is JSON, batched fifty
+recipes at a time, and a base64 blob inside it is not a serious option. Instead a recipe's
+`SyncRecipe` carries a pointer, and the bytes themselves move through a sibling endpoint:
+
+```
+PUT    /recipes/{recipeId}/image   — upload (raw bytes, not multipart)
+GET    /recipes/{recipeId}/image   — serve (ETag / 304 support)
+DELETE /recipes/{recipeId}/image   — clear the pointer
+```
+
+See `docs/prompts/recipe-image-upload-backend-prompt.md` for the full endpoint contract
+(validation order, provenance, quota, reclamation). The sync-protocol-relevant surface is just
+one field:
+
+```diff
+ {
+   "uuid": "<uuid>",
+   ...
+   "imageUrl": "https://example.com/photo.jpg",
+   "imageUrlThumbnail": "...",
++  "imageBlobId": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+ }
+```
+
+- **`imageBlobId`** — the content hash of the uploaded blob, or `null` if the recipe has none.
+  Nullable with a default so an older client that doesn't send or understand the field keeps
+  working.
+- **Push ignores it.** Whatever a client sends in `imageBlobId` is discarded; the server's own
+  value is persisted and echoed back unchanged. The pointer is set exclusively by `PUT
+  .../image` and cleared exclusively by `DELETE .../image` — never by a push payload. This is
+  what keeps blob pointers out of last-writer-wins: a client cannot point its recipe at a blob it
+  never uploaded, and since blobs are content-addressed and immutable, two devices can never
+  disagree about a blob's contents. Which blob a recipe points at is settled by the same
+  `updated_at` LWW that already governs the row — no new conflict class.
+- **Pull includes it** on every recipe, including soft-deleted ones, same as every other field.
+- A recipe soft-deleted through `/sync/push` runs the same blob-dereference check as the
+  repoint/clear paths on the image endpoints — see §6 of the prompt doc.
+
+---
+
 ## Validation & Errors
 
 The server validates each pushed recipe:

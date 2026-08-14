@@ -39,11 +39,12 @@ class PostgresSyncRepository : SyncRepository {
         val recipeUuid = UUID.fromString(recipe.uuid)
         val recipeEntityId = EntityID(recipeUuid, RecipeTable)
 
-        val exists = RecipeTable
+        val existingRow = RecipeTable
             .selectAll()
             .where { RecipeTable.id eq recipeUuid }
             .limit(1)
-            .any()
+            .firstOrNull()
+        val exists = existingRow != null
 
         if (exists) {
             RecipeTable.update({ RecipeTable.id eq recipeUuid }) {
@@ -78,6 +79,17 @@ class PostgresSyncRepository : SyncRepository {
                 it[deleted_at] = recipe.deletedAt
                 it[RecipeTable.server_updated_at] = serverUpdatedAt
             }
+        }
+
+        // A recipe soft-deleted through /sync/push can be the last pointer to a blob — the
+        // same reclamation check that runs on repoint/clear (§6) must run here too.
+        val previousImageBlobId = existingRow?.get(RecipeTable.image_blob_id)
+        if (recipe.deletedAt != null && previousImageBlobId != null) {
+            applyImageDereferenceCheck(
+                userId = UUID.fromString(recipe.creatorId),
+                contentHash = previousImageBlobId,
+                nowMillis = serverUpdatedAt.toEpochMilliseconds()
+            )
         }
 
         RecipeStepTable.deleteWhere { RecipeStepTable.recipe_id eq recipeEntityId }
@@ -696,7 +708,8 @@ class PostgresSyncRepository : SyncRepository {
             steps = steps,
             ingredients = ingredients,
             tagIds = tagIds,
-            labelIds = labelIds
+            labelIds = labelIds,
+            imageBlobId = recipeRow[RecipeTable.image_blob_id]
         )
 
         return SyncRecipeRecord(

@@ -109,11 +109,26 @@ class FakeSyncRepository : SyncRepository {
         return uuid
     }
 
+    /**
+     * Test-only mirror of what the image-upload endpoints do directly to the shared `recipes`
+     * table in production (see PostgresImageBlobRepository.setRecipeImageBlobId). FakeSyncRepository
+     * and FakeImageBlobRepository are independent in-memory stores, unlike the real
+     * Postgres-backed repositories, so a test exercising both needs to call this explicitly
+     * after a successful upload/clear for a pull to see the change.
+     */
+    fun setImageBlobId(recipeId: UUID, imageBlobId: String?) {
+        val existing = recipes[recipeId] ?: return
+        recipes[recipeId] = existing.copy(recipe = existing.recipe.copy(imageBlobId = imageBlobId))
+    }
+
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
 
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
+        // Mirrors PostgresSyncRepository: imageBlobId is set exclusively by the image-upload
+        // endpoints, never by a push payload — preserve whatever the server already had.
+        val existingImageBlobId = recipes[UUID.fromString(recipe.uuid)]?.recipe?.imageBlobId
         recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
-            recipe = recipe,
+            recipe = recipe.copy(imageBlobId = existingImageBlobId),
             serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
         )
     }
