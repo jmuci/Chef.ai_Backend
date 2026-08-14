@@ -26,6 +26,14 @@ val dbIntegrationTest by tasks.registering(Test::class) {
     shouldRunAfter(tasks.test)
 }
 
+val importTheMealDb by tasks.registering(JavaExec::class) {
+    description = "Fetches recipes from TheMealDB's free API and writes " +
+        "src/main/resources/sql/seed_themealdb.sql. One-off, no DB connection required."
+    group = "data"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "com.tenmilelabs.tools.themealdb.MainKt"
+}
+
 dependencies {
 
     implementation(libs.logback.classic)
@@ -53,9 +61,13 @@ dependencies {
     // Security
     implementation(libs.bcrypt)
 
+    // Bulk import tooling (tools/themealdb) — a Ktor HTTP client, not used by the server itself
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
+    implementation(libs.ktor.client.content.negotiation)
+
     // Tests
     testImplementation(libs.json.path)
-    testImplementation(libs.ktor.client.content.negotiation)
     testImplementation(libs.ktor.server.test.host)
 
     // JUnit 5
