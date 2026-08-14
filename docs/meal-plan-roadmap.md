@@ -96,6 +96,19 @@ psql -h localhost -U postgres -d chefai_db \
   -f src/main/resources/sql/seed_themealdb.sql
 ```
 
+**Running it again.** `./gradlew importTheMealDb` re-fetches fresh from
+TheMealDB every time and overwrites `seed_themealdb.sql` in place — it's not
+additive across runs. Applying the (re)generated file via `psql` is safe to
+repeat: every insert is `ON CONFLICT ... DO NOTHING` against deterministic
+UUIDs (derived from TheMealDB's `idMeal` for recipes, from normalized names
+for new ingredients/tags/labels), so a second apply produces zero duplicate
+rows and no errors. The one nuance worth knowing: `DO NOTHING` is not
+`DO UPDATE` — if a recipe's content changes upstream on TheMealDB between two
+runs, the already-imported row is **not** refreshed; the first import
+silently wins because its `INSERT` for that UUID gets skipped on conflict.
+Picking up an upstream change requires deleting the existing row(s) first (or
+a future enhancement switching that path to `DO UPDATE`).
+
 `importTheMealDb` (new Gradle task, `src/main/kotlin/tools/themealdb/`)
 fetches TheMealDB's catalog via a 26-request a–z scan of `search.php?f=`,
 maps it onto this schema (`TheMealDbMapper` — deterministic UUIDs, ingredient

@@ -13,6 +13,11 @@ import java.time.Instant
  * Every statement uses `ON CONFLICT ... DO NOTHING` — unlike the first half of `seed.sql`, this
  * file is safe to apply more than once. Write order respects FKs: creator user, then new
  * ingredient/tag/label catalog rows, then recipes, then everything that references a recipe.
+ *
+ * Note `DO NOTHING`, not `DO UPDATE`: re-running the importer and re-applying its output will
+ * *not* refresh a recipe whose upstream TheMealDB content changed since the first import — the
+ * original row wins silently because its UUID is deterministic and the conflicting insert is
+ * simply skipped.
  */
 object SeedSqlWriter {
     fun write(result: MappingResult, importedAtMillis: Long): String = buildString {
