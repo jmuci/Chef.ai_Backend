@@ -14,7 +14,7 @@ interface ImageBlobRepository {
 
     /**
      * Looks up a blob by its natural key. Blobs are scoped per-user — see
-     * docs/prompts/recipe-image-upload-backend-prompt.md §1 for why cross-user
+     * docs/recipe-image-architecture.md § Data Model for why cross-user
      * deduplication is deliberately not done.
      */
     suspend fun findBlob(userId: UUID, contentHash: String): ImageBlobRecord?

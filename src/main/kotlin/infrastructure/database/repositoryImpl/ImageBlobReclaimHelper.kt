@@ -19,7 +19,7 @@ import java.util.UUID
  * Shared by [PostgresImageBlobRepository] (repoint via upload, clear via delete) and
  * [PostgresSyncRepository] (soft-delete via `/sync/push`) — the same dereference check applies
  * to every mutation that can drop a recipe's last pointer to a blob. See
- * docs/prompts/recipe-image-upload-backend-prompt.md §6.
+ * docs/recipe-image-architecture.md § Reclamation.
  */
 internal fun applyImageDereferenceCheck(userId: UUID, contentHash: String, nowMillis: Long) {
     val stillReferenced = RecipeTable

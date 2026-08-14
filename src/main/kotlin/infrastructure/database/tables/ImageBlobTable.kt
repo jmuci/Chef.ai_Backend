@@ -5,7 +5,7 @@ import org.jetbrains.exposed.sql.ReferenceOption
 
 /**
  * Recipe hero image bytes, scoped per-user (not deduplicated across users — see
- * ADR-011 Stage 2 / docs/prompts/recipe-image-upload-backend-prompt.md §1).
+ * ADR-011 Stage 2 / docs/recipe-image-architecture.md.
  */
 object ImageBlobTable : UUIDTable("image_blobs", "id") {
     val user_id = reference("user_id", UserTable, onDelete = ReferenceOption.CASCADE)

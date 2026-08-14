@@ -19,7 +19,7 @@ import kotlin.streams.toList
  * so each user gets their own subdirectory.
  *
  * This is the boring, always-available implementation of [BlobStore] — see
- * docs/prompts/recipe-image-upload-backend-prompt.md §2 for why an object-store client is
+ * docs/recipe-image-architecture.md for why an object-store client is
  * deliberately not added here.
  */
 class LocalDiskBlobStore(private val root: Path) : BlobStore {

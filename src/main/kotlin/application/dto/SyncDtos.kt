@@ -34,7 +34,7 @@ data class SyncRecipe(
      * Content hash of the uploaded hero image blob, or null if none. Set exclusively by
      * `PUT /recipes/{id}/image` and cleared exclusively by `DELETE /recipes/{id}/image` —
      * a client-supplied value is always ignored on push and the server's own value echoed
-     * back instead. See docs/prompts/recipe-image-upload-backend-prompt.md §4.
+     * back instead. See docs/sync-protocol.md § Recipe Images.
      */
     val imageBlobId: String? = null
 )

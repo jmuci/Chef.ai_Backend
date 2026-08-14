@@ -145,6 +145,32 @@ Bookmark errors are **per-item** — other bookmarks and all recipes in the same
 
 ---
 
+## Recipe Image Errors
+
+Unlike sync errors, `PUT`/`GET`/`DELETE /recipes/{id}/image` map directly to HTTP status codes —
+closer to the auth pattern than the sync one. Full validation order and rationale:
+[`docs/recipe-image-architecture.md`](recipe-image-architecture.md#error-states-reference).
+
+| Status | Trigger | Body |
+|--------|---------|------|
+| `401` | Missing/invalid JWT | `ErrorResponse` |
+| `400` | `recipeId` path segment isn't a valid UUID | `ErrorResponse` |
+| `404` | Recipe doesn't exist, isn't owned by caller (upload/clear), or isn't visible (serve) | `ErrorResponse` (upload/clear) or empty (serve) |
+| `413` | Body exceeds `maxUploadBytes` | `ErrorResponse` |
+| `415` | `Content-Type` isn't `image/{jpeg,png,webp}`, or magic bytes don't match the declared type | `ErrorResponse` |
+| `422` | `sha256(body)` doesn't match `X-Content-SHA256` | `ErrorResponse` |
+| `403` | Scraped-image upload while `imageBlob.allowScrapedImageUpload=false` | `{"error":"SCRAPED_UPLOAD_DISABLED"}` |
+| `403` | Upload would exceed `imageBlob.perUserQuotaBytes` | `{"error":"QUOTA_EXCEEDED"}` |
+| `429` | Per-user upload rate limit exceeded | Ktor `RateLimit` default body |
+
+The two `403` variants use a stable machine-readable `{"error": "<CODE>"}` shape rather than the
+usual free-text message, because the client branches on them specifically —
+`SCRAPED_UPLOAD_DISABLED` is treated as permanent (stop retrying that recipe's image upload),
+while everything else is retried. Every "not visible to this caller" case on `GET`/`PUT`/`DELETE`
+returns `404`, never `403`, so the endpoint can't be used to probe whether a recipe exists.
+
+---
+
 ## Future Enhancements
 
 - Custom exception handler plugin for consistent error responses

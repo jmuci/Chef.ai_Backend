@@ -22,7 +22,7 @@ import kotlin.test.assertNull
 
 /**
  * Covers the cross-repository behavior from
- * docs/prompts/recipe-image-upload-backend-prompt.md §6: a recipe soft-deleted through
+ * docs/recipe-image-architecture.md § Reclamation: a recipe soft-deleted through
  * `/sync/push` must dereference the blob it was pointing at, exactly like the repoint/clear
  * paths in [PostgresImageBlobRepository]. Both repositories reach into the same `recipes`
  * table, which the in-memory fakes used by the HTTP-level tests don't share — so this needs a
