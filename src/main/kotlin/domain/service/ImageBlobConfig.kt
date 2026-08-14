@@ -1,7 +1,7 @@
 package com.tenmilelabs.domain.service
 
 /**
- * See docs/prompts/recipe-image-upload-backend-prompt.md §5.
+ * See docs/recipe-image-architecture.md § Configuration Reference.
  *
  * [allowScrapedImageUpload] and [serveScrapedBlobsToNonOwners] are kill switches, not tuning
  * knobs — they exist so that hosting and publicly serving third-party images can be retreated

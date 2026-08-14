@@ -36,7 +36,7 @@ sealed interface ImageClearResult {
 /**
  * Upload, serving, and clearing of a recipe's hero image blob.
  *
- * See docs/prompts/recipe-image-upload-backend-prompt.md §3 for the endpoint contract this
+ * See docs/recipe-image-architecture.md for the endpoint contract this
  * implements and the reasoning behind each check.
  */
 class RecipeImageService(

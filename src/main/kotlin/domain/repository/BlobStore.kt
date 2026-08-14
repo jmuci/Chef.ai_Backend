@@ -9,7 +9,7 @@ import java.io.InputStream
  * [LocalDiskBlobStore][com.tenmilelabs.infrastructure.storage.LocalDiskBlobStore] is the only
  * implementation for now. Swapping in an object-store client later touches this interface's
  * implementation only — no endpoint or client-facing change. See
- * docs/prompts/recipe-image-upload-backend-prompt.md §2.
+ * docs/recipe-image-architecture.md.
  */
 interface BlobStore {
     suspend fun put(key: String, bytes: ByteArray, mimeType: String)

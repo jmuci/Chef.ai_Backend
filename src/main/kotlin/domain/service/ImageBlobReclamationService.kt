@@ -11,7 +11,7 @@ import kotlinx.datetime.Clock
  * no matching [image_blobs][com.tenmilelabs.infrastructure.database.tables.ImageBlobTable] row
  * (crash-orphans from an upload that wrote bytes but died before the row committed).
  *
- * See docs/prompts/recipe-image-upload-backend-prompt.md §6. The retention window exists
+ * See docs/recipe-image-architecture.md § Reclamation. The retention window exists
  * because recipe delete is a soft delete with no undo — it is the only thing that would make a
  * future "undo delete" feature possible at all.
  */

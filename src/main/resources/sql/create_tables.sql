@@ -123,7 +123,7 @@ CREATE INDEX IF NOT EXISTS idx_recipes_deleted_at_not_null ON recipes(deleted_at
 -- ===============================
 -- Recipe hero image bytes, scoped per-user (not deduplicated across users).
 -- recipes.image_blob_id stores the content_hash directly (an opaque change-token),
--- not a foreign key to this table's id — see docs/prompts/recipe-image-upload-backend-prompt.md.
+-- not a foreign key to this table's id — see docs/recipe-image-architecture.md.
 CREATE TABLE IF NOT EXISTS image_blobs (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID    NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
