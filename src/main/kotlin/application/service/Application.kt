@@ -2,6 +2,7 @@ package com.tenmilelabs.application.service
 
 import com.tenmilelabs.domain.repository.BlobStore
 import com.tenmilelabs.domain.repository.ImageBlobRepository
+import com.tenmilelabs.domain.repository.RecipeSearchRepository
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
@@ -13,6 +14,7 @@ import com.tenmilelabs.domain.service.ImageBlobReclamationService
 import com.tenmilelabs.domain.service.JwtService
 import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.RecipeImageService
+import com.tenmilelabs.domain.service.RecipeSearchService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SoftDeletePurgeConfig
 import com.tenmilelabs.domain.service.SoftDeletePurgeService
@@ -20,6 +22,7 @@ import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.configureJwtAuth
 import com.tenmilelabs.infrastructure.database.*
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresImageBlobRepository
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipeSearchRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipesRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRefreshTokenRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresSyncRepository
@@ -46,6 +49,7 @@ fun Application.module(
     syncRepository: SyncRepository = PostgresSyncRepository(),
     userPreferencesRepository: UserPreferencesRepository = PostgresUserPreferencesRepository(),
     imageBlobRepository: ImageBlobRepository = PostgresImageBlobRepository(),
+    recipeSearchRepository: RecipeSearchRepository = PostgresRecipeSearchRepository(),
     blobStore: BlobStore = LocalDiskBlobStore(
         Path.of(System.getenv("IMAGE_BLOB_STORAGE_ROOT") ?: "data/image-blobs")
     ),
@@ -75,6 +79,8 @@ fun Application.module(
     val softDeletePurgeService = SoftDeletePurgeService(recipeRepository, log)
     val syncService = SyncService(syncRepository, log, userPreferencesRepository)
 
+    val recipeSearchService = RecipeSearchService(recipeSearchRepository)
+
     val imageBlobConfig = imageBlobConfig()
     val recipeImageService = RecipeImageService(imageBlobRepository, blobStore, imageBlobConfig, log)
     val imageBlobReclamationService =
@@ -101,6 +107,7 @@ fun Application.module(
         recipeImageService = recipeImageService,
         imageBlobConfig = imageBlobConfig,
         userPreferencesRepository = userPreferencesRepository,
+        recipeSearchService = recipeSearchService,
     )
 
     val purgeConfig = softDeletePurgeConfig()
