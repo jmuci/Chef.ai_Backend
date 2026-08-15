@@ -10,6 +10,7 @@ import com.tenmilelabs.domain.service.HomeLayoutService
 import com.tenmilelabs.domain.service.ImageBlobConfig
 import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.RecipeImageService
+import com.tenmilelabs.domain.service.RecipeSearchService
 import com.tenmilelabs.domain.service.RecipesService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
@@ -44,6 +45,7 @@ fun Application.configureRouting(
     recipeImageService: RecipeImageService,
     imageBlobConfig: ImageBlobConfig,
     userPreferencesRepository: UserPreferencesRepository,
+    recipeSearchService: RecipeSearchService,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -78,6 +80,10 @@ fun Application.configureRouting(
             rateLimiter(limit = imageBlobConfig.uploadRateLimitPerMinute, refillPeriod = 60.seconds)
             requestKey { call -> call.userId ?: "anonymous" }
         }
+        register(RECIPE_SEARCH_RATE_LIMIT_NAME) {
+            rateLimiter(limit = 30, refillPeriod = 10.seconds)
+            requestKey { call -> call.userId ?: "anonymous" }
+        }
     }
 
     routing {
@@ -98,6 +104,7 @@ fun Application.configureRouting(
             mealPlanRoutes(mealPlanGenerationService)
             userPreferencesRoutes(userPreferencesRepository, mealPlanGenerationService)
             recipeImageRoutes(recipeImageService, imageBlobConfig)
+            recipeSearchRoutes(recipeSearchService)
             route("/recipes") {
 
                 get {
