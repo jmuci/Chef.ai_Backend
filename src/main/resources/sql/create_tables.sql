@@ -112,11 +112,22 @@ CREATE TABLE IF NOT EXISTS recipes (
     deleted_at          BIGINT,
     server_updated_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     image_blob_id       TEXT,
+    -- Full-text search over title + description, used by GET /api/v1/recipes/search. Weighted
+    -- 'A'/'C' so a title match ranks above a description-only match. The two-argument
+    -- to_tsvector(regconfig, text) form is required here: it's the only IMMUTABLE overload
+    -- (verified against a live PG 16 via pg_proc.provolatile), which GENERATED ALWAYS AS ...
+    -- STORED requires. Deliberately not declared on the Exposed RecipeTable object — see the
+    -- comment there.
+    search_vector       tsvector GENERATED ALWAYS AS (
+                             setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+                             setweight(to_tsvector('english', coalesce(description, '')), 'C')
+                         ) STORED,
     CONSTRAINT fk_recipes_creator FOREIGN KEY (creator_id) REFERENCES users(uuid) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_recipes_creator_id        ON recipes(creator_id);
 CREATE INDEX IF NOT EXISTS idx_recipes_server_updated_at ON recipes(server_updated_at);
 CREATE INDEX IF NOT EXISTS idx_recipes_deleted_at_not_null ON recipes(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_recipes_search_vector ON recipes USING GIN (search_vector);
 
 -- ===============================
 -- IMAGE_BLOBS
