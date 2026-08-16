@@ -3,13 +3,13 @@ package com.tenmilelabs.infrastructure.database.repositoryImpl
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.domain.model.Recipe
 import com.tenmilelabs.domain.repository.RecipesRepository
+import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.dao.RecipeDAO
 import com.tenmilelabs.infrastructure.database.mappers.daoToModel
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
 import io.ktor.util.logging.*
-import kotlinx.datetime.Clock
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.update
@@ -80,13 +80,13 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
             privacy = recipeRequest.privacy
             updatedAt = System.currentTimeMillis()
             deletedAt = null
-            serverUpdatedAt = Clock.System.now()
+            serverUpdatedAt = millisecondPrecisionNow()
         }
         recipeDAO.id.toString()
     }
 
     override suspend fun removeRecipe(uuid: String, userId: UUID): Boolean = suspendTransaction {
-        val now = Clock.System.now()
+        val now = millisecondPrecisionNow()
         val rowsUpdated = RecipeTable.update({
             (RecipeTable.id eq UUID.fromString(uuid)) and
                 (RecipeTable.creator_id eq userId) and

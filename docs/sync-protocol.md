@@ -501,6 +501,28 @@ Each page's reference data is independently complete:
 - Page 2 includes all tags/ingredients/etc. referenced by r21..r40 (possibly overlapping with Page 1)
 - Client deduplicates and merges across pages
 
+### Cursor stability guarantee
+
+`serverTimestamp` is always the `server_updated_at` of the last recipe actually included in
+the page, computed fresh per request — never a cached or client-echoed value. Two consecutive
+pulls, where call *N+1* uses call *N*'s `serverTimestamp` as its `since`, never return an
+identical `(recipe UUIDs, serverTimestamp)` pair while `hasMore` is still `true`.
+
+Two things the server guarantees to make that hold:
+- **Millisecond-exact writes**: every write to `server_updated_at` is truncated to millisecond
+  precision (`domain/util/SyncClock.kt`) before being persisted. `Clock.System.now()` resolves
+  to `java.time.Instant.now()` on the JVM, which carries microsecond precision; storing that
+  untruncated would let a strict `server_updated_at > since` comparison re-admit the very row
+  that produced the cursor, since the client's millisecond-floored `since` is always slightly
+  less than the row's true stored value. This was the root cause of a bug where `/sync/pull`
+  cursors froze on the first page forever — see the regression tests in `SyncServiceTest.kt`.
+- **No split ties**: if multiple recipes share the exact same `server_updated_at` (e.g. a
+  batched push landing in one millisecond), the whole tied group is kept together in one page
+  rather than being cut at `limit` — a page can occasionally return more than `limit` rows to
+  preserve this. Splitting a tie is what breaks the guarantee above: the shared boundary value
+  would either re-admit already-returned rows or silently drop the rest of the group. See
+  `SyncService.fetchStablePage`.
+
 ---
 
 ## Client Pre-Population / Bundle Strategy
