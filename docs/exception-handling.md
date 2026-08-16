@@ -145,6 +145,46 @@ Bookmark errors are **per-item** — other bookmarks and all recipes in the same
 
 ---
 
+## Sync Pagination Diagnostics
+
+Not a client-facing error — the response is still `200 OK`. This is a server log signal for
+operators debugging a `/sync/pull` account that isn't making forward progress.
+
+`SyncService.fetchStablePage` logs a `WARN` when it can't produce a page without splitting a
+tied `server_updated_at` boundary:
+
+```
+Sync pull for user <userId>: recipe tie at server_updated_at=<millis> exceeds the
+5000-row safety fetch — cursor may not advance past it until the tie clears
+```
+
+| Field | Meaning |
+|-------|---------|
+| `user <userId>` | The authenticated user whose pull triggered the log |
+| `server_updated_at=<millis>` | The shared millisecond timestamp the tie sits on — also what `serverTimestamp` will equal in the response |
+| `5000-row safety fetch` | `TIE_ESCAPE_FETCH_LIMIT` in `SyncService.kt` |
+
+**When this fires**: more than 5,000 recipes share the exact same millisecond-precision
+`server_updated_at`, starting at the client's own `since` cursor — e.g. a bulk import that
+wrote that many rows inside one millisecond. Ordinary single- or batch-recipe pushes can't
+trigger it: each recipe upsert does real per-row DB I/O, so genuine ties are expected to be far
+smaller than the safety fetch. See the cursor stability guarantee in
+[`docs/sync-protocol.md`](sync-protocol.md#cursor-stability-guarantee) for why a tie has to be
+kept whole rather than split across pages in the first place.
+
+**Client impact**: `hasMore` stays `true` and `serverTimestamp` stops advancing past the tied
+value until it's resolved server-side — the same symptom the underlying cursor-freeze bug
+produced, but now scoped to a documented, logged, and narrow edge case instead of any account
+whose data exceeded `limit`.
+
+**Fix**: re-run the offending bulk write with `server_updated_at` spread across distinct
+milliseconds, or raise `TIE_ESCAPE_FETCH_LIMIT` if 5,000 is genuinely too small for a
+legitimate one-off import. Resolving this class of tie completely (regardless of size) would
+need a compound `(timestamp, id)` cursor, which is a sync protocol change, not just a backend
+fix.
+
+---
+
 ## Recipe Image Errors
 
 Unlike sync errors, `PUT`/`GET`/`DELETE /recipes/{id}/image` map directly to HTTP status codes —

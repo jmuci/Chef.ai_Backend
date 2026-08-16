@@ -107,6 +107,98 @@ class SyncServiceTest {
         assertEquals(pageCreatorIds, returnedCreatorIds)
     }
 
+    /**
+     * Regression test for the frozen-cursor bug: several recipes sharing one exact
+     * `serverUpdatedAtMillis` (e.g. a batch push landing in the same millisecond) must not be
+     * split across a page boundary — see [SyncService.fetchStablePage]. When earlier, distinct
+     * timestamps exist, the tied group is deferred whole to the next page rather than cut.
+     */
+    @Test
+    fun pullDefersEntireTiedGroupInsteadOfSplittingIt() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+
+        val early = sampleRecipe(UUID.randomUUID(), userId, 500L, ingredientId)
+        val tiedA = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+        val tiedB = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+        val tiedC = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+        val later = sampleRecipe(UUID.randomUUID(), userId, 2000L, ingredientId)
+        repo.seedRecipe(early, 500L)
+        repo.seedRecipe(tiedA, 1000L)
+        repo.seedRecipe(tiedB, 1000L)
+        repo.seedRecipe(tiedC, 1000L)
+        repo.seedRecipe(later, 2000L)
+
+        val allIds = setOf(early, tiedA, tiedB, tiedC, later).map { it.uuid }.toSet()
+        val seen = mutableSetOf<String>()
+        var since = 0L
+        var hasMore = true
+        var pages = 0
+
+        while (hasMore) {
+            pages++
+            assertTrue(pages <= 5, "pagination did not terminate within a bounded number of pages")
+
+            val response = service.pullRecipes(userId = userId, sinceMillis = since, limit = 2)
+            val returnedIds = response.recipes.map { it.uuid }.toSet()
+
+            assertTrue(returnedIds.isNotEmpty(), "page $pages returned no recipes while hasMore was true")
+            val repeated = seen.intersect(returnedIds)
+            assertTrue(repeated.isEmpty(), "page $pages repeated recipes already returned: $repeated")
+
+            seen += returnedIds
+            since = response.serverTimestamp
+            hasMore = response.hasMore
+        }
+
+        assertEquals(allIds, seen)
+        assertEquals(3, pages) // [early] | [tiedA, tiedB, tiedC] (kept whole, past limit=2) | [later]
+    }
+
+    /**
+     * Same regression, but the tie has no earlier material to defer to at all — every recipe
+     * across two distinct timestamps ties with its own group, exercising the widen-and-return-
+     * whole-group path in [SyncService.fetchStablePage] on both pulls.
+     */
+    @Test
+    fun pullAdvancesAcrossConsecutiveTiedGroupsExceedingLimit() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+
+        val groupA = (1..4).map { sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId) }
+        val groupB = (1..4).map { sampleRecipe(UUID.randomUUID(), userId, 2000L, ingredientId) }
+        (groupA + groupB).forEachIndexed { index, recipe ->
+            repo.seedRecipe(recipe, if (index < 4) 1000L else 2000L)
+        }
+
+        val allIds = (groupA + groupB).map { it.uuid }.toSet()
+        val seen = mutableSetOf<String>()
+        var since = 0L
+        var hasMore = true
+        var pages = 0
+
+        while (hasMore) {
+            pages++
+            assertTrue(pages <= 5, "pagination did not terminate within a bounded number of pages")
+
+            val response = service.pullRecipes(userId = userId, sinceMillis = since, limit = 3)
+            val returnedIds = response.recipes.map { it.uuid }.toSet()
+
+            assertTrue(returnedIds.isNotEmpty(), "page $pages returned no recipes while hasMore was true")
+            val repeated = seen.intersect(returnedIds)
+            assertTrue(repeated.isEmpty(), "page $pages repeated recipes already returned: $repeated")
+            // Each tied group of 4 must come back intact in one page, never split by `limit`=3.
+            assertTrue(returnedIds.size == 4, "page $pages split a 4-way tied group: got ${returnedIds.size}")
+
+            seen += returnedIds
+            since = response.serverTimestamp
+            hasMore = response.hasMore
+        }
+
+        assertEquals(allIds, seen)
+        assertEquals(2, pages)
+    }
+
     @Test
     fun pullReturnsUniqueCreatorsPerPage() = withService { service, repo ->
         val userId = UUID.randomUUID()

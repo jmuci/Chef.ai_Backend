@@ -16,10 +16,13 @@ import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
+import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
+import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import io.ktor.util.logging.Logger
 import kotlinx.datetime.Clock
+import kotlinx.datetime.Instant
 import java.util.UUID
 
 class SyncService(
@@ -27,6 +30,14 @@ class SyncService(
     private val log: Logger,
     private val userPreferencesRepository: UserPreferencesRepository
 ) {
+    /**
+     * Safety cap on how far [fetchStablePage] will widen a fetch to find the end of a
+     * `server_updated_at` tie that starts at the pull's own `since` cursor.
+     */
+    private companion object {
+        private const val TIE_ESCAPE_FETCH_LIMIT = 5_000
+    }
+
     /**
      * Processes client dirty recipe aggregates for authenticated user.
      *
@@ -81,7 +92,7 @@ class SyncService(
                 return@forEach
             }
 
-            val now = Clock.System.now()
+            val now = millisecondPrecisionNow()
             syncRepository.upsertRecipeAggregate(recipe, now)
             accepted += AcceptedEntity(
                 uuid = recipe.uuid,
@@ -175,7 +186,7 @@ class SyncService(
                 return@forEach
             }
 
-            val now = Clock.System.now()
+            val now = millisecondPrecisionNow()
             syncRepository.upsertMealPlan(plan, userId, now)
             userPreferencesRepository.upsertUserPreferences(userId, plan.preferencesJson, now)
             accepted += MealPlanPushResult(uuid = plan.uuid, serverUpdatedAt = now.toEpochMilliseconds())
@@ -234,8 +245,8 @@ class SyncService(
                 return@forEach
             }
 
-            val now = Clock.System.now()
-            val deletedAt = bookmark.deletedAt?.let { kotlinx.datetime.Instant.fromEpochMilliseconds(it) }
+            val now = millisecondPrecisionNow()
+            val deletedAt = bookmark.deletedAt?.let { Instant.fromEpochMilliseconds(it) }
             syncRepository.upsertBookmark(userId, recipeId, deletedAt, now)
             log.info(
                 "Bookmark upserted for userId=$userId, recipeId=$recipeId, " +
@@ -262,13 +273,7 @@ class SyncService(
         require(sinceMillis >= 0) { "since must be non-negative" }
         require(limit > 0) { "limit must be greater than 0" }
 
-        val records = syncRepository.findDeltaRecipes(
-            userId = userId,
-            sinceMillis = sinceMillis,
-            limit = limit + 1
-        )
-        val hasMore = records.size > limit
-        val page = if (hasMore) records.take(limit) else records
+        val (page, hasMore) = fetchStablePage(userId, sinceMillis, limit)
         val cursor = page.lastOrNull()?.serverUpdatedAtMillis ?: sinceMillis
 
         val ingredientIds = page
@@ -321,6 +326,57 @@ class SyncService(
             serverTimestamp = cursor,
             hasMore = hasMore
         )
+    }
+
+    /**
+     * Fetches a delta page of recipes whose boundary `serverUpdatedAtMillis` is never split
+     * across two pages.
+     *
+     * `/sync/pull`'s cursor is a single millisecond `Long`. Splitting a page in the middle of
+     * several rows that share one `server_updated_at` value is what gets a pull cursor stuck:
+     * the next pull's `since` (`>` that shared value) either re-admits rows already returned —
+     * if communicating the cursor lost precision, as `Clock.System.now()`'s microsecond
+     * resolution used to before [millisecondPrecisionNow] — or silently drops whatever else
+     * shared it. Either way the client stops making forward progress. This fetches one row past
+     * `limit` to detect a tie at the boundary and, if found, defers the whole tied group to the
+     * next page — widening the fetch when needed to find where a tie starting at `since` itself
+     * actually ends, since there's no earlier material to defer to in that case.
+     */
+    private suspend fun fetchStablePage(
+        userId: UUID,
+        sinceMillis: Long,
+        limit: Int
+    ): Pair<List<SyncRecipeRecord>, Boolean> {
+        val fetched = syncRepository.findDeltaRecipes(userId, sinceMillis, limit = limit + 1)
+        if (fetched.size <= limit) return fetched to false
+
+        val boundaryTimestamp = fetched[limit - 1].serverUpdatedAtMillis
+        if (fetched[limit].serverUpdatedAtMillis != boundaryTimestamp) return fetched.take(limit) to true
+
+        val earlierGroups = fetched.filter { it.serverUpdatedAtMillis < boundaryTimestamp }
+        if (earlierGroups.isNotEmpty()) return earlierGroups to true
+
+        // The tie starts at `since` itself, so there's no earlier material to cut at — the only
+        // way to advance the cursor is to return the tied group whole, however large it turns
+        // out to be. Widen the fetch to find where it ends.
+        val widened = syncRepository.findDeltaRecipes(userId, sinceMillis, limit = TIE_ESCAPE_FETCH_LIMIT)
+        val tiedGroup = widened.takeWhile { it.serverUpdatedAtMillis == boundaryTimestamp }
+        return when {
+            tiedGroup.size < widened.size -> tiedGroup to true
+            widened.size < TIE_ESCAPE_FETCH_LIMIT -> widened to false
+            else -> {
+                // More than TIE_ESCAPE_FETCH_LIMIT recipes share one exact millisecond starting
+                // at `since`. A single-timestamp cursor can't express "partway through a tie
+                // this large" — fully resolving it needs a compound (timestamp, id) cursor,
+                // out of scope here. Log it so a stuck account is diagnosable.
+                log.warn(
+                    "Sync pull for user $userId: recipe tie at server_updated_at=$boundaryTimestamp " +
+                        "exceeds the $TIE_ESCAPE_FETCH_LIMIT-row safety fetch — cursor may not " +
+                        "advance past it until the tie clears"
+                )
+                widened.take(limit) to true
+            }
+        }
     }
 
     /**
