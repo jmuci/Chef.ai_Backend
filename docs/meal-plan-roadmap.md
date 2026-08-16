@@ -1,7 +1,7 @@
 # Meal Plan Generation — Incremental Roadmap
 
 **Status**: Living document — update as phases complete.
-**Last updated**: 2026-08-14 (Phase 3 done)
+**Last updated**: 2026-08-14 (Phase 4 done)
 
 This document tracks how meal-plan generation evolves from the current
 rule-based pipeline toward something smarter, and sequences the prerequisite
@@ -301,14 +301,68 @@ capturing the same `preferencesJson` shape as `MealPlanTable.preferences`.
 not this repo): actually wiring the wizard to call `GET /user/preferences`
 and pre-fill its fields from the response.
 
-## Phase 4 — Smarter deterministic ranking
+## Phase 4 — Done: smarter deterministic ranking
 
-Still no ML/LLM. Improvements to `assignRecipesToDays`:
-- Actually use `leftoverFriendly` (currently parsed in `parsePreferences`
-  but never consulted during assignment).
-- Avoid repeating dominant ingredients across consecutive days.
-- Weight against recipes used in the user's recent *past* meal plans, not
-  just within the current plan's own history.
+**Status: built.** Still no ML/LLM. Three additional signals now bias which
+candidate `pickFrom` sees first, on top of the existing variety logic —
+never overriding it, and never leaving a slot unfilled that would
+otherwise be filled:
+
+1. **`leftoverFriendly` is finally consulted.** It was parsed since Phase 0
+   but never read during assignment. Now, when true, candidates whose
+   `servings` exceeds `servingsPerMeal` are shuffled ahead of the rest in
+   `MealPlanGenerationService.leftoverAwareShuffle` — an ordering bias, not
+   a filter, so recipes that would actually produce leftovers are favored
+   early in the plan without excluding anything.
+2. **Dominant-ingredient repetition is soft-avoided across consecutive
+   days.** There's no per-recipe "dominant ingredient" column in this
+   schema, and comparing raw `RecipeIngredientTable.quantity` across
+   recipes is unreliable (units aren't normalized). Instead,
+   `PostgresSyncRepository.findRecipeRankingMetadata` computes each
+   recipe's dominant *food-group category* — the mode (most frequent, ties
+   broken alphabetically) of `SourceClassificationTable.category` across
+   its classified ingredients, joined manually via
+   `IngredientTable.source_primary_id` (a plain column, not a typed FK, so
+   this is 3 batched queries + an in-memory join rather than one Exposed
+   join). A recipe with no classified ingredients simply isn't
+   constrained. `MealPlanGenerationService.rankForDay` then soft-sorts a
+   day's candidates so ones sharing the previous day's dominant category
+   (for the same meal slot — dinner/lunch tracked independently) sort
+   last.
+3. **New plans weight against the user's recent past plans, not just their
+   own history.** `PostgresSyncRepository.findRecentlyUsedRecipeIds`
+   returns recipe IDs (dinner or lunch) from the user's last 3 `READY`
+   plans (mirrors `MEDIUM` variety's existing hardcoded 3-day gap),
+   excluding the plan currently being generated and soft-deleted plans.
+   DRAFT/GENERATING plans don't count — only plans that actually reached
+   `READY` reflect something the user was really served. `rankForDay`
+   soft-deprioritizes these the same way as the category signal.
+
+**Important scoping decision, found while testing**: signals 2 and 3 only
+apply to `MEDIUM`/`HIGH` variety, not `LOW`. `LOW`'s
+`candidates[history.size % candidates.size]` round-robin walks every list
+position over the course of a plan, so re-sorting the candidate list per
+day doesn't reliably bias `LOW`'s outcome the way it does for
+`MEDIUM`/`HIGH`'s "try the preferred candidate first, fall back" logic —
+it can even deterministically land on the *least*-preferred candidate for
+some day/candidate-count combinations, which a test caught immediately.
+`LOW`'s contract is "free repetition, no variety logic" — these are
+additive refinements to the "try preferred first" step that only
+`MEDIUM`/`HIGH` have, so `rankForDay` returns `LOW`'s candidates unchanged.
+
+`pickFrom` itself was not touched — Phase 2's HIGH/MEDIUM/LOW logic is
+exactly as it was; every new signal is a candidate-list reorder computed
+in `assignRecipesToDays`/`rankForDay` before the unchanged `pickFrom` call,
+keeping the blast radius minimal and Phase 2's tests untouched.
+
+Tests: `MealPlanGenerationServiceTest` (leftoverFriendly bias, category
+avoidance when an alternative exists, category repetition remains
+soft/never-empty, recentlyUsedElsewhere deprioritization and its
+soft/never-empty case, `LOW` variety's exemption);
+`PostgresRecipeRankingIntegrationTest` (servings + mode-category
+correctness including the unclassified-ingredient case;
+`findRecentlyUsedRecipeIds` respecting the `READY`-only filter, the limit,
+plan exclusion, and soft-deleted plans).
 
 ## Phase 5 — Future/optional: AI-assisted generation
 

@@ -9,6 +9,7 @@ import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.application.dto.SyncUser
+import com.tenmilelabs.domain.repository.RecipeRankingMetadata
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
@@ -34,6 +35,16 @@ class FakeSyncRepository : SyncRepository {
     private val mealPlans = mutableMapOf<UUID, SyncMealPlanRecord>()
     // candidate recipe IDs for generation (injectable per-test)
     private val candidateRecipeIds = mutableListOf<UUID>()
+    private val rankingMetadataByRecipe = mutableMapOf<UUID, RecipeRankingMetadata>()
+    private val recentlyUsedElsewhereIds = mutableSetOf<UUID>()
+
+    fun seedRankingMetadata(recipeId: UUID, servings: Int = 2, dominantCategory: String? = null) {
+        rankingMetadataByRecipe[recipeId] = RecipeRankingMetadata(servings, dominantCategory)
+    }
+
+    fun seedRecentlyUsedElsewhere(recipeId: UUID) {
+        recentlyUsedElsewhereIds += recipeId
+    }
 
     fun seedIngredient(uuid: UUID = UUID.randomUUID(), serverUpdatedAt: Long = 0L): UUID {
         ingredients[uuid] = SyncIngredient(
@@ -243,4 +254,10 @@ class FakeSyncRepository : SyncRepository {
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?
     ): List<UUID> = candidateRecipeIds.toList()
+
+    override suspend fun findRecipeRankingMetadata(recipeIds: Set<UUID>): Map<UUID, RecipeRankingMetadata> =
+        recipeIds.mapNotNull { id -> rankingMetadataByRecipe[id]?.let { id to it } }.toMap()
+
+    override suspend fun findRecentlyUsedRecipeIds(userId: UUID, excludePlanId: UUID, limit: Int): Set<UUID> =
+        recentlyUsedElsewhereIds.toSet()
 }

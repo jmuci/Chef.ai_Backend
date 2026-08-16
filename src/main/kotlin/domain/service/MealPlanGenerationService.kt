@@ -2,6 +2,7 @@ package com.tenmilelabs.domain.service
 
 import com.tenmilelabs.application.dto.GenerateMealPlanResponse
 import com.tenmilelabs.application.dto.SyncMealPlanDayDto
+import com.tenmilelabs.domain.repository.RecipeRankingMetadata
 import com.tenmilelabs.domain.repository.SyncRepository
 import io.ktor.util.logging.*
 import kotlinx.coroutines.CoroutineScope
@@ -72,7 +73,14 @@ class MealPlanGenerationService(
                 maxPrepTimeMinutes = prefs.maxPrepTimeMinutes
             )
 
-            val days = assignRecipesToDays(candidateIds, prefs)
+            val rankingMetadata = syncRepository.findRecipeRankingMetadata(candidateIds.toSet())
+            val recentlyUsedElsewhere = syncRepository.findRecentlyUsedRecipeIds(
+                userId = userId,
+                excludePlanId = planId,
+                limit = RECENT_PLAN_HISTORY_LIMIT
+            )
+
+            val days = assignRecipesToDays(candidateIds, prefs, rankingMetadata, recentlyUsedElsewhere)
 
             val now = Clock.System.now()
             syncRepository.replaceMealPlanDays(planId, days)
@@ -96,17 +104,33 @@ class MealPlanGenerationService(
      *
      * Batch-cooking: when [prefs.batchCooking] is true, odd-indexed days reuse the previous
      * day's assignment (pairs intentionally share a recipe for batch-prep efficiency).
+     *
+     * Three additional signals bias which candidate [pickFrom] sees first, but never override
+     * the variety rules above or leave a slot unfilled that would otherwise be filled:
+     * - [prefs.leftoverFriendly]: candidates whose `servings` exceeds [prefs.servingsPerMeal]
+     *   are shuffled to the front, so recipes that actually produce leftovers are favored early.
+     * - Dominant-ingredient repetition: each day's pick is soft-deprioritized (not excluded) if
+     *   its [RecipeRankingMetadata.dominantCategory] matches the immediately-previous day's pick
+     *   for the same meal slot (dinner/lunch tracked independently). Only applies to MEDIUM/HIGH —
+     *   see [rankForDay] for why LOW is exempt.
+     * - [recentlyUsedElsewhere]: candidates used in the user's recent past `READY` plans are
+     *   soft-deprioritized, so a new plan favors recipes the user hasn't seen recently. Also
+     *   MEDIUM/HIGH only, same reason.
      */
     internal fun assignRecipesToDays(
         candidateIds: List<UUID>,
-        prefs: MealPlanPreferences
+        prefs: MealPlanPreferences,
+        rankingMetadata: Map<UUID, RecipeRankingMetadata> = emptyMap(),
+        recentlyUsedElsewhere: Set<UUID> = emptySet()
     ): List<SyncMealPlanDayDto> {
         if (candidateIds.isEmpty()) return buildEmptyDays(prefs.planLengthDays)
 
-        val shuffled = candidateIds.shuffled()
+        val shuffled = leftoverAwareShuffle(candidateIds, prefs, rankingMetadata)
         val days = mutableListOf<SyncMealPlanDayDto>()
         val dinnerHistory = ArrayDeque<UUID>()
         val lunchHistory = ArrayDeque<UUID>()
+        var previousDinnerCategory: String? = null
+        var previousLunchCategory: String? = null
 
         for (dayIndex in 0 until prefs.planLengthDays) {
             val dinnerRecipeId: UUID?
@@ -117,12 +141,21 @@ class MealPlanGenerationService(
                 dinnerRecipeId = days.last().dinnerRecipeId?.let { UUID.fromString(it) }
                 lunchRecipeId = days.last().lunchRecipeId?.let { UUID.fromString(it) }
             } else {
-                dinnerRecipeId = pickFrom(shuffled, dinnerHistory, prefs.varietyPreference)
-                dinnerRecipeId?.let { dinnerHistory.addLast(it) }
+                val dinnerRanked = rankForDay(shuffled, prefs.varietyPreference, recentlyUsedElsewhere, previousDinnerCategory, rankingMetadata)
+                dinnerRecipeId = pickFrom(dinnerRanked, dinnerHistory, prefs.varietyPreference)
+                dinnerRecipeId?.let {
+                    dinnerHistory.addLast(it)
+                    previousDinnerCategory = rankingMetadata[it]?.dominantCategory
+                }
 
                 lunchRecipeId = if (prefs.mealType == MealType.DINNER_AND_LUNCH) {
-                    pickFrom(shuffled, lunchHistory, prefs.varietyPreference)
-                        .also { it?.let { id -> lunchHistory.addLast(id) } }
+                    val lunchRanked = rankForDay(shuffled, prefs.varietyPreference, recentlyUsedElsewhere, previousLunchCategory, rankingMetadata)
+                    pickFrom(lunchRanked, lunchHistory, prefs.varietyPreference).also {
+                        it?.let { id ->
+                            lunchHistory.addLast(id)
+                            previousLunchCategory = rankingMetadata[id]?.dominantCategory
+                        }
+                    }
                 } else null
             }
 
@@ -135,6 +168,52 @@ class MealPlanGenerationService(
         }
 
         return days
+    }
+
+    /**
+     * When [MealPlanPreferences.leftoverFriendly] is true, favors candidates whose `servings`
+     * exceeds [MealPlanPreferences.servingsPerMeal] by shuffling them ahead of the rest; otherwise
+     * a plain shuffle. Ordering only — never excludes a candidate.
+     */
+    private fun leftoverAwareShuffle(
+        candidateIds: List<UUID>,
+        prefs: MealPlanPreferences,
+        rankingMetadata: Map<UUID, RecipeRankingMetadata>
+    ): List<UUID> {
+        if (!prefs.leftoverFriendly) return candidateIds.shuffled()
+
+        val (leftoverFavoring, rest) = candidateIds.partition {
+            (rankingMetadata[it]?.servings ?: 0) > prefs.servingsPerMeal
+        }
+        return leftoverFavoring.shuffled() + rest.shuffled()
+    }
+
+    /**
+     * Stably re-sorts [candidates] ahead of a single day's [pickFrom] call: candidates recently
+     * used in the user's other plans sort last, and (within that) candidates sharing
+     * [previousCategory] with the prior day's pick for this meal slot sort last. Ordering only —
+     * [pickFrom]'s own variety/fallback logic is unaffected.
+     *
+     * Skipped for [VarietyPreference.LOW]: its `candidates[history.size % candidates.size]`
+     * round-robin walks every position in the list over time, so re-sorting per day doesn't bias
+     * outcomes the way it does for MEDIUM/HIGH's "try preferred first" — it can even land on the
+     * *least*-preferred position for some day/candidate-count combinations. LOW's contract is pure
+     * free repetition; these signals only apply where there's a "try preferred first" step to hook.
+     */
+    private fun rankForDay(
+        candidates: List<UUID>,
+        variety: VarietyPreference,
+        recentlyUsedElsewhere: Set<UUID>,
+        previousCategory: String?,
+        rankingMetadata: Map<UUID, RecipeRankingMetadata>
+    ): List<UUID> {
+        if (variety == VarietyPreference.LOW) return candidates
+        return candidates.sortedWith(
+            compareBy(
+                { it in recentlyUsedElsewhere },
+                { previousCategory != null && rankingMetadata[it]?.dominantCategory == previousCategory }
+            )
+        )
     }
 
     /**
@@ -215,6 +294,9 @@ class MealPlanGenerationService(
     companion object {
         const val STATUS_GENERATING = "GENERATING"
         const val STATUS_READY = "READY"
+
+        /** How many of the user's most recent READY plans count toward [SyncRepository.findRecentlyUsedRecipeIds]. */
+        internal const val RECENT_PLAN_HISTORY_LIMIT = 3
 
         private val lenientJson = Json { ignoreUnknownKeys = true }
     }
