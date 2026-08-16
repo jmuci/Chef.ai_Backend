@@ -521,7 +521,9 @@ Two things the server guarantees to make that hold:
   rather than being cut at `limit` — a page can occasionally return more than `limit` rows to
   preserve this. Splitting a tie is what breaks the guarantee above: the shared boundary value
   would either re-admit already-returned rows or silently drop the rest of the group. See
-  `SyncService.fetchStablePage`.
+  `SyncService.fetchStablePage`. Ties large enough to outgrow the safety fetch fall back to a
+  logged, documented edge case — see
+  [`docs/exception-handling.md`](exception-handling.md#sync-pagination-diagnostics).
 
 ---
 
