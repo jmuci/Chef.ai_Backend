@@ -804,6 +804,19 @@ This ensures no bookmark deltas are re-fetched on the next pull.
 - A recipe can be bookmarked only if it is `PUBLIC` or the user is the creator. Attempting to bookmark a private recipe owned by another user produces `RECIPE_NOT_FOUND`.
 - Anonymous / unauthenticated requests return `401`; the client should handle bookmarks as local-only in that case.
 
+**Accessibility is checked at bookmark-push time only, not re-verified afterward.** If a recipe's
+owner later flips `privacy` away from `PUBLIC`, or soft-deletes it, the `bookmarked_recipes` row
+is not cleaned up — nothing cascades that change. The bookmark pull query above (`user_id =
+authenticated user AND server_updated_at > since`) doesn't re-check the referenced recipe's
+current accessibility either, so a stale bookmark keeps syncing down as a normal delta. In
+practice this is harmless for the bookmarks list itself (the client already drops recipes it
+can't resolve locally), but **any server-side consumer that treats bookmark rows as a proxy for
+"recipe this user can currently receive" must re-apply the same `deleted_at IS NULL AND
+(creator_id = userId OR privacy = 'PUBLIC')` predicate against `recipes` before trusting a
+bookmark**. Meal-plan generation's `COLLECTION_ONLY` candidate query
+(`findCandidateRecipeIds` in `PostgresSyncRepository.kt`) does this today — see
+`docs/meal-plan-roadmap.md`'s Phase 2.1 for the bug this closed.
+
 ---
 
 ## Recipe Images (Hero Image Blobs)

@@ -174,7 +174,10 @@ interface SyncRepository {
      *
      * [recipeSource] — "COLLECTION_ONLY" limits to recipes bookmarked by [userId] or authored
      * by [userId] (so a user's own recipes are always usable, even unbookmarked); "INCLUDE_PUBLIC"
-     * includes all recipes owned by [userId] or marked PUBLIC.
+     * includes all recipes owned by [userId] or marked PUBLIC. A bookmark only counts if the
+     * bookmarked recipe is still accessible to [userId] (not soft-deleted, and either owned by
+     * [userId] or still `privacy = PUBLIC`) — the same predicate `/sync/pull` uses, so a
+     * candidate is never returned that the client's own pull could never deliver.
      *
      * [dietaryRestrictionTags] — tag display names (e.g. "VEGAN", "GLUTEN_FREE") that
      * a candidate recipe must ALL be tagged with. Empty list means no restriction.

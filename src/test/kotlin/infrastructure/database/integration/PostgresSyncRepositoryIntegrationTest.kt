@@ -19,6 +19,7 @@ import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.jetbrains.exposed.sql.update
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -373,5 +374,183 @@ class PostgresSyncRepositoryIntegrationTest {
         )
 
         assertEquals(setOf(authoredNotBookmarkedId, bookmarkedFromOtherUserId), candidates.toSet())
+    }
+
+    @Test
+    fun findCandidateRecipeIdsCollectionOnlyExcludesStaleBookmarks() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val userId = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(userId, UserTable)
+                it[user_name] = "user"
+                it[email] = "user-${userId}@example.com"
+                it[display_name] = "User"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+            UserTable.insert {
+                it[UserTable.id] = EntityID(otherUserId, UserTable)
+                it[user_name] = "other"
+                it[email] = "other-${otherUserId}@example.com"
+                it[display_name] = "Other"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+        }
+
+        fun pushRecipe(id: UUID, title: String, creatorId: UUID, privacy: String) = runBlocking {
+            repo.upsertRecipeAggregate(
+                SyncRecipe(
+                    uuid = id.toString(),
+                    title = title,
+                    description = "desc",
+                    imageUrl = "https://example.com/i.jpg",
+                    imageUrlThumbnail = "https://example.com/t.jpg",
+                    prepTimeMinutes = 10,
+                    cookTimeMinutes = 10,
+                    servings = 2,
+                    creatorId = creatorId.toString(),
+                    recipeExternalUrl = null,
+                    privacy = privacy,
+                    updatedAt = 1_000L,
+                    deletedAt = null,
+                    steps = emptyList(),
+                    ingredients = emptyList(),
+                    tagIds = emptyList(),
+                    labelIds = emptyList()
+                ),
+                Instant.fromEpochMilliseconds(2_000L)
+            )
+        }
+
+        val stillPublicId = UUID.randomUUID()
+        val laterPrivatizedId = UUID.randomUUID()
+        val laterSoftDeletedId = UUID.randomUUID()
+
+        pushRecipe(stillPublicId, "Still Public", creatorId = otherUserId, privacy = "PUBLIC")
+        pushRecipe(laterPrivatizedId, "Later Privatized", creatorId = otherUserId, privacy = "PUBLIC")
+        pushRecipe(laterSoftDeletedId, "Later Soft Deleted", creatorId = otherUserId, privacy = "PUBLIC")
+
+        transaction {
+            listOf(stillPublicId, laterPrivatizedId, laterSoftDeletedId).forEach { recipeId ->
+                BookmarkedRecipeTable.insert {
+                    it[BookmarkedRecipeTable.user_id] = EntityID(userId, UserTable)
+                    it[BookmarkedRecipeTable.recipe_id] = EntityID(recipeId, RecipeTable)
+                    it[deleted_at] = null
+                    it[server_updated_at] = Instant.fromEpochMilliseconds(2_000L)
+                }
+            }
+
+            // Nothing cleans up bookmarked_recipes when the owner later revokes access — simulate
+            // that directly against RecipeTable, the same way the owner's own push would.
+            RecipeTable.update({ RecipeTable.id eq EntityID(laterPrivatizedId, RecipeTable) }) {
+                it[privacy] = "PRIVATE"
+            }
+            RecipeTable.update({ RecipeTable.id eq EntityID(laterSoftDeletedId, RecipeTable) }) {
+                it[deleted_at] = 3_000L
+            }
+        }
+
+        val candidates = repo.findCandidateRecipeIds(
+            userId = userId,
+            recipeSource = "COLLECTION_ONLY",
+            dietaryRestrictionTags = emptyList(),
+            maxPrepTimeMinutes = null
+        )
+
+        assertEquals(setOf(stillPublicId), candidates.toSet())
+    }
+
+    @Test
+    fun findCandidateRecipeIdsIncludePublicExcludesInaccessibleAndStaleBookmarkedRecipes() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val userId = UUID.randomUUID()
+        val otherUserId = UUID.randomUUID()
+
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(userId, UserTable)
+                it[user_name] = "user"
+                it[email] = "user-${userId}@example.com"
+                it[display_name] = "User"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+            UserTable.insert {
+                it[UserTable.id] = EntityID(otherUserId, UserTable)
+                it[user_name] = "other"
+                it[email] = "other-${otherUserId}@example.com"
+                it[display_name] = "Other"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+        }
+
+        fun pushRecipe(id: UUID, title: String, creatorId: UUID, privacy: String) = runBlocking {
+            repo.upsertRecipeAggregate(
+                SyncRecipe(
+                    uuid = id.toString(),
+                    title = title,
+                    description = "desc",
+                    imageUrl = "https://example.com/i.jpg",
+                    imageUrlThumbnail = "https://example.com/t.jpg",
+                    prepTimeMinutes = 10,
+                    cookTimeMinutes = 10,
+                    servings = 2,
+                    creatorId = creatorId.toString(),
+                    recipeExternalUrl = null,
+                    privacy = privacy,
+                    updatedAt = 1_000L,
+                    deletedAt = null,
+                    steps = emptyList(),
+                    ingredients = emptyList(),
+                    tagIds = emptyList(),
+                    labelIds = emptyList()
+                ),
+                Instant.fromEpochMilliseconds(2_000L)
+            )
+        }
+
+        val ownedPrivateId = UUID.randomUUID()
+        val otherPublicId = UUID.randomUUID()
+        val otherPrivateNotBookmarkedId = UUID.randomUUID()
+        val otherPrivateButBookmarkedId = UUID.randomUUID()
+        val softDeletedPublicId = UUID.randomUUID()
+
+        pushRecipe(ownedPrivateId, "My Private Recipe", creatorId = userId, privacy = "PRIVATE")
+        pushRecipe(otherPublicId, "Other's Public Recipe", creatorId = otherUserId, privacy = "PUBLIC")
+        pushRecipe(otherPrivateNotBookmarkedId, "Other's Private Recipe", creatorId = otherUserId, privacy = "PRIVATE")
+        pushRecipe(otherPrivateButBookmarkedId, "Later Privatized But Bookmarked", creatorId = otherUserId, privacy = "PUBLIC")
+        pushRecipe(softDeletedPublicId, "Soft Deleted Public Recipe", creatorId = otherUserId, privacy = "PUBLIC")
+
+        transaction {
+            // A bookmark must never be the thing that grants INCLUDE_PUBLIC access — this branch
+            // doesn't even query bookmarked_recipes, so a bookmark to a recipe the owner has since
+            // made inaccessible (here: privatized) must not leak it into the candidate pool.
+            BookmarkedRecipeTable.insert {
+                it[BookmarkedRecipeTable.user_id] = EntityID(userId, UserTable)
+                it[BookmarkedRecipeTable.recipe_id] = EntityID(otherPrivateButBookmarkedId, RecipeTable)
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(2_000L)
+            }
+            RecipeTable.update({ RecipeTable.id eq EntityID(otherPrivateButBookmarkedId, RecipeTable) }) {
+                it[privacy] = "PRIVATE"
+            }
+            RecipeTable.update({ RecipeTable.id eq EntityID(softDeletedPublicId, RecipeTable) }) {
+                it[deleted_at] = 3_000L
+            }
+        }
+
+        val candidates = repo.findCandidateRecipeIds(
+            userId = userId,
+            recipeSource = "INCLUDE_PUBLIC",
+            dietaryRestrictionTags = emptyList(),
+            maxPrepTimeMinutes = null
+        )
+
+        assertEquals(setOf(ownedPrivateId, otherPublicId), candidates.toSet())
     }
 }
