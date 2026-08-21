@@ -582,7 +582,7 @@ class PostgresSyncRepository : SyncRepository {
         // Step 2: Build the base set of accessible recipe IDs per recipeSource
         val accessibleIds: Set<UUID> = when (recipeSource) {
             "COLLECTION_ONLY" -> {
-                val bookmarked = BookmarkedRecipeTable
+                val bookmarkedIds = BookmarkedRecipeTable
                     .selectAll()
                     .where {
                         (BookmarkedRecipeTable.user_id eq EntityID(userId, UserTable)) and
@@ -590,6 +590,25 @@ class PostgresSyncRepository : SyncRepository {
                     }
                     .map { it[BookmarkedRecipeTable.recipe_id].value }
                     .toSet()
+                // Nothing cleans up bookmarked_recipes when the bookmarked recipe is later
+                // soft-deleted or its owner flips privacy away from PUBLIC, so a bookmark can
+                // outlive the recipe's accessibility to this user. Re-check against the same
+                // predicate /sync/pull uses (findDeltaRecipes) — otherwise a stale bookmark hands
+                // out a candidate the client can never actually receive, leaving a permanently
+                // unresolvable recipe reference in the generated plan.
+                val accessibleBookmarked = if (bookmarkedIds.isEmpty()) {
+                    emptySet()
+                } else {
+                    RecipeTable
+                        .selectAll()
+                        .where {
+                            (RecipeTable.id inList bookmarkedIds.map { EntityID(it, RecipeTable) }) and
+                                RecipeTable.deleted_at.isNull() and
+                                ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
+                        }
+                        .map { it[RecipeTable.id].value }
+                        .toSet()
+                }
                 val authored = RecipeTable
                     .selectAll()
                     .where {
@@ -597,7 +616,7 @@ class PostgresSyncRepository : SyncRepository {
                     }
                     .map { it[RecipeTable.id].value }
                     .toSet()
-                bookmarked + authored
+                accessibleBookmarked + authored
             }
             else -> RecipeTable
                 .selectAll()

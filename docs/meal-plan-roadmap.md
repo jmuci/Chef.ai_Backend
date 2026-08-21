@@ -1,7 +1,7 @@
 # Meal Plan Generation — Incremental Roadmap
 
 **Status**: Living document — update as phases complete.
-**Last updated**: 2026-08-14 (Phase 4 done)
+**Last updated**: 2026-08-20 (Phase 2.1 done)
 
 This document tracks how meal-plan generation evolves from the current
 rule-based pipeline toward something smarter, and sequences the prerequisite
@@ -253,6 +253,53 @@ recipes without bookmarking any, push a `DRAFT` plan with
 `varietyPreference: "HIGH"`, call `/generate`, pull — status comes back
 `READY` with all 7 days filled (5 distinct recipes + 2 repeats), instead of
 the previous empty-pool / partial-fill behavior.
+
+## Phase 2.1 — Done: close the stale-bookmark leak in COLLECTION_ONLY
+
+**Status: built (2026-08-20).** Diagnosed from a client-visible symptom: a
+`COLLECTION_ONLY` plan's day 2 dinner referenced a recipe UUID that was
+never in the user's local `recipes` table on Android — not soft-deleted,
+just never delivered by any `/sync/pull`, and not present in the user's
+`bookmarked_recipes` either. The plan itself came from the server
+(`syncState=SYNCED`), so the dangling reference had to originate in
+`findCandidateRecipeIds`.
+
+**Root cause**: the `"COLLECTION_ONLY"` branch built its `bookmarked` set
+from `BookmarkedRecipeTable` alone — no join back to `RecipeTable` — while
+every other recipe-delivery query in this file (`findDeltaRecipes`'s pull
+query, and this same function's own `INCLUDE_PUBLIC`/`else` branch) gates on
+`deleted_at IS NULL AND (creator_id = userId OR privacy = 'PUBLIC')`.
+Nothing in this codebase cleans up `bookmarked_recipes` when the bookmarked
+recipe is later soft-deleted or its owner flips `privacy` away from
+`PUBLIC` — so a bookmark can quietly outlive the recipe's accessibility to
+the bookmarking user. The stale bookmark stayed a valid `COLLECTION_ONLY`
+candidate forever, even though `/sync/pull` (bound to the same
+creator-or-public predicate) would never actually deliver that recipe to
+the client — producing a meal-plan slot the client can never resolve, no
+matter how many times it syncs.
+
+**Fix**, in
+[`findCandidateRecipeIds`](../src/main/kotlin/infrastructure/database/repositoryImpl/PostgresSyncRepository.kt):
+the bookmarked recipe IDs are now re-checked against `RecipeTable` with the
+same `deleted_at IS NULL AND (creator_id = userId OR privacy = 'PUBLIC')`
+predicate before being unioned with `authored`. KDoc on
+`SyncRepository.findCandidateRecipeIds` updated to match. Regression test:
+`PostgresSyncRepositoryIntegrationTest.findCandidateRecipeIdsCollectionOnlyExcludesStaleBookmarks`
+(one bookmark whose recipe stays `PUBLIC`, one whose owner later flips it to
+`PRIVATE`, one whose recipe is later soft-deleted — only the first should
+remain a candidate).
+
+**Audited**: `INCLUDE_PUBLIC` does not have an analogous gap. Its candidate
+query applies the `deleted_at`/`creator_id`-or-`PUBLIC` predicate directly
+against `RecipeTable` (see Phase 0 above) and never queries
+`bookmarked_recipes` at all, so a stale or privacy-flipped bookmark can't
+leak a recipe into an `INCLUDE_PUBLIC` plan the way it could for
+`COLLECTION_ONLY`. Confirmed by
+`PostgresSyncRepositoryIntegrationTest.findCandidateRecipeIdsIncludePublicExcludesInaccessibleAndStaleBookmarkedRecipes`:
+a recipe the user bookmarked while `PUBLIC` and whose owner later flips to
+`PRIVATE`, a never-bookmarked private recipe, and a soft-deleted public
+recipe are all excluded; only the user's own (private) recipe and another
+user's still-public recipe remain candidates.
 
 ## Phase 3 — Done: persist preference defaults
 
