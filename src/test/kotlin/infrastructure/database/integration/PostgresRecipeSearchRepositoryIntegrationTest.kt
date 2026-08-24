@@ -166,6 +166,53 @@ class PostgresRecipeSearchRepositoryIntegrationTest {
     }
 
     @Test
+    fun `an anonymous search sees PUBLIC recipes only, while the owner still sees both`() = runBlocking {
+        // ChefAI#184: a null userId is the anonymous caller, served by the PUBLIC-only statement.
+        val repo = PostgresRecipeSearchRepository()
+        val ownerId = UUID.randomUUID()
+        val publicRecipeId = UUID.randomUUID()
+        val privateRecipeId = UUID.randomUUID()
+        transaction {
+            insertUser(ownerId)
+            insertRecipe(publicRecipeId, title = "Zzyxqorbnak Sponge Cake", creatorId = ownerId)
+            insertRecipe(
+                privateRecipeId,
+                title = "Zzyxqorbnak Secret Cake",
+                creatorId = ownerId,
+                privacy = "PRIVATE"
+            )
+        }
+
+        val anonymousResult = repo.search(null, tsQueryFor("Zzyxqorbnak"), 20, 0)
+        assertEquals(listOf(publicRecipeId), anonymousResult.rows.map { it.uuid })
+
+        val ownerResult = repo.search(ownerId, tsQueryFor("Zzyxqorbnak"), 20, 0)
+        assertEquals(setOf(publicRecipeId, privateRecipeId), ownerResult.rows.map { it.uuid }.toSet())
+    }
+
+    @Test
+    fun `a PRIVATE recipe never leaks to an anonymous search via a tag hit`() = runBlocking {
+        // The anonymous mirror of the stranger test above: dropping the creator disjunct must not
+        // also drop the visibility predicate that keeps the tag CTE honest.
+        val repo = PostgresRecipeSearchRepository()
+        val ownerId = UUID.randomUUID()
+        val privateRecipeId = UUID.randomUUID()
+        val tagId = UUID.randomUUID()
+        transaction {
+            insertUser(ownerId)
+            insertRecipe(privateRecipeId, title = "Family Secret Chili", creatorId = ownerId, privacy = "PRIVATE")
+            insertTag(tagId, "Zzyxqorbnak")
+            linkTag(privateRecipeId, tagId)
+        }
+
+        val anonymousByTag = repo.search(null, tsQueryFor("Zzyxqorbnak"), 20, 0)
+        assertTrue(anonymousByTag.rows.isEmpty())
+
+        val anonymousByTitle = repo.search(null, tsQueryFor("Family Secret Chili"), 20, 0)
+        assertTrue(anonymousByTitle.rows.isEmpty())
+    }
+
+    @Test
     fun `soft-deleted recipes and soft-deleted tag links are excluded`() = runBlocking {
         val repo = PostgresRecipeSearchRepository()
         val userId = UUID.randomUUID()

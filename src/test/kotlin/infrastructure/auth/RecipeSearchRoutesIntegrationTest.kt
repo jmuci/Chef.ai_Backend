@@ -28,18 +28,63 @@ import io.ktor.server.testing.testApplication
 import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class RecipeSearchRoutesIntegrationTest {
 
     @Test
-    fun `search requires authentication`() = testApplication {
-        application { module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository(), syncRepository = FakeSyncRepository(), recipeSearchRepository = FakeRecipeSearchRepository()) }
+    fun `an anonymous request is served and reaches the repository with a null user id`() = testApplication {
+        // The regression this pins: ChefAI#184. The route used to 401 without a JWT, so the
+        // Android client skipped it entirely for anonymous sessions and search silently degraded
+        // to an on-device scan. A null userId is what scopes the query to PUBLIC recipes.
+        val fakeRepository = FakeRecipeSearchRepository()
+        application { module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository(), syncRepository = FakeSyncRepository(), recipeSearchRepository = fakeRepository) }
         val client = createClient { install(ContentNegotiation) { json() } }
 
-        val response = client.get("/api/v1/recipes/search?q=chicken")
+        val response = client.get("/api/v1/recipes/search?q=chicken") {
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        assertEquals(1, fakeRepository.searchCallCount)
+        assertNull(fakeRepository.lastUserId)
+    }
+
+    @Test
+    fun `an authenticated request still forwards its own user id`() = testApplication {
+        val fakeRepository = FakeRecipeSearchRepository()
+        application { module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository(), syncRepository = FakeSyncRepository(), recipeSearchRepository = fakeRepository) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/api/v1/recipes/search?q=chicken") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        // Optional auth must not cost a signed-in user their own PRIVATE recipes: the principal is
+        // still resolved, so the repository gets the real id rather than the anonymous null.
+        assertEquals(UUID.fromString(auth.userId), fakeRepository.lastUserId)
+    }
+
+    @Test
+    fun `a present but invalid bearer token is still rejected instead of silently downgraded`() = testApplication {
+        // optional = true skips the challenge for a *missing* Authorization header, not a broken
+        // one. Serving public-only results here would strand a signed-in user on an expired token:
+        // the client's refresh-then-retry only fires on a 401.
+        val fakeRepository = FakeRecipeSearchRepository()
+        application { module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = FakeRefreshTokenRepository(), syncRepository = FakeSyncRepository(), recipeSearchRepository = fakeRepository) }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val response = client.get("/api/v1/recipes/search?q=chicken") {
+            bearerAuth("not-a-real-jwt")
+            accept(ContentType.Application.Json)
+        }
 
         assertEquals(HttpStatusCode.Unauthorized, response.status)
+        assertEquals(0, fakeRepository.searchCallCount)
     }
 
     @Test

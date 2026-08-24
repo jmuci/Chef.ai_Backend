@@ -13,9 +13,12 @@ class RecipeSearchService(private val recipeSearchRepository: RecipeSearchReposi
     /**
      * [requestedLimit]/[requestedOffset] come straight from query params and are clamped here —
      * the repository trusts its callers completely, so this is the one place that enforces it.
+     *
+     * A null [userId] is an anonymous caller, not an error: results are scoped to `PUBLIC`
+     * recipes only. See `Routing.kt` for why the route admits them.
      */
     suspend fun search(
-        userId: UUID,
+        userId: UUID?,
         rawQuery: String,
         requestedLimit: Int?,
         requestedOffset: Int?,

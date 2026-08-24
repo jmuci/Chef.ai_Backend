@@ -175,6 +175,14 @@ Client                    Server                     Database
 | Update Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | Delete Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | List All Recipes  | ✅    | ✅ (filtered)              | ❌                           | ❌              |
+| Search Recipes    | ✅    | ✅                         | ❌                           | ✅ (public only) |
+
+`GET /api/v1/recipes/search` is the one endpoint that serves unauthenticated callers a data
+result: it is mounted under `authenticate("auth-jwt", optional = true)`, so a missing
+`Authorization` header scopes the query to `PUBLIC` recipes instead of being challenged. A
+*present but invalid* token is still a `401` — optional auth skips the challenge only when no
+credentials were offered at all. See ChefAI#184 for why this endpoint is anonymous-capable: the
+app is anonymous-first, and requiring a JWT made the catalog unreachable for signed-out users.
 
 ### Authorization Logic
 
