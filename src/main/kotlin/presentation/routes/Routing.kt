@@ -97,9 +97,12 @@ fun Application.configureRouting(
         // Public authentication routes
         authRoutes(authService)
 
+        // Public: the anonymous-first Home screen must load before any account exists.
+        // homeRoutes reads no auth principal, so it belongs outside authenticate("auth-jwt").
+        homeRoutes(homeLayoutService)
+
         // Protected routes - require authentication
         authenticate("auth-jwt") {
-            homeRoutes(homeLayoutService)
             syncRoutes(syncService)
             mealPlanRoutes(mealPlanGenerationService)
             userPreferencesRoutes(userPreferencesRepository, mealPlanGenerationService)
