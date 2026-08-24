@@ -170,19 +170,23 @@ Client                    Server                     Database
 
 | Resource          | Owner | Other Users (Public Recipe) | Other Users (Private Recipe) | Unauthenticated |
 |-------------------|-------|----------------------------|------------------------------|-----------------|
-| View Recipe       | ✅    | ✅                         | ❌                           | ❌              |
+| View Recipe       | ✅    | ✅                         | ❌                           | ✅ (public only) |
 | Create Recipe     | ✅    | N/A                        | N/A                          | ❌              |
 | Update Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | Delete Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | List All Recipes  | ✅    | ✅ (filtered)              | ❌                           | ❌              |
 | Search Recipes    | ✅    | ✅                         | ❌                           | ✅ (public only) |
 
-`GET /api/v1/recipes/search` is the one endpoint that serves unauthenticated callers a data
-result: it is mounted under `authenticate("auth-jwt", optional = true)`, so a missing
-`Authorization` header scopes the query to `PUBLIC` recipes instead of being challenged. A
-*present but invalid* token is still a `401` — optional auth skips the challenge only when no
-credentials were offered at all. See ChefAI#184 for why this endpoint is anonymous-capable: the
-app is anonymous-first, and requiring a JWT made the catalog unreachable for signed-out users.
+`GET /api/v1/recipes/search` and `GET /api/v1/recipes/{recipeId}` are the two endpoints that
+serve unauthenticated callers a data result: both are mounted under
+`authenticate("auth-jwt", optional = true)`, so a missing `Authorization` header scopes them
+to `PUBLIC` recipes instead of being challenged. A *present but invalid* token is still a
+`401` on either — optional auth skips the challenge only when no credentials were offered at
+all. See ChefAI#184 for why search is anonymous-capable (the app is anonymous-first, and
+requiring a JWT made the catalog unreachable for signed-out users) and ChefAI#186 for why
+single-recipe fetch is too (search was reachable but its results weren't — see
+`docs/sync-protocol.md`'s Recipe Detail section). The older `GET /recipes/byId` is a
+different, unrelated endpoint — still fully authenticated, unchanged by either fix.
 
 ### Authorization Logic
 

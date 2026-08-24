@@ -92,6 +92,12 @@ fun Application.configureRouting(
             // publishes 8080 directly.
             requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
         }
+        register(RECIPE_DETAIL_RATE_LIMIT_NAME) {
+            rateLimiter(limit = 30, refillPeriod = 10.seconds)
+            // Its own bucket, not RECIPE_SEARCH_RATE_LIMIT_NAME's - see RecipeDetailRoutes.kt.
+            // Same anonymous-by-remote-address keying rationale as search.
+            requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
+        }
     }
 
     routing {
@@ -117,6 +123,9 @@ fun Application.configureRouting(
         // keystroke.
         authenticate("auth-jwt", optional = true) {
             recipeSearchRoutes(recipeSearchService)
+            // ChefAI#186: a search result's tap-through needs to fetch a not-yet-synced recipe
+            // by id under the same anonymous-capable rules search itself uses.
+            recipeDetailRoutes(syncService)
         }
 
         // Protected routes - require authentication
