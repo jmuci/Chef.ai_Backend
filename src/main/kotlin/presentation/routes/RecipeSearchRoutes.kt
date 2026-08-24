@@ -16,10 +16,10 @@ val RECIPE_SEARCH_RATE_LIMIT_NAME = RateLimitName("recipe-search")
 fun Route.recipeSearchRoutes(recipeSearchService: RecipeSearchService) {
     rateLimit(RECIPE_SEARCH_RATE_LIMIT_NAME) {
         get("/api/v1/recipes/search") {
-            val userId = parseUuidOrNull(call.userId) ?: run {
-                call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
-                return@get
-            }
+            // Null for an anonymous caller - this route is mounted under
+            // authenticate("auth-jwt", optional = true), see Routing.kt. Null is not an error
+            // here; it scopes the search to PUBLIC recipes only.
+            val userId: UUID? = parseUuidOrNull(call.userId)
 
             val query = call.request.queryParameters["q"]?.trim()
             if (query.isNullOrBlank()) {

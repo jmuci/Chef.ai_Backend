@@ -186,6 +186,36 @@ Expected outcomes:
 - A subsequent pull (`GET /sync/pull?...`) includes `imageBlobId` on the recipe.
 - Clear returns `204`; a fetch after that returns `404`.
 
+### Recipe Search Smoke Test
+
+`GET /api/v1/recipes/search` is anonymous-capable: with no `Authorization` header it searches the
+`PUBLIC` catalog, and with a valid token it searches that catalog *plus* the caller's own
+`PRIVATE` recipes. Against a running, seeded server:
+
+1. Anonymous — no auth header at all:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/search?q=cake&limit=50" | jq '.results | length'
+```
+
+2. Authenticated — same query, with a token from `/auth/login`:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/search?q=cake&limit=50" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" | jq '.results | length'
+```
+
+3. Broken token — must still be rejected, not silently downgraded to the anonymous scope:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "http://localhost:8080/api/v1/recipes/search?q=cake" \
+  -H "Authorization: Bearer not-a-real-jwt"
+```
+
+Expected outcomes:
+- Step 1 returns `200` with the full public catalog match count — not a subset, and never a `PRIVATE` recipe.
+- Step 2 returns a superset of step 1 (the caller's own private recipes are added).
+- Step 3 returns `401`; the client is expected to refresh and retry rather than accept public-only results.
+- Rate limiting is 30 requests / 10s, keyed per user for authenticated callers and per remote address for anonymous ones.
+
 ## Test Users
 
 | Email          | Password  |
