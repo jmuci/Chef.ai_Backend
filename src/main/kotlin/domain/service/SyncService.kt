@@ -16,6 +16,7 @@ import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
+import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
@@ -24,6 +25,15 @@ import io.ktor.util.logging.Logger
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import java.util.UUID
+
+sealed interface RecipeDetailResult {
+    data class Found(
+        val recipe: SyncRecipe,
+        val referenceData: SyncReferenceData,
+        val creators: List<SyncUser>
+    ) : RecipeDetailResult
+    data object NotFound : RecipeDetailResult
+}
 
 class SyncService(
     private val syncRepository: SyncRepository,
@@ -326,6 +336,48 @@ class SyncService(
             serverTimestamp = cursor,
             hasMore = hasMore
         )
+    }
+
+    /**
+     * Fetches a single recipe aggregate for `GET /api/v1/recipes/{recipeId}` — the
+     * anonymous-capable counterpart to [pullRecipes] used to hydrate a search result the
+     * client hasn't synced yet (ChefAI#186). [userId] is nullable for the same reason
+     * [RecipeSearchService.search]'s is: a null caller is anonymous, not an error.
+     *
+     * A recipe is visible if it's `PUBLIC`, or `PRIVATE` and owned by [userId]. Everything
+     * else — nonexistent, soft-deleted, or `PRIVATE` and not owned — is [RecipeDetailResult.NotFound].
+     * Deliberately never a 403-shaped outcome: this mirrors the bookmark-push rule (see
+     * docs/sync-protocol.md's validation table) of not distinguishing "doesn't exist" from
+     * "exists but you can't see it," so a private recipe's existence isn't leaked to a caller
+     * who isn't its owner.
+     *
+     * Reference data is fetched gap-only (`sinceMillis = null`) — the same mode [pushRecipes]
+     * uses for conflict responses — since there's no pull cursor for a one-off fetch.
+     * [RecipeDetailResult.Found.creators] is included alongside [SyncReferenceData] because
+     * `recipes.creator_id` is itself an FK a client must be able to resolve, same as
+     * [pullRecipes]'s `creators` field.
+     */
+    suspend fun getRecipeDetail(userId: UUID?, recipeId: UUID): RecipeDetailResult {
+        val record = syncRepository.getRecipe(recipeId) ?: return RecipeDetailResult.NotFound
+        val recipe = record.recipe
+
+        if (recipe.deletedAt != null) return RecipeDetailResult.NotFound
+
+        val isOwner = userId != null && recipe.creatorId == userId.toString()
+        if (recipe.privacy != "PUBLIC" && !isOwner) return RecipeDetailResult.NotFound
+
+        val referenceData = syncRepository.collectReferenceData(
+            ingredientIds = recipe.ingredients.map { UUID.fromString(it.ingredientId) }.toSet(),
+            tagIds = recipe.tagIds.map { UUID.fromString(it) }.toSet(),
+            labelIds = recipe.labelIds.map { UUID.fromString(it) }.toSet(),
+            sinceMillis = null
+        )
+        val creators = syncRepository.collectCreators(
+            creatorIds = setOf(UUID.fromString(recipe.creatorId)),
+            sinceMillis = null
+        )
+
+        return RecipeDetailResult.Found(recipe, referenceData, creators)
     }
 
     /**

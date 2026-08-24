@@ -216,6 +216,45 @@ Expected outcomes:
 - Step 3 returns `401`; the client is expected to refresh and retry rather than accept public-only results.
 - Rate limiting is 30 requests / 10s, keyed per user for authenticated callers and per remote address for anonymous ones.
 
+### Recipe Detail Smoke Test
+
+`GET /api/v1/recipes/{recipeId}` is anonymous-capable the same way search is: a missing
+`Authorization` header scopes visibility to `PUBLIC` recipes, and a valid token additionally
+allows the caller's own `PRIVATE` recipes. Unlike search, not-found and not-accessible both
+respond `404` — see `docs/sync-protocol.md`'s Recipe Detail section. Against a running,
+seeded server:
+
+1. Anonymous fetch of a `PUBLIC` recipe:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/<PUBLIC_RECIPE_UUID>" | jq '.recipe.uuid, (.referenceData.ingredients | length), (.creators | length)'
+```
+
+2. Anonymous fetch of a `PRIVATE` recipe you don't own:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PRIVATE_RECIPE_UUID>"
+```
+
+3. Owner fetch of their own `PRIVATE` recipe, with a token from `/auth/login`:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PRIVATE_RECIPE_UUID>" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+4. Broken token — must still be rejected, not silently downgraded:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PUBLIC_RECIPE_UUID>" \
+  -H "Authorization: Bearer not-a-real-jwt"
+```
+
+Expected outcomes:
+- Step 1 returns `200` with `referenceData`/`creators` populated for that recipe's actual
+  ingredients/tags/labels/author — not empty arrays.
+- Step 2 returns `404` (not `403` — a private recipe's existence isn't leaked).
+- Step 3 returns `200`.
+- Step 4 returns `401`.
+- Rate limiting is its own bucket from recipe search (30 requests / 10s, same anonymous
+  keying) — exhausting one doesn't block the other.
+
 ## Test Users
 
 | Email          | Password  |
