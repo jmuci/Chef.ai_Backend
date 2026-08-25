@@ -106,6 +106,12 @@ echo "Created recipe response:"
 cat "$RECIPE_RESPONSE"
 echo
 
+RECIPE_UUID=$(jq -e -r .uuid <"$RECIPE_RESPONSE") || {
+  echo "No uuid found in recipe creation response:"
+  cat "$RECIPE_RESPONSE"
+  exit 1
+}
+
 # 5. Get recipes as an authenticated user
 echo "Getting recipes..."
 RECIPES=$(curl -s -X GET http://localhost:8082/recipes \
@@ -229,6 +235,112 @@ fi
 if ! jq -e --arg recipeUuid "$SYNC_RECIPE_UUID" '.recipes | any(.uuid == $recipeUuid)' <"$SYNC_PULL_RESPONSE" >/dev/null; then
   echo "Sync pull did not include pushed recipe UUID $SYNC_RECIPE_UUID:"
   cat "$SYNC_PULL_RESPONSE"
+  exit 1
+fi
+
+# 8. Home layout (anonymous, no Authorization header)
+echo "Fetching home layout (anonymous)..."
+HOME_LAYOUT_RESPONSE=$(mktemp)
+HOME_LAYOUT_HTTP_CODE=$(curl -s -o "$HOME_LAYOUT_RESPONSE" -w "%{http_code}" \
+  http://localhost:8082/api/v1/home/layout \
+) || {
+    echo "Home layout curl failed with HTTP code: $HOME_LAYOUT_HTTP_CODE"
+    cat "$HOME_LAYOUT_RESPONSE"
+    exit 1
+}
+
+if [[ "$HOME_LAYOUT_HTTP_CODE" != "200" ]]; then
+  echo "Home layout fetch failed (HTTP $HOME_LAYOUT_HTTP_CODE):"
+  cat "$HOME_LAYOUT_RESPONSE"
+  exit 1
+fi
+
+if ! jq -e '
+  (.schemaVersion | type == "string") and
+  (.layoutChecksum | type == "string") and
+  (.components | type == "array")
+' <"$HOME_LAYOUT_RESPONSE" >/dev/null; then
+  echo "Home layout response missing required fields:"
+  cat "$HOME_LAYOUT_RESPONSE"
+  exit 1
+fi
+
+# 9. Home layout again, this time with If-None-Match set to the checksum we just got - expect 304
+echo "Re-fetching home layout with matching ETag (expect 304)..."
+LAYOUT_CHECKSUM=$(jq -e -r .layoutChecksum <"$HOME_LAYOUT_RESPONSE")
+HOME_LAYOUT_304_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  http://localhost:8082/api/v1/home/layout \
+  -H "If-None-Match: \"$LAYOUT_CHECKSUM\"" \
+)
+
+if [[ "$HOME_LAYOUT_304_CODE" != "304" ]]; then
+  echo "Home layout conditional GET expected 304 but got HTTP $HOME_LAYOUT_304_CODE"
+  exit 1
+fi
+
+# 10. Recipe search (anonymous) - the recipe created in step 4 is PUBLIC, so it must be
+# visible to a caller with no Authorization header.
+echo "Searching recipes (anonymous)..."
+SEARCH_RESPONSE=$(mktemp)
+SEARCH_HTTP_CODE=$(curl -s -o "$SEARCH_RESPONSE" -w "%{http_code}" \
+  "http://localhost:8082/api/v1/recipes/search?q=Test" \
+) || {
+    echo "Recipe search curl failed with HTTP code: $SEARCH_HTTP_CODE"
+    cat "$SEARCH_RESPONSE"
+    exit 1
+}
+
+if [[ "$SEARCH_HTTP_CODE" != "200" ]]; then
+  echo "Recipe search failed (HTTP $SEARCH_HTTP_CODE):"
+  cat "$SEARCH_RESPONSE"
+  exit 1
+fi
+
+if ! jq -e --arg recipeUuid "$RECIPE_UUID" '.results | any(.uuid == $recipeUuid)' <"$SEARCH_RESPONSE" >/dev/null; then
+  echo "Anonymous search for 'Test' did not include public recipe $RECIPE_UUID:"
+  cat "$SEARCH_RESPONSE"
+  exit 1
+fi
+
+# 11. Recipe search with a missing q param - expect 400
+SEARCH_MISSING_Q_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://localhost:8082/api/v1/recipes/search" \
+)
+if [[ "$SEARCH_MISSING_Q_CODE" != "400" ]]; then
+  echo "Recipe search without q expected 400 but got HTTP $SEARCH_MISSING_Q_CODE"
+  exit 1
+fi
+
+# 12. Single-recipe detail fetch (anonymous) - the recipe created in step 4 is PUBLIC.
+echo "Fetching recipe detail (anonymous)..."
+DETAIL_RESPONSE=$(mktemp)
+DETAIL_HTTP_CODE=$(curl -s -o "$DETAIL_RESPONSE" -w "%{http_code}" \
+  "http://localhost:8082/api/v1/recipes/$RECIPE_UUID" \
+) || {
+    echo "Recipe detail curl failed with HTTP code: $DETAIL_HTTP_CODE"
+    cat "$DETAIL_RESPONSE"
+    exit 1
+}
+
+if [[ "$DETAIL_HTTP_CODE" != "200" ]]; then
+  echo "Recipe detail fetch failed (HTTP $DETAIL_HTTP_CODE):"
+  cat "$DETAIL_RESPONSE"
+  exit 1
+fi
+
+if ! jq -e --arg recipeUuid "$RECIPE_UUID" '.recipe.uuid == $recipeUuid' <"$DETAIL_RESPONSE" >/dev/null; then
+  echo "Recipe detail response did not match requested uuid $RECIPE_UUID:"
+  cat "$DETAIL_RESPONSE"
+  exit 1
+fi
+
+# 13. Single-recipe detail fetch for a recipe that doesn't exist - expect 404
+NONEXISTENT_UUID=$(new_uuid)
+DETAIL_404_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  "http://localhost:8082/api/v1/recipes/$NONEXISTENT_UUID" \
+)
+if [[ "$DETAIL_404_CODE" != "404" ]]; then
+  echo "Recipe detail for nonexistent uuid expected 404 but got HTTP $DETAIL_404_CODE"
   exit 1
 fi
 
