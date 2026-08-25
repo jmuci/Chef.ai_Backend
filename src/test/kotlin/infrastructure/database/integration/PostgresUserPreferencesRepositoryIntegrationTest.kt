@@ -22,7 +22,9 @@ class PostgresUserPreferencesRepositoryIntegrationTest {
     @BeforeEach
     fun resetSchema() {
         Database.connect(
-            url = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/chefai_db",
+            // chefai_test, deliberately NOT the docker-compose dev database: resetSchema()
+            // drops the public schema, which silently wiped a seeded chefai_db. CI sets DB_URL.
+            url = System.getenv("DB_URL") ?: "jdbc:postgresql://localhost:5432/chefai_test",
             user = System.getenv("DB_USER") ?: "postgres",
             password = System.getenv("DB_PASSWORD") ?: "password"
         )

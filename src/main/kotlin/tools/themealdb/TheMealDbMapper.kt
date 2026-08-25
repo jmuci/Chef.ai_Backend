@@ -127,18 +127,30 @@ object TheMealDbMapper {
             ingredientCount = mergedIngredients.size
         )
 
+        // Meal-type/style tags TheMealDB's own vocabulary doesn't carry — without these the
+        // client's browse cards ("Lunch", "Kid-Friendly", ...) have nothing to match. See
+        // MealTypeClassifier for why these are editorial, not sourced.
+        val classification = MealTypeClassifier.classify(
+            category = meal.category,
+            tags = meal.tags,
+            title = meal.name,
+            ingredientNames = meal.ingredients.map { it.name }
+        )
+
         val tagIds = buildList {
             meal.area?.takeIf { it.isNotBlank() }?.let { add(resolveTag(it).id) }
             meal.category
                 ?.takeIf { it.isNotBlank() && normalizeName(it) !in DIETARY_CATEGORY_NAMES }
                 ?.let { add(resolveTag(it).id) }
             meal.tags.forEach { add(resolveTag(it).id) }
+            classification.tagNames.forEach { add(resolveTag(it).id) }
         }.distinct()
 
         val labelIds = buildList {
             meal.category
                 ?.takeIf { normalizeName(it) in DIETARY_CATEGORY_NAMES }
                 ?.let { add(resolveLabel(it).id) }
+            classification.labelNames.forEach { add(resolveLabel(it).id) }
         }.distinct()
 
         val description = listOfNotNull(meal.area, meal.category)
