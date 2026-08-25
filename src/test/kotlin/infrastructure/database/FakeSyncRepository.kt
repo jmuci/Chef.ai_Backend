@@ -33,6 +33,10 @@ class FakeSyncRepository : SyncRepository {
     private val inaccessibleRecipes = mutableSetOf<UUID>()
     // meal plans: key=planId, value=record with server timestamp
     private val mealPlans = mutableMapOf<UUID, SyncMealPlanRecord>()
+    // meal plans: key=planId, value=owning user - PostgresSyncRepository enforces this at the
+    // query level (WHERE user_id = ...); this fake must mirror that or ownership checks in
+    // MealPlanGenerationService/SyncService pass in tests while being broken in production.
+    private val mealPlanOwners = mutableMapOf<UUID, UUID>()
     // candidate recipe IDs for generation (injectable per-test)
     private val candidateRecipeIds = mutableListOf<UUID>()
     private val rankingMetadataByRecipe = mutableMapOf<UUID, RecipeRankingMetadata>()
@@ -109,9 +113,10 @@ class FakeSyncRepository : SyncRepository {
         inaccessibleRecipes += recipeId
     }
 
-    fun seedMealPlan(plan: SyncMealPlanDto, serverUpdatedAtMillis: Long = 0L): UUID {
+    fun seedMealPlan(plan: SyncMealPlanDto, serverUpdatedAtMillis: Long = 0L, userId: UUID = UUID.randomUUID()): UUID {
         val uuid = UUID.fromString(plan.uuid)
         mealPlans[uuid] = SyncMealPlanRecord(plan = plan, serverUpdatedAtMillis = serverUpdatedAtMillis)
+        mealPlanOwners[uuid] = userId
         return uuid
     }
 
@@ -221,18 +226,21 @@ class FakeSyncRepository : SyncRepository {
     // ── Meal Plans ────────────────────────────────────────────────────────────
 
     override suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord? =
-        mealPlans[uuid]
+        mealPlans[uuid]?.takeIf { mealPlanOwners[uuid] == userId }
 
     override suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant) {
-        mealPlans[UUID.fromString(plan.uuid)] = SyncMealPlanRecord(
+        val uuid = UUID.fromString(plan.uuid)
+        mealPlans[uuid] = SyncMealPlanRecord(
             plan = plan,
             serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
         )
+        mealPlanOwners[uuid] = userId
     }
 
     override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
-        mealPlans.values
-            .filter { it.serverUpdatedAtMillis > sinceMillis }
+        mealPlans.entries
+            .filter { (uuid, record) -> mealPlanOwners[uuid] == userId && record.serverUpdatedAtMillis > sinceMillis }
+            .map { it.value }
             .sortedBy { it.serverUpdatedAtMillis }
 
     override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant) {

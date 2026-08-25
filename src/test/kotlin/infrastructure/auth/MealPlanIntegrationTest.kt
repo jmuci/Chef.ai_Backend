@@ -102,10 +102,12 @@ class MealPlanIntegrationTest {
         val client = createClient { install(ContentNegotiation) { json() } }
         val auth = client.registerAndGetAuth()
 
-        // Seed an existing plan with a high server timestamp
+        // Seed an existing plan with a high server timestamp, owned by the same user who is
+        // about to push a stale update - getMealPlanForUser only sees plans owned by the caller.
         syncRepository.seedMealPlan(
             buildDraftPlan(planId, updatedAt = 9000L),
-            serverUpdatedAtMillis = 9000L
+            serverUpdatedAtMillis = 9000L,
+            userId = UUID.fromString(auth.userId)
         )
 
         // Push a stale version (client updatedAt < server serverUpdatedAt)
@@ -146,6 +148,68 @@ class MealPlanIntegrationTest {
 
         val response = client.post("/meal-plans/${UUID.randomUUID()}/generate") {
             bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+    }
+
+    @Test
+    fun `generate endpoint returns 400 for a malformed mealPlanId`() = testApplication {
+        application {
+            module(
+                configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = FakeSyncRepository(),
+                userPreferencesRepository = FakeUserPreferencesRepository()
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.post("/meal-plans/not-a-uuid/generate") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun `generate endpoint returns 404 for a plan owned by a different user`() = testApplication {
+        // startGeneration folds "doesn't exist" and "exists but isn't owned by the caller" into
+        // the same 404 - this pins that the authorization branch is taken, not just the existence
+        // branch above, so a query that dropped its ownership filter wouldn't slip through.
+        val syncRepository = FakeSyncRepository()
+        val planId = UUID.randomUUID()
+
+        application {
+            module(
+                configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository,
+                userPreferencesRepository = FakeUserPreferencesRepository()
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val owner = client.registerAndGetAuth()
+        val intruder = client.registerAndGetAuth()
+
+        client.post("/sync/push") {
+            bearerAuth(owner.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildDraftPlan(planId))))
+        }
+
+        val response = client.post("/meal-plans/$planId/generate") {
+            bearerAuth(intruder.token)
             accept(ContentType.Application.Json)
         }
 
@@ -202,20 +266,21 @@ class MealPlanIntegrationTest {
         val testDispatcher = StandardTestDispatcher(testScheduler)
         val syncRepository = FakeSyncRepository()
         val planId = UUID.randomUUID()
+        val userId = UUID.randomUUID()
         val recipeId = syncRepository.seedCandidateRecipe()
         val log = KtorSimpleLogger("test")
         val generationScope = CoroutineScope(SupervisorJob() + testDispatcher)
         val generationService = MealPlanGenerationService(syncRepository, generationScope, log)
 
         // Seed plan directly and trigger generation
-        syncRepository.upsertMealPlan(buildDraftPlan(planId), UUID.randomUUID(), kotlinx.datetime.Clock.System.now())
-        generationService.startGeneration(planId, UUID.randomUUID())
+        syncRepository.upsertMealPlan(buildDraftPlan(planId), userId, kotlinx.datetime.Clock.System.now())
+        generationService.startGeneration(planId, userId)
 
         // Advance coroutines to completion
         advanceUntilIdle()
 
         // Plan should now be READY with days
-        val record = syncRepository.getMealPlanForUser(planId, UUID.randomUUID())
+        val record = syncRepository.getMealPlanForUser(planId, userId)
         assertNotNull(record)
         assertEquals("READY", record.plan.status)
         assertEquals(3, record.plan.days.size)

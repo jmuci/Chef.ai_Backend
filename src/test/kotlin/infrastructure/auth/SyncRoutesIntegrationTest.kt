@@ -877,6 +877,108 @@ class SyncRoutesIntegrationTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
+    @Test
+    fun pullRouteRejectsZeroLimit() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/sync/pull?since=0&limit=0") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun pullRouteRejectsNegativeLimit() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/sync/pull?since=0&limit=-10") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun pushRouteRejectsMalformedJsonBody() = testApplication {
+        // Pins the JsonConvertException/SerializationException branches in SyncRoutes.kt - an
+        // unparseable body must map to 400, not fall through to the generic 500 handler.
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody("""{ "recipes": "this should be an array, not a string" }""")
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
+    fun pushRouteRejectsRequestMissingRequiredFields() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody("{}")
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
     private suspend fun HttpClient.registerAndGetAuth(): AuthResponse {
         val registerRequest = RegisterRequest(
             email = "sync-test@example.com",
