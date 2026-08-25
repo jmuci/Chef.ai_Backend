@@ -168,6 +168,10 @@ fun pullIncludesGapTagReferencedByReturnedRecipe() = testApplication {
 - `docs/auth-quick-start.md` — Quick endpoint reference
 - `docs/exception-handling.md` — Error codes and patterns
 - `docs/recipe-image-architecture.md` — Recipe hero image blob upload/serving/reclamation: class diagram, upload/serve sequence diagrams, error states, app startup changes
+- `docs/home-layout-sdui.md` — Server-driven home layout endpoint, component schema, caching/ETag behavior
+- `docs/meal-plan-roadmap.md` — Meal-plan generation phases, recipe sourcing strategy
+- `docs/recipe-search.md` — Postgres full-text recipe search: query builder, ranking, rate limiting
+- `docs/themealdb-importer.md` — One-off catalog import tool (`tools/themealdb`): fetch, map, dedup, idempotent seed SQL
 - `README.md` — Quick start, smoke tests, build commands
 
 ---

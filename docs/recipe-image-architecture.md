@@ -56,6 +56,7 @@ erDiagram
     recipes {
         UUID uuid PK
         UUID creator_id FK
+        TEXT privacy "PUBLIC or PRIVATE — drives the Visibility Matrix"
         TEXT image_url
         TEXT image_blob_id "content hash, not a FK"
         BIGINT updated_at
@@ -84,10 +85,13 @@ Three choices worth calling out:
 - **`recipes.image_blob_id` stores the hash itself, not a foreign key to `image_blobs.id`.** The
   client treats it as an opaque change-token; comparing hashes *is* the "is this a different
   image" test. A join would buy nothing.
-- **`provenance` is recorded but only consulted on `GET`,** not on write. It exists so an
-  owner-only serving rule can be re-imposed by config (`serveScrapedBlobsToNonOwners`, see
-  [Configuration Reference](#configuration-reference)) without a backfill that would be
-  impossible to reconstruct after the fact.
+- **`provenance` gates both the write and the read.** On upload, `RecipeImageService` derives it
+  from whether the recipe already has a scraped `imageUrl` (`imageUrl.isBlank() → USER`, else
+  `SCRAPED`) and rejects the upload outright if it's `SCRAPED` and `allowScrapedImageUpload` is
+  off — see the [Upload Flow validation order](#validation-order-and-error-states). On `GET`, the
+  same field additionally gates serving to non-owners via `serveScrapedBlobsToNonOwners`. It's
+  stored (rather than re-derived on every read) so an owner-only serving rule can be re-imposed by
+  config without a backfill that would be impossible to reconstruct after the fact.
 
 ## Class Diagram
 
@@ -142,6 +146,7 @@ classDiagram
     }
     ImageBlobReclamationService --> ImageBlobRepository : uses
     ImageBlobReclamationService --> BlobStore : uses
+    ImageBlobReclamationService --> ImageBlobConfig : reads unreferencedRetentionDays
 
     class ImageBlobConfig {
         +allowScrapedImageUpload Boolean
@@ -151,6 +156,13 @@ classDiagram
         +unreferencedRetentionDays Int
         +uploadRateLimitPerMinute Int
     }
+
+    class ImageBlobReclamationConfig {
+        +enabled Boolean
+        +intervalHours Long
+        +batchSize Int
+    }
+    note for ImageBlobReclamationConfig "Separate class from ImageBlobConfig, even though both\nload from the same imageBlob.* yaml block — see\nApplication.kt. Governs only the scheduler loop\n(interval, batch size, on/off); sweepOnce()'s own\nbehavior reads unreferencedRetentionDays off ImageBlobConfig."
 
     class ImageProvenance {
         <<enumeration>>
@@ -185,8 +197,12 @@ classDiagram
 ```
 
 `RecipeImageRoutes.kt` (presentation) depends only on `RecipeImageService` and `ImageBlobConfig`
-(for the streaming cap) — it never touches `ImageBlobRepository` or `BlobStore` directly, and it
-never imports anything from `infrastructure.*`.
+(for the streaming cap) — it never touches `ImageBlobRepository` or `BlobStore` directly. It does
+import `infrastructure.auth.userId` (the `ApplicationCall.userId` extension every authenticated
+route uses to read the JWT principal) — the "zero framework dependencies" rule from
+[Architecture Overview](#architecture-overview) applies to the **domain** layer only;
+presentation routes are expected to depend on `infrastructure.auth` for principal extraction, same
+as every other route file in this codebase.
 
 Each service method returns a **sealed result type** rather than throwing — consistent with this
 repo's "typed sealed classes over generic exceptions" rule — and the route layer's job is purely
@@ -270,8 +286,9 @@ flowchart TD
 ```
 
 A separate, always-on gate not shown above: **per-user upload rate limiting** (60/minute by
-default) sits in front of the whole route via Ktor's `RateLimit` plugin and returns `429 Too Many
-Requests` before the handler runs at all.
+default) sits in front of the `PUT` handler only — `RecipeImageRoutes.kt` wraps just the `put { }`
+block in Ktor's `RateLimit` plugin, so `GET` and `DELETE` on the same route are unaffected — and
+returns `429 Too Many Requests` before the upload handler runs at all.
 
 ## Error States Reference
 
@@ -279,7 +296,7 @@ Requests` before the handler runs at all.
 |---|---|---|
 | `401` | Missing/invalid JWT | `ErrorResponse` |
 | `400` | `recipeId` path segment isn't a valid UUID | `ErrorResponse` |
-| `404` | Recipe doesn't exist, isn't owned by caller (upload/clear), or isn't visible (serve) | `ErrorResponse` (upload/clear) or empty (serve) |
+| `404` | Recipe doesn't exist, isn't owned by caller (upload/clear), isn't visible (serve), or (serve only) its storage object is missing despite a valid pointer | `ErrorResponse` (upload/clear) or empty (serve) |
 | `413` | Body exceeds `maxUploadBytes`, caught while streaming *or* after buffering | `ErrorResponse` |
 | `415` | `Content-Type` isn't `image/{jpeg,png,webp}`, or magic bytes don't match the declared type | `ErrorResponse` |
 | `422` | `sha256(body)` doesn't match `X-Content-SHA256` | `ErrorResponse` |
@@ -323,11 +340,22 @@ sequenceDiagram
         Route-->>Client: 304, ETag
     else
         Service->>Store: openRead(storageKey)
-        Store-->>Service: InputStream
-        Service-->>Route: Found(stream, mimeType, byteSize, hash)
-        Route-->>Client: 200, ETag, Cache-Control: immutable,<br/>streamed bytes
+        alt storage object missing (defensive fallback)
+            Store-->>Service: null
+            Service-->>Route: NotFound
+            Route-->>Client: 404
+        else
+            Store-->>Service: InputStream
+            Service-->>Route: Found(stream, mimeType, byteSize, hash)
+            Route-->>Client: 200, ETag,<br/>Cache-Control: private, max-age=31536000, immutable,<br/>streamed bytes
+        end
     end
 ```
+
+The `openRead` → `null` branch is a defensive fallback for a state the reclamation sweep is
+supposed to prevent (a DB row surviving after its storage object is gone) — it shouldn't happen in
+normal operation, but a `GET` for such a row degrades to a clean `404` rather than a `500` or a
+thrown exception.
 
 ### Visibility matrix
 
@@ -497,7 +525,7 @@ the server's own value back instead, are in
 | Layer | Approach |
 |---|---|
 | `RecipeImageServiceTest`, `ImageBlobReclamationServiceTest` | Unit tests against `FakeImageBlobRepository` / `FakeBlobStore` — the full validation matrix, quota, kill switches, idempotent re-upload, visibility rules, retention sweep |
-| `RecipeImageRoutesIntegrationTest`, `RecipeImageSyncIntegrationTest` | HTTP-level tests via `testApplication` with fakes — ownership/visibility over real requests, hash-mismatch rejection, the full push→upload→pull→GET lifecycle |
+| `RecipeImageRoutesIntegrationTest`, `RecipeImageSyncIntegrationTest`, `RecipeImageConfigIntegrationTest` | HTTP-level tests via `testApplication` with fakes — ownership/visibility over real requests, hash-mismatch rejection, the full push→upload→pull→GET lifecycle, and config-driven behavior (kill switches, upload cap) |
 | `PostgresImageBlobRepositoryIntegrationTest` | `@Tag("db-integration")`, needs a real Postgres — the one behavior fakes can't exercise: `PostgresSyncRepository` and `PostgresImageBlobRepository` reaching into the *same* `recipes` table, so a soft-delete via `/sync/push` correctly dereferences a blob |
 
 `FakeSyncRepository` and `FakeImageBlobRepository` are independent in-memory stores in tests,

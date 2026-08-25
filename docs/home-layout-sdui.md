@@ -6,16 +6,21 @@ PocketChef Home is server-driven. The backend owns the complete Home layout and 
 
 - `GET /api/v1/home/layout`
 
-This endpoint is public (anonymous allowed) and currently returns one static layout from a bundled resource file.
+This endpoint **requires JWT auth** — it's wrapped in the same `authenticate("auth-jwt")` block
+as every other protected route group in `Routing.kt` (since `4ba84d4`/`5bbe028`, 2026-03-26; this
+doc previously described it as public, which is now stale). It currently returns one static
+layout from a bundled resource file; the `userId` isn't used for personalization yet (see
+[Future Personalization Hook](#future-personalization-hook)) but authentication is already
+enforced.
 
 ## Endpoint Contract
 
 ### Request
 
 - Method/Path: `GET /api/v1/home/layout`
-- Optional headers:
-  - `Authorization: Bearer <jwt>` (reserved for future personalization)
-  - `If-None-Match: <etag>` for cache revalidation
+- Headers:
+  - `Authorization: Bearer <jwt>` — **required**
+  - `If-None-Match: <etag>` for cache revalidation (optional)
 
 ### Success Response
 
@@ -40,6 +45,7 @@ Top-level response:
 - `schemaVersion` (`String`)
 - `layoutChecksum` (`String`, MD5 of canonical `components` JSON)
 - `components` (`List<HomeComponent>`)
+- `sidecar` (`HomeSidecar?`) — see below
 
 Component `type` values:
 
@@ -49,12 +55,34 @@ Component `type` values:
 - `squared_card`
 - `list_card`
 
+Card components (`large_card`, `squared_card`, `list_card`) carry only a `recipeId` pointer —
+they don't embed recipe content. `HomeSidecar` is where that content actually lives:
+
+### HomeSidecar
+
+Loaded from a second bundled resource, `/src/main/resources/home_sidecar.json`, decoded
+independently of the layout resource and always present in the response (non-null in practice,
+though the DTO allows null for forward compatibility). It denormalizes everything a client needs
+to render a card without a follow-up request:
+
+- `recipes: List<SidecarRecipeDto>` — full card content: title, description, image URLs,
+  prep/cook time, servings, `creatorId`, `privacy`, `tagIds`, `labelIds`, `ingredients`, `steps`
+- `tags: List<SidecarTagDto>`, `labels: List<SidecarLabelDto>` — display names for the tag/label
+  IDs referenced by `recipes`
+- `creators: List<SidecarCreatorDto>` — display name + avatar for each `creatorId` referenced by
+  `recipes`
+
+A `large_card`/`squared_card`/`list_card` component's `recipeId` is resolved by the client against
+`sidecar.recipes` — the same pointer-plus-sidecar-lookup pattern as `/sync/pull`'s reference data,
+but scoped to exactly what's needed for the components in this one response instead of a general
+delta/gap union.
+
 Implementation location:
 
 - DTOs + polymorphic serializer: `/src/main/kotlin/application/dto/HomeLayoutDtos.kt`
 - Service: `/src/main/kotlin/domain/service/HomeLayoutService.kt`
 - Route: `/src/main/kotlin/presentation/routes/HomeRoutes.kt`
-- Bundled layout resource: `/src/main/resources/home_layout.json`
+- Bundled resources: `/src/main/resources/home_layout.json`, `/src/main/resources/home_sidecar.json`
 
 ## Unknown Type Handling
 
@@ -72,8 +100,7 @@ The custom `HomeComponent` serializer maps unrecognized `type` values to an `Unk
 
 ## Future Personalization Hook
 
-`HomeLayoutService.getHomeLayout(userId: String? = null)` already supports a future user-aware resolution path without changing the API contract.
-
-## Future Auth
-
-Right now the endpoint is publicly exposed, it should definitely use authentication for authenticated user. Question is how it should work for anonymous users.
+`HomeLayoutService.getHomeLayout(userId: String? = null)` already accepts a `userId` parameter for
+a future user-aware resolution path without changing the API contract — but the route doesn't
+pass one through yet (`homeRoutes` calls `getHomeLayout()` with no argument), so every
+authenticated user currently gets the same static layout and sidecar.

@@ -17,12 +17,15 @@ Core architecture and protocol documentation:
 
 | Document | Coverage |
 |----------|----------|
-| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios, **client pre-population strategy** |
+| [Sync Protocol](docs/sync-protocol.md) | Cursor-based sync with conflict resolution, reference data integrity, multi-device scenarios, bookmarks, meal plans |
 | [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
-| [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, caching and ETag behavior |
+| [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, sidecar data, caching and ETag behavior |
 | [Recipe Image Architecture](docs/recipe-image-architecture.md) | Recipe hero image blob upload/serving/reclamation — class diagram, upload/serve sequence diagrams, error states, app startup changes |
+| [Recipe Search](docs/recipe-search.md) | Postgres full-text recipe search — query sanitization, ranking, rate limiting |
+| [Meal Plan Roadmap](docs/meal-plan-roadmap.md) | Meal-plan generation phases, recipe sourcing strategy |
+| [TheMealDB Importer](docs/themealdb-importer.md) | One-off catalog import tool — fetch, map, dedup, idempotent seed SQL |
 
 ## Features
 
