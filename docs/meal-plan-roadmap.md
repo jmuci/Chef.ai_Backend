@@ -92,10 +92,23 @@ normal internet access:
 
 ```
 ./gradlew importTheMealDb
-psql -h localhost -U postgres -d chefai_db \
+psql -h localhost -U postgres -d chefai_db -v ON_ERROR_STOP=1 \
   -f src/main/resources/sql/seed.sql \
   -f src/main/resources/sql/seed_themealdb.sql
 ```
+
+**`seed.sql` first is mandatory, not stylistic.** Every junction INSERT in the
+generated file is one multi-row statement referencing curated catalog UUIDs, so
+against a bare schema each aborts wholesale on the first FK violation — recipes
+land, tags/labels/ingredients do not, and psql still exits 0 without
+`ON_ERROR_STOP`. See jmuci/ChefAI#182, where exactly that produced 789
+ingredient-less recipes and an empty "Lunch" browse card. The generated file now
+starts with a preflight `DO` block that raises a clear error instead.
+
+The import also attaches the browse taxonomy (`MealTypeClassifier` — meal-type
+and style tags plus `High Protein` / `Low Carb`); see
+[`docs/recipe-search.md`](recipe-search.md) for the rules and the tag-vs-label
+correctness boundary.
 
 **Running it again.** `./gradlew importTheMealDb` re-fetches fresh from
 TheMealDB every time and overwrites `seed_themealdb.sql` in place — it's not

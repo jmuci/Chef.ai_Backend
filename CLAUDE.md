@@ -168,6 +168,7 @@ fun pullIncludesGapTagReferencedByReturnedRecipe() = testApplication {
 - `docs/auth-quick-start.md` — Quick endpoint reference
 - `docs/exception-handling.md` — Error codes and patterns
 - `docs/recipe-image-architecture.md` — Recipe hero image blob upload/serving/reclamation: class diagram, upload/serve sequence diagrams, error states, app startup changes
+- `docs/recipe-search.md` — Search endpoint matching/ranking, the browse-card taxonomy, tag-vs-label correctness boundary, seeding order
 - `README.md` — Quick start, smoke tests, build commands
 
 ---
@@ -393,6 +394,7 @@ docs/
 ├── auth-quick-start.md         ← Endpoint reference
 ├── exception-handling.md       ← Error codes
 ├── recipe-image-architecture.md ← Image blob upload/serving/reclamation, diagrams
+├── recipe-search.md            ← Search matching/ranking, browse taxonomy, seeding order
 └── README.md                   ← Build, run, smoke tests
 ```
 
