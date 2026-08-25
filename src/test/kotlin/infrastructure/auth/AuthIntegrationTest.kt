@@ -382,4 +382,119 @@ class AuthIntegrationTest {
         // UserIds should match
         assertEquals(registerAuth.userId, loginAuth.userId)
     }
+
+    // The route's exception-to-status mapping (AuthRoutes.kt /auth/refresh) was previously
+    // untested at the HTTP layer: RefreshTokenServiceTest.kt exercises AuthService.refreshToken
+    // directly, but never through the route's try/catch, so a broken `catch` clause ordering or
+    // a status-code typo there would not fail any test.
+
+    @Test
+    fun `refresh with a valid token returns new tokens over HTTP`() = testApplication {
+        application {
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+        }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val registerResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest("refresh-http@example.com", "refreshhttpuser", "SecurePass123"))
+        }
+        val original = registerResponse.body<com.tenmilelabs.application.dto.AuthResponse>()
+
+        val refreshResponse = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest(original.refreshToken))
+        }
+
+        assertEquals(HttpStatusCode.OK, refreshResponse.status)
+        val body = refreshResponse.body<com.tenmilelabs.application.dto.RefreshTokenResponse>()
+        assertEquals(original.userId, body.userId)
+        assertTrue(body.accessToken != original.token, "Access token should rotate")
+        assertTrue(body.refreshToken != original.refreshToken, "Refresh token should rotate")
+
+        // The rotated access token must actually work against a protected endpoint.
+        val recipesResponse = client.get("/recipes") { bearerAuth(body.accessToken) }
+        assertEquals(HttpStatusCode.OK, recipesResponse.status)
+    }
+
+    @Test
+    fun `refresh with an unrecognized token returns 401 over HTTP`() = testApplication {
+        application {
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+        }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val response = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest("not-a-real-refresh-token"))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `refresh with a blank token returns 401 over HTTP`() = testApplication {
+        application {
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+        }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val response = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest(""))
+        }
+
+        assertEquals(HttpStatusCode.Unauthorized, response.status)
+    }
+
+    @Test
+    fun `reusing an already-rotated refresh token returns 401 and revokes the rotated one too`() = testApplication {
+        application {
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+        }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val registerResponse = client.post("/auth/register") {
+            contentType(ContentType.Application.Json)
+            setBody(RegisterRequest("reuse-http@example.com", "reusehttpuser", "SecurePass123"))
+        }
+        val original = registerResponse.body<com.tenmilelabs.application.dto.AuthResponse>()
+
+        val firstRefresh = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest(original.refreshToken))
+        }
+        assertEquals(HttpStatusCode.OK, firstRefresh.status)
+        val rotated = firstRefresh.body<com.tenmilelabs.application.dto.RefreshTokenResponse>()
+
+        // Replay the original (already-consumed) refresh token - this is the reuse-detection path.
+        val replay = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest(original.refreshToken))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, replay.status)
+
+        // The security breach must revoke the token family entirely, so even the token issued by
+        // the legitimate first rotation is now rejected too.
+        val rotatedNowRejected = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody(com.tenmilelabs.application.dto.RefreshTokenRequest(rotated.refreshToken))
+        }
+        assertEquals(HttpStatusCode.Unauthorized, rotatedNowRejected.status)
+    }
+
+    @Test
+    fun `refresh with a malformed JSON body returns 400 over HTTP`() = testApplication {
+        application {
+            module(configureDatabase = false, recipeRepository = FakeRecipesRepository(), userRepository = FakeUserRepository(), refreshTokenRepository = com.tenmilelabs.infrastructure.database.FakeRefreshTokenRepository())
+        }
+        val client = createClient { install(ContentNegotiation) { json() } }
+
+        val response = client.post("/auth/refresh") {
+            contentType(ContentType.Application.Json)
+            setBody("""{ this is not valid json """)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
 }

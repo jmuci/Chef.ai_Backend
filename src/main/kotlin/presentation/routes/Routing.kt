@@ -20,6 +20,7 @@ import io.ktor.server.application.*
 import io.ktor.server.auth.*
 import io.ktor.server.http.content.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
@@ -82,7 +83,20 @@ fun Application.configureRouting(
         }
         register(RECIPE_SEARCH_RATE_LIMIT_NAME) {
             rateLimiter(limit = 30, refillPeriod = 10.seconds)
-            requestKey { call -> call.userId ?: "anonymous" }
+            // Unlike the upload limiter above, this endpoint serves anonymous callers (see the
+            // optional-auth block below), so a literal "anonymous" key would put every signed-out
+            // device on the planet in one shared 30-per-10s bucket. Key on the socket peer
+            // instead. Caveat: that is the proxy's address if one is ever put in front of the
+            // JVM, which would need XForwardedHeaders (io.ktor:ktor-server-forwarded-header, not
+            // a dependency here) to see through. Today nothing fronts it - docker-compose.yaml
+            // publishes 8080 directly.
+            requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
+        }
+        register(RECIPE_DETAIL_RATE_LIMIT_NAME) {
+            rateLimiter(limit = 30, refillPeriod = 10.seconds)
+            // Its own bucket, not RECIPE_SEARCH_RATE_LIMIT_NAME's - see RecipeDetailRoutes.kt.
+            // Same anonymous-by-remote-address keying rationale as search.
+            requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
         }
     }
 
@@ -97,14 +111,29 @@ fun Application.configureRouting(
         // Public authentication routes
         authRoutes(authService)
 
+        // Public: the anonymous-first Home screen must load before any account exists.
+        // homeRoutes reads no auth principal, so it belongs outside authenticate("auth-jwt").
+        homeRoutes(homeLayoutService)
+
+        // Anonymous-capable, but not principal-free the way homeRoutes is: with optional = true a
+        // valid token still produces a JWTPrincipal, so a signed-in user keeps seeing their own
+        // PRIVATE recipes in results, while a request carrying no Authorization header is scoped
+        // to PUBLIC recipes instead of being challenged. See ChefAI#184 - the Android client
+        // skipped search entirely for anonymous sessions precisely because this 401'd on every
+        // keystroke.
+        authenticate("auth-jwt", optional = true) {
+            recipeSearchRoutes(recipeSearchService)
+            // ChefAI#186: a search result's tap-through needs to fetch a not-yet-synced recipe
+            // by id under the same anonymous-capable rules search itself uses.
+            recipeDetailRoutes(syncService)
+        }
+
         // Protected routes - require authentication
         authenticate("auth-jwt") {
-            homeRoutes(homeLayoutService)
             syncRoutes(syncService)
             mealPlanRoutes(mealPlanGenerationService)
             userPreferencesRoutes(userPreferencesRepository, mealPlanGenerationService)
             recipeImageRoutes(recipeImageService, imageBlobConfig)
-            recipeSearchRoutes(recipeSearchService)
             route("/recipes") {
 
                 get {

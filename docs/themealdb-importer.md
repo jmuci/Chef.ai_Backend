@@ -20,10 +20,16 @@ Requires outbound HTTPS to `www.themealdb.com` and takes no DB connection — it
 `src/main/resources/sql/seed_themealdb.sql`. Some sandboxed/restricted-egress environments block
 that host by policy; if every letter fetch fails, that's almost certainly why.
 
-Apply the output the same way as the other seed scripts:
+**The output file is checked into the repo** (895 recipes as of the last regeneration) — not a
+build artifact regenerated on every run. This makes the seeded catalog reproducible without a
+network dependency for anyone setting up the DB from scratch; only re-run the importer and commit
+the regenerated file if the upstream TheMealDB catalog needs refreshing.
+
+Apply the output the same way as the other seed scripts — **`seed.sql` first is mandatory, not
+stylistic**, and `-v ON_ERROR_STOP=1` is not optional (see the preflight guard below):
 
 ```bash
-psql -h localhost -U postgres -d chefai_db \
+psql -h localhost -U postgres -d chefai_db -v ON_ERROR_STOP=1 \
   -f src/main/resources/sql/seed.sql \
   -f src/main/resources/sql/seed_themealdb.sql
 ```
@@ -40,12 +46,14 @@ flowchart TD
 
     CATALOG --> MAPPER
     MEALS --> MAPPER["TheMealDbMapper.map()<br/>pure function, no I/O"]
+    MAPPER -->|"per meal: category/tags/title/<br/>ingredients"| CLASSIFIER["MealTypeClassifier.classify()<br/>browse-taxonomy tags +<br/>High Protein/Low Carb labels"]
+    CLASSIFIER --> MAPPER
     MAPPER --> RECIPES["MappedRecipe list +<br/>new ingredient/tag/label rows"]
 
-    RECIPES --> WRITER["SeedSqlWriter.write()"]
-    WRITER --> SQL["seed_themealdb.sql<br/>every statement:<br/>ON CONFLICT ... DO NOTHING"]
+    RECIPES --> WRITER["SeedSqlWriter.write()<br/>preflight guard +<br/>ON CONFLICT ... DO NOTHING"]
+    WRITER --> SQL["seed_themealdb.sql"]
 
-    SQL -.->|"psql -f seed.sql -f seed_themealdb.sql"| DB[(Postgres)]
+    SQL -.->|"psql -v ON_ERROR_STOP=1<br/>-f seed.sql -f seed_themealdb.sql"| DB[(Postgres)]
 ```
 
 ### 1. Fetch — `TheMealDbClient`
@@ -66,6 +74,12 @@ labels} (...) VALUES (...)` rows straight out of `seed.sql` instead. This is a s
 format-specific reader tuned to this repo's own consistent single-statement, one-tuple-per-line
 INSERT style, not a general SQL parser — if `seed.sql`'s formatting changes shape, this needs
 updating alongside it.
+
+`--` line comments are stripped before parsing. The statement regex matches non-greedily up to
+the first `;`, so a semicolon inside a comment used to silently truncate a statement mid-parse and
+hide every row after it — the importer would then mint duplicate catalog rows under fresh UUIDs
+instead of reusing the curated ones, invisible until two identically-named tags turned up in the
+app. Fixed by stripping comments first.
 
 ### 3. Map — `TheMealDbMapper`
 
@@ -91,6 +105,18 @@ wire format doesn't solve for free:
   *within one `map()` call*, so the same new name appearing across multiple meals in this batch
   correctly resolves to one new row, not several duplicates.
 
+**Browse-taxonomy tags/labels** — TheMealDB's own vocabulary is cuisine- and ingredient-shaped
+(`Beef`, `Chinese`, `DinnerParty`) and has no notion of *when* a dish is eaten, so the Android
+client's browse cards (`Lunch`, `Kid-Friendly`, ...) had nothing to match against and returned
+empty (jmuci/ChefAI#182). For every meal, `mapMeal()` now also calls
+`MealTypeClassifier.classify(category, tags, title, ingredientNames)`, which derives additional
+meal-type/style tags and, from the ingredient list only, the `High Protein`/`Low Carb` dietary
+*labels* — synthesized editorial classifications, not sourced facts, with the same standing as
+`estimateTimingsAndServings()` below. See [`docs/recipe-search.md`](recipe-search.md) for the
+full derivation rules, the tag-vs-label correctness boundary (only two labels are ever
+classifier-derived, and never one encoding an allergen or ethical commitment), and per-category
+coverage numbers against the seeded catalog.
+
 Other mapping decisions: `strArea` and non-dietary `strCategory` become tags; `strCategory`
 values in `{vegan, vegetarian}` become labels instead (dietary vocabulary lives in `LabelTable`,
 not `TagTable` — see the Phase 1 bug this convention was fixing, in
@@ -109,23 +135,35 @@ applies hit `ON CONFLICT` instead of minting duplicates.
 
 ### 4. Write — `SeedSqlWriter`
 
-Emits one SQL file, every statement `ON CONFLICT ... DO NOTHING`, in FK-safe order: the fixed
-system "editorial" creator user (`SYSTEM_CREATOR_ID`, never a real test user) → new
-ingredient/tag/label catalog rows → recipes → steps/recipe_ingredients/recipe_tags/recipe_labels.
-`recipe_external_url` carries attribution (the meal's own source URL if TheMealDB provided one,
-else a generated `themealdb.com/meal/{idMeal}` link) — required, since TheMealDB's terms ask for
-attribution on reused content.
+Emits one SQL file, in FK-safe order: a **preflight guard** → the fixed system "editorial"
+creator user (`SYSTEM_CREATOR_ID`, never a real test user) → new ingredient/tag/label catalog
+rows → recipes → steps/recipe_ingredients/recipe_tags/recipe_labels, every statement in that last
+group `ON CONFLICT ... DO NOTHING`. `recipe_external_url` carries attribution (the meal's own
+source URL if TheMealDB provided one, else a generated `themealdb.com/meal/{idMeal}` link) —
+required, since TheMealDB's terms ask for attribution on reused content.
+
+**The preflight guard** is a `DO $$ ... END $$` block, written first, that checks for one known
+curated tag UUID and raises a clear exception if it's missing — i.e. if `seed.sql` hasn't been
+applied yet. Without it, applying `seed_themealdb.sql` against a bare schema doesn't fail
+cleanly: every junction INSERT (`recipe_tags`, `recipe_labels`, `recipe_ingredients`) is one
+multi-row statement referencing curated catalog UUIDs, so each one aborts *in its entirety* on
+the first FK violation — recipes land with no tags, labels, or ingredients, and plain `psql`
+(without `-v ON_ERROR_STOP=1`) prints three `ERROR` lines and still exits `0`, so the import
+*looks* like it worked. This is exactly how the database behind jmuci/ChefAI#182 ended up with
+789 ingredient-less recipes and an empty "Lunch" browse card. The generated file also emits
+`\set ON_ERROR_STOP on` for psql clients, but the `DO` block is the real guard — it works through
+any client, not just psql.
 
 ## Running it again
 
 `./gradlew importTheMealDb` re-fetches fresh from TheMealDB every time and **overwrites**
 `seed_themealdb.sql` in place — it's not additive across runs. Applying the (re)generated file via
-`psql` is safe to repeat: deterministic UUIDs mean every insert either matches an existing row
-(skipped by `DO NOTHING`) or is genuinely new. The one nuance: `DO NOTHING` is not `DO UPDATE` — if
-a recipe's content changes upstream on TheMealDB between two runs, the already-imported row is
-**not** refreshed; the first import silently wins because its insert for that UUID gets skipped on
-conflict. Picking up an upstream change requires deleting the existing row(s) first, or a future
-enhancement switching that path to `DO UPDATE`.
+`psql -v ON_ERROR_STOP=1` is safe to repeat: deterministic UUIDs mean every insert either matches
+an existing row (skipped by `DO NOTHING`) or is genuinely new. The one nuance: `DO NOTHING` is not
+`DO UPDATE` — if a recipe's content changes upstream on TheMealDB between two runs, the
+already-imported row is **not** refreshed; the first import silently wins because its insert for
+that UUID gets skipped on conflict. Picking up an upstream change requires deleting the existing
+row(s) first, or a future enhancement switching that path to `DO UPDATE`.
 
 ## Testing
 
@@ -135,16 +173,17 @@ possible:
 | File | Covers |
 |---|---|
 | `TheMealDbMapperTest.kt` | Measure parsing, instruction splitting, timing/servings heuristic, catalog resolution/reuse, deterministic UUID stability |
-| `SeedCatalogLoaderTest.kt` | Regex-based `seed.sql` parsing against fixture text |
-| `SeedSqlWriterTest.kt` | SQL escaping, statement ordering, idempotency shape |
+| `MealTypeClassifierTest.kt` | Browse-taxonomy tag/label derivation rules — TAG_SOURCES/TITLE_HINTS/TAG_EXCLUSIONS, the protein/carb label heuristics, the dessert and empty-ingredient-list guards |
+| `SeedCatalogLoaderTest.kt` | Regex-based `seed.sql` parsing against fixture text, including that every browse-category tag the classifier can emit actually resolves against the real `seed.sql` (not silently minted as a duplicate) |
+| `SeedSqlWriterTest.kt` | SQL escaping, statement ordering, idempotency shape, the preflight guard |
 
 `TheMealDbClient` itself has no unit tests (it's a thin HTTP wrapper around a live third-party
 API) — its behavior is exercised manually by actually running `importTheMealDb`.
 
-## Two real bugs this importer surfaced
+## Real bugs this importer surfaced
 
-Building and running this against a live Postgres instance found two pre-existing bugs, fixed as
-part of the same work (see `docs/meal-plan-roadmap.md`'s Phase 1 for full detail):
+Building and running this against a live Postgres instance found real bugs, fixed as part of the
+same work (see `docs/meal-plan-roadmap.md`'s Phase 1 for full detail on the first two):
 
 1. **Recipe privacy casing** — `seed.sql` wrote lowercase `'public'`/`'private'` for the original
    70 recipes, but every query that matters filters `privacy = 'PUBLIC'` exactly, and
@@ -155,3 +194,12 @@ part of the same work (see `docs/meal-plan-roadmap.md`'s Phase 1 for full detail
    vocabulary actually lives in `LabelTable`. No tag ever matched, so the filter silently returned
    every recipe regardless of requested diet. Fixed in
    `PostgresSyncRepository.findCandidateRecipeIds`.
+3. **Browse cards with no notion of meal time returned nothing** (jmuci/ChefAI#182) — TheMealDB's
+   vocabulary has no "Lunch"/"Kid-Friendly"/etc. concept, so those Search-tab browse cards matched
+   zero recipes. Fixed by adding `MealTypeClassifier` to the mapping step (see above).
+4. **Apply-order failures were silent** — applying `seed_themealdb.sql` before `seed.sql`, or
+   without `-v ON_ERROR_STOP=1`, aborted every junction INSERT on an FK violation while `psql`
+   still exited `0` — recipes landed with no tags, labels, or ingredients and nothing said so.
+   This is what produced 789 ingredient-less recipes in the database behind jmuci/ChefAI#182.
+   Fixed by the preflight guard in `SeedSqlWriter` (see above) plus documenting
+   `-v ON_ERROR_STOP=1` as required, not optional, everywhere the apply command is shown.

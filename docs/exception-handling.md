@@ -145,6 +145,33 @@ Bookmark errors are **per-item** — other bookmarks and all recipes in the same
 
 ---
 
+## Sync Push/Pull Transport Errors
+
+Separate from the per-item codes above: these apply to the *whole request*, before it ever
+reaches `SyncService` — a malformed body or bad query param, not a problem with any individual
+recipe/bookmark.
+
+| Status | Trigger |
+|--------|---------|
+| `401` | Missing/invalid JWT |
+| `400` | Body isn't valid JSON, or is missing a required field (e.g. `recipes`) |
+| `400` | `/sync/pull`: `since` missing/non-numeric, or `limit <= 0` |
+| `409` | `ExposedSQLException` — a DB constraint conflict outside the normal per-recipe conflict path |
+| `500` | Unexpected server/DB failure |
+
+**Gotcha this route learned the hard way**: `call.receive<SyncPushRequest>()` does not throw
+`JsonConvertException` or `kotlinx.serialization.SerializationException` directly on a malformed
+body — Ktor's `ContentNegotiation` plugin wraps those in `io.ktor.server.plugins.BadRequestException`
+first. `SyncRoutes.kt`'s catch block originally only matched the two inner types, so every
+malformed/incomplete push body fell through to the generic `catch (ex: Exception)` and answered
+`500 Internal Server Error` instead of `400 Bad Request`. Fixed by adding an explicit
+`catch (ex: BadRequestException)` ahead of the (now effectively dead, but kept for any future
+in-block throw) `JsonConvertException`/`SerializationException` clauses. If you add a new route
+that calls `call.receive<T>()` inside a multi-branch try/catch like this one, catch
+`BadRequestException` — don't rely on `JsonConvertException` alone.
+
+---
+
 ## Sync Pagination Diagnostics
 
 Not a client-facing error — the response is still `200 OK`. This is a server log signal for

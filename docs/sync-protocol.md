@@ -233,6 +233,25 @@ Pushes **dirty client recipes** to the server. Server processes each recipe inde
 - Enables client to apply server's version without a separate pull
 - Includes transitive FKs (allergens/source-classifications from returned ingredients)
 
+**Transport-Level Errors** (whole request rejected, not per-recipe):
+
+These are distinct from the per-recipe `errors[]` above — the request never reaches
+`SyncService` at all.
+
+| Status | Trigger |
+|--------|---------|
+| `401` | Missing/invalid JWT |
+| `400` | Body isn't valid JSON, or is missing a required field (e.g. `recipes`) |
+| `400` | `/sync/pull`: `since` missing/non-numeric, or `limit <= 0` |
+| `409` | A DB constraint conflict outside the normal per-recipe conflict path (`ExposedSQLException`) |
+| `500` | Unexpected server/DB failure |
+
+The 400 case is handled by catching Ktor's `BadRequestException` — what
+`call.receive<SyncPushRequest>()` actually throws on a conversion failure, wrapping the
+underlying `JsonConvertException`/`SerializationException`. See
+[`docs/exception-handling.md`](exception-handling.md#sync-pushpull-transport-errors) for why
+that distinction matters: without it, a malformed body answered `500` instead of `400`.
+
 ---
 
 ## Multi-Device Conflict Resolution: Full Example
@@ -928,6 +947,78 @@ surface is just one field:
 
 ---
 
+## Recipe Detail (Single-Recipe Fetch)
+
+### GET /api/v1/recipes/{recipeId}
+
+Anonymous-capable fetch of one recipe aggregate, mounted under
+`authenticate("auth-jwt", optional = true)` — the same posture as `GET /api/v1/recipes/search`
+(ChefAI#184). It exists for a narrower reason than search: a search result is only useful if
+the client can actually open it, and an anonymous device that hasn't pulled anything yet (it
+can't — `/sync/pull` requires auth) has no other way to resolve a search hit's UUID into a
+full recipe. See ChefAI#186.
+
+**Request**:
+```
+GET /api/v1/recipes/{recipeId} HTTP/1.1
+Authorization: Bearer <token>   # optional
+```
+
+**Access rules** — evaluated against the loaded recipe, not a separate authorization query:
+- Soft-deleted (`deletedAt` non-null) → `404`.
+- `privacy == PUBLIC` → visible to anyone, authenticated or not.
+- `privacy == PRIVATE` → visible only if authenticated and the caller is the creator.
+- Everything else → `404`, never `403` — same posture as the bookmark-push validation table
+  above (`RECIPE_NOT_FOUND` "(403 semantics)"): a private recipe's existence isn't leaked to
+  a non-owner caller.
+
+**Response** (`RecipeDetailResponse`, `200`):
+```json
+{
+  "recipe": {
+    "uuid": "abc123",
+    "title": "Carbonara",
+    "creatorId": "user-uuid",
+    "privacy": "PUBLIC",
+    "ingredients": [{"ingredientId": "egg-uuid", "quantity": 3, "unit": "eggs"}],
+    "tagIds": ["quick-uuid"],
+    "updatedAt": 1200,
+    "...": "..."
+  },
+  "referenceData": {
+    "ingredients": [{"uuid": "egg-uuid", "displayName": "Eggs", "...": "..."}],
+    "allergens": [],
+    "sourceClassifications": [],
+    "tags": [{"uuid": "quick-uuid", "displayName": "Quick", "...": "..."}],
+    "labels": []
+  },
+  "creators": [{"uuid": "user-uuid", "displayName": "...", "...": "..."}]
+}
+```
+`404` on any not-found/not-accessible case (`ErrorResponse`); `401` for a present-but-invalid
+token (challenge, not a downgrade to public-only); `400` for a malformed `recipeId`.
+
+**Key Behavior**:
+- `recipe` and `referenceData` reuse the exact same shapes `/sync/pull` and `/sync/push`'s
+  conflict response already use — a client can feed this response through whatever code
+  already turns a `SyncRecipe` + reference data into a Room upsert, no new parsing needed.
+- Reference data is gap-only (`sinceMillis = null`), same mode `/sync/push` uses for conflict
+  responses — see "Reference Data Isolation" below. There is no pull cursor for a one-off
+  fetch, so only the recipe's own direct dependencies are returned, not a delta window.
+- `creators` is included alongside `referenceData` (rather than folded into it) because
+  `recipes.creator_id` is itself an FK the client must resolve, same reason `/sync/pull`
+  ships its own `creators` field — a fresh anonymous install's local `users` table is
+  typically empty, so omitting this would reproduce the exact FK-failure class ChefAI#186 is
+  about, just relocated to the recipe's author.
+- Rate limited separately from search (its own bucket, same 30-req/10s-per-caller shape) so
+  exhausting one doesn't block the other.
+
+**Client-side note**: what `syncState` a recipe persisted this way should carry, and how it
+reconciles if a later `/sync/pull` returns the same row, is an Android-client concern and not
+addressed here — see the ChefAI repo's own fix for #186.
+
+---
+
 ## Validation & Errors
 
 The server validates each pushed recipe, in this order — the first failing check wins and the rest are skipped:
@@ -1020,3 +1111,4 @@ While the server ensures referential integrity, the client must:
 | **Client Pre-Population** | **Proposed, not implemented** — see the disposition note in that section |
 | **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |
 | **Meal Plans** | Piggybacked on push/pull; same LWW conflict model as recipes; push also writes `UserPreferencesRepository` |
+| **Recipe Detail** | `GET /api/v1/recipes/{recipeId}`, anonymous-capable, PUBLIC (+ owner's own PRIVATE); reuses `SyncRecipe`/reference-data shapes; not-found and not-accessible both 404 |

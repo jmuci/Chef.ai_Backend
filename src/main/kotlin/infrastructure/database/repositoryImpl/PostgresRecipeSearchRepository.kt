@@ -13,6 +13,7 @@ import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
 import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.sql.IColumnType
 import org.jetbrains.exposed.sql.IntegerColumnType
 import org.jetbrains.exposed.sql.TextColumnType
 import org.jetbrains.exposed.sql.UUIDColumnType
@@ -21,10 +22,15 @@ import org.jetbrains.exposed.sql.selectAll
 import org.jetbrains.exposed.sql.statements.StatementType
 import java.util.UUID
 
+// Substituted into SEARCH_SQL_TEMPLATE below. An anonymous caller has no creator to match, so
+// that disjunct — and its placeholder — disappear entirely rather than being bound to NULL.
+private const val VISIBILITY_MARKER = "__VISIBILITY__"
+
 // Placeholder order matters — it's positional, not named — and must match the args list in
 // search() below exactly: tsQuery x4 (tag match, label match, rank, title/description match),
-// then userId, then limit, then offset.
-private val SEARCH_SQL = """
+// then userId (only for SEARCH_SQL_AUTHENTICATED — SEARCH_SQL_PUBLIC_ONLY has no userId
+// placeholder at all), then limit, then offset.
+private val SEARCH_SQL_TEMPLATE = """
     WITH tag_hits AS (
         SELECT rt.recipe_id AS recipe_id
         FROM recipe_tags rt
@@ -58,10 +64,15 @@ private val SEARCH_SQL = """
     LEFT JOIN tag_hits th ON th.recipe_id = r.uuid
     WHERE r.deleted_at IS NULL
       AND (r.search_vector @@ to_tsquery('english', ?::text) OR th.recipe_id IS NOT NULL)
-      AND (r.creator_id = ?::uuid OR r.privacy = 'PUBLIC')
+      AND $VISIBILITY_MARKER
     ORDER BY tag_or_label_hit DESC, rank DESC, r.uuid ASC
     LIMIT ? OFFSET ?
 """.trimIndent()
+
+private val SEARCH_SQL_AUTHENTICATED =
+    SEARCH_SQL_TEMPLATE.replace(VISIBILITY_MARKER, "(r.creator_id = ?::uuid OR r.privacy = 'PUBLIC')")
+
+private val SEARCH_SQL_PUBLIC_ONLY = SEARCH_SQL_TEMPLATE.replace(VISIBILITY_MARKER, "r.privacy = 'PUBLIC'")
 
 /**
  * Raw SQL, not the Exposed DSL — deliberate exception to the usual house style. Exposed 0.56 has
@@ -70,23 +81,22 @@ private val SEARCH_SQL = """
  */
 class PostgresRecipeSearchRepository : RecipeSearchRepository {
 
-    override suspend fun search(userId: UUID, tsQuery: String, limit: Int, offset: Int): RecipeSearchPage =
+    override suspend fun search(userId: UUID?, tsQuery: String, limit: Int, offset: Int): RecipeSearchPage =
         suspendTransaction {
             // Request one extra row so `hasMore` doesn't need a second COUNT(*) query.
             val fetchLimit = limit + 1
 
+            val args = buildList<Pair<IColumnType<*>, Any?>> {
+                repeat(TS_QUERY_PLACEHOLDER_COUNT) { add(TextColumnType() to tsQuery) }
+                if (userId != null) add(UUIDColumnType() to userId)
+                add(IntegerColumnType() to fetchLimit)
+                add(IntegerColumnType() to offset)
+            }
+
             val rows = exec(
-                stmt = SEARCH_SQL,
-                args = listOf(
-                    TextColumnType() to tsQuery,
-                    TextColumnType() to tsQuery,
-                    TextColumnType() to tsQuery,
-                    TextColumnType() to tsQuery,
-                    UUIDColumnType() to userId,
-                    IntegerColumnType() to fetchLimit,
-                    IntegerColumnType() to offset,
-                ),
-                // Mandatory: SEARCH_SQL starts with WITH, which exec()'s keyword-based inference
+                stmt = if (userId == null) SEARCH_SQL_PUBLIC_ONLY else SEARCH_SQL_AUTHENTICATED,
+                args = args,
+                // Mandatory: both statements start with WITH, which exec()'s keyword-based inference
                 // doesn't recognise — it falls through to OTHER (grouped with DDL) and is routed
                 // through executeUpdate() instead of executeQuery(), which PgJDBC rejects for a
                 // statement that returns a ResultSet. Confirmed by decompiling exposed-core-0.56.0.
@@ -169,4 +179,9 @@ class PostgresRecipeSearchRepository : RecipeSearchRepository {
                 )
             }
         }
+
+    private companion object {
+        // Tag match, label match, ts_rank, title/description match — all four bind the same value.
+        const val TS_QUERY_PLACEHOLDER_COUNT = 4
+    }
 }

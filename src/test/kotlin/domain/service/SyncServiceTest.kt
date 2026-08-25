@@ -8,6 +8,7 @@ import com.tenmilelabs.application.dto.ConflictReasons
 import com.tenmilelabs.application.dto.SyncErrors
 import com.tenmilelabs.application.dto.SyncMealPlanDayDto
 import com.tenmilelabs.application.dto.SyncMealPlanDto
+import com.tenmilelabs.domain.service.RecipeDetailResult
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.database.FakeUserPreferencesRepository
 import io.ktor.server.testing.TestApplicationBuilder
@@ -324,6 +325,103 @@ class SyncServiceTest {
         assertEquals(1, response.errors.size)
         assertEquals(SyncErrors.INVALID_TAG, response.errors.first().reason)
         assertEquals(SyncErrors.INVALID_TAG.message, response.errors.first().message)
+    }
+
+    // ── getRecipeDetail (ChefAI#186) ─────────────────────────────────────────
+
+    @Test
+    fun getRecipeDetailReturnsFoundForAnonymousCallerAndPublicRecipe() = withService { service, repo ->
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, UUID.randomUUID(), 1000L, repo.seedIngredient(), "PUBLIC")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = null, recipeId = recipeId)
+
+        assertTrue(result is RecipeDetailResult.Found)
+        assertEquals(recipeId.toString(), (result as RecipeDetailResult.Found).recipe.uuid)
+    }
+
+    @Test
+    fun getRecipeDetailReturnsNotFoundForAnonymousCallerAndPrivateRecipe() = withService { service, repo ->
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, UUID.randomUUID(), 1000L, repo.seedIngredient(), "PRIVATE")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = null, recipeId = recipeId)
+
+        assertEquals(RecipeDetailResult.NotFound, result)
+    }
+
+    @Test
+    fun getRecipeDetailReturnsFoundForOwnerOfPrivateRecipe() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, ownerId, 1000L, repo.seedIngredient(), "PRIVATE")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = ownerId, recipeId = recipeId)
+
+        assertTrue(result is RecipeDetailResult.Found)
+    }
+
+    @Test
+    fun getRecipeDetailReturnsNotFoundForNonOwnerOfPrivateRecipe() = withService { service, repo ->
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, UUID.randomUUID(), 1000L, repo.seedIngredient(), "PRIVATE")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = UUID.randomUUID(), recipeId = recipeId)
+
+        assertEquals(RecipeDetailResult.NotFound, result)
+    }
+
+    @Test
+    fun getRecipeDetailReturnsNotFoundForNonexistentRecipe() = withService { service, _ ->
+        val result = service.getRecipeDetail(userId = null, recipeId = UUID.randomUUID())
+
+        assertEquals(RecipeDetailResult.NotFound, result)
+    }
+
+    @Test
+    fun getRecipeDetailReturnsNotFoundForSoftDeletedRecipeEvenWhenPublicAndOwned() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, ownerId, 1000L, repo.seedIngredient(), "PUBLIC")
+            .copy(deletedAt = 1500L)
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1500L)
+
+        val result = service.getRecipeDetail(userId = ownerId, recipeId = recipeId)
+
+        assertEquals(RecipeDetailResult.NotFound, result)
+    }
+
+    @Test
+    fun getRecipeDetailReferenceDataMatchesTheRecipesOwnDependencies() = withService { service, repo ->
+        val recipeId = UUID.randomUUID()
+        val tagId = repo.seedTag(serverUpdatedAt = 50L)
+        val labelId = repo.seedLabel(serverUpdatedAt = 50L)
+        val ingredientId = repo.seedIngredient(serverUpdatedAt = 50L)
+        val recipe = sampleRecipe(recipeId, UUID.randomUUID(), 1000L, ingredientId, "PUBLIC")
+            .copy(tagIds = listOf(tagId.toString()), labelIds = listOf(labelId.toString()))
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = null, recipeId = recipeId) as RecipeDetailResult.Found
+
+        assertEquals(setOf(ingredientId.toString()), result.referenceData.ingredients.map { it.uuid }.toSet())
+        assertEquals(setOf(tagId.toString()), result.referenceData.tags.map { it.uuid }.toSet())
+        assertEquals(setOf(labelId.toString()), result.referenceData.labels.map { it.uuid }.toSet())
+    }
+
+    @Test
+    fun getRecipeDetailCreatorsContainsTheRecipesAuthor() = withService { service, repo ->
+        val creatorId = repo.seedUser()
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, creatorId, 1000L, repo.seedIngredient(), "PUBLIC")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val result = service.getRecipeDetail(userId = null, recipeId = recipeId) as RecipeDetailResult.Found
+
+        assertEquals(setOf(creatorId.toString()), result.creators.map { it.uuid }.toSet())
     }
 
     @Test

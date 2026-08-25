@@ -14,6 +14,9 @@ class FakeRecipeSearchRepository : RecipeSearchRepository {
     var pageToReturn: RecipeSearchPage = RecipeSearchPage(rows = emptyList(), hasMore = false)
     var tagsAndLabelsToReturn: Map<UUID, RecipeTagsAndLabels> = emptyMap()
 
+    /** `lastUserId` alone can't tell "called with null" (anonymous) from "never called". */
+    var searchCallCount: Int = 0
+        private set
     var lastUserId: UUID? = null
         private set
     var lastTsQuery: String? = null
@@ -23,7 +26,8 @@ class FakeRecipeSearchRepository : RecipeSearchRepository {
     var lastOffset: Int? = null
         private set
 
-    override suspend fun search(userId: UUID, tsQuery: String, limit: Int, offset: Int): RecipeSearchPage {
+    override suspend fun search(userId: UUID?, tsQuery: String, limit: Int, offset: Int): RecipeSearchPage {
+        searchCallCount++
         lastUserId = userId
         lastTsQuery = tsQuery
         lastLimit = limit

@@ -23,7 +23,7 @@ Core architecture and protocol documentation:
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
 | [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, sidecar data, caching and ETag behavior |
 | [Recipe Image Architecture](docs/recipe-image-architecture.md) | Recipe hero image blob upload/serving/reclamation — class diagram, upload/serve sequence diagrams, error states, app startup changes |
-| [Recipe Search](docs/recipe-search.md) | Postgres full-text recipe search — query sanitization, ranking, rate limiting |
+| [Recipe Search](docs/recipe-search.md) | Postgres full-text recipe search, anonymous access, browse-card taxonomy, ranking, rate limiting |
 | [Meal Plan Roadmap](docs/meal-plan-roadmap.md) | Meal-plan generation phases, recipe sourcing strategy |
 | [TheMealDB Importer](docs/themealdb-importer.md) | One-off catalog import tool — fetch, map, dedup, idempotent seed SQL |
 
@@ -189,6 +189,75 @@ Expected outcomes:
 - A subsequent pull (`GET /sync/pull?...`) includes `imageBlobId` on the recipe.
 - Clear returns `204`; a fetch after that returns `404`.
 
+### Recipe Search Smoke Test
+
+`GET /api/v1/recipes/search` is anonymous-capable: with no `Authorization` header it searches the
+`PUBLIC` catalog, and with a valid token it searches that catalog *plus* the caller's own
+`PRIVATE` recipes. Against a running, seeded server:
+
+1. Anonymous — no auth header at all:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/search?q=cake&limit=50" | jq '.results | length'
+```
+
+2. Authenticated — same query, with a token from `/auth/login`:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/search?q=cake&limit=50" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" | jq '.results | length'
+```
+
+3. Broken token — must still be rejected, not silently downgraded to the anonymous scope:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "http://localhost:8080/api/v1/recipes/search?q=cake" \
+  -H "Authorization: Bearer not-a-real-jwt"
+```
+
+Expected outcomes:
+- Step 1 returns `200` with the full public catalog match count — not a subset, and never a `PRIVATE` recipe.
+- Step 2 returns a superset of step 1 (the caller's own private recipes are added).
+- Step 3 returns `401`; the client is expected to refresh and retry rather than accept public-only results.
+- Rate limiting is 30 requests / 10s, keyed per user for authenticated callers and per remote address for anonymous ones.
+
+### Recipe Detail Smoke Test
+
+`GET /api/v1/recipes/{recipeId}` is anonymous-capable the same way search is: a missing
+`Authorization` header scopes visibility to `PUBLIC` recipes, and a valid token additionally
+allows the caller's own `PRIVATE` recipes. Unlike search, not-found and not-accessible both
+respond `404` — see `docs/sync-protocol.md`'s Recipe Detail section. Against a running,
+seeded server:
+
+1. Anonymous fetch of a `PUBLIC` recipe:
+```bash
+curl -s "http://localhost:8080/api/v1/recipes/<PUBLIC_RECIPE_UUID>" | jq '.recipe.uuid, (.referenceData.ingredients | length), (.creators | length)'
+```
+
+2. Anonymous fetch of a `PRIVATE` recipe you don't own:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PRIVATE_RECIPE_UUID>"
+```
+
+3. Owner fetch of their own `PRIVATE` recipe, with a token from `/auth/login`:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PRIVATE_RECIPE_UUID>" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+4. Broken token — must still be rejected, not silently downgraded:
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "http://localhost:8080/api/v1/recipes/<PUBLIC_RECIPE_UUID>" \
+  -H "Authorization: Bearer not-a-real-jwt"
+```
+
+Expected outcomes:
+- Step 1 returns `200` with `referenceData`/`creators` populated for that recipe's actual
+  ingredients/tags/labels/author — not empty arrays.
+- Step 2 returns `404` (not `403` — a private recipe's existence isn't leaked).
+- Step 3 returns `200`.
+- Step 4 returns `401`.
+- Rate limiting is its own bucket from recipe search (30 requests / 10s, same anonymous
+  keying) — exhausting one doesn't block the other.
+
 ## Test Users
 
 | Email          | Password  |
@@ -250,19 +319,48 @@ To start both the DB and the service, run:
 
 ### Database Setup
 
-To reset and reseed the local database from scratch, run these three scripts in order against the running Postgres container:
+To reset and reseed the local database from scratch, run these scripts **in order** against the running Postgres container. `-v ON_ERROR_STOP=1` is not optional — see the warning below.
 
 ```bash
-psql -h localhost -U postgres -d chefai_db -f src/main/resources/sql/drop_tables.sql -f src/main/resources/sql/create_tables.sql -f src/main/resources/sql/seed.sql
+psql -h localhost -U postgres -d chefai_db -v ON_ERROR_STOP=1 -f src/main/resources/sql/drop_tables.sql -f src/main/resources/sql/create_tables.sql -f src/main/resources/sql/seed.sql
+```
+
+To also load the ~789-recipe TheMealDB catalog, apply it **after** `seed.sql`:
+
+```bash
+psql -h localhost -U postgres -d chefai_db -v ON_ERROR_STOP=1 -f src/main/resources/sql/seed_themealdb.sql
 ```
 
 | Script | Purpose |
 |--------|---------|
 | `drop_tables.sql` | Drops all tables (clean slate) |
 | `create_tables.sql` | Creates the full schema |
-| `seed.sql` | Seeds reference data (allergens, ingredients, source classifications) + sample recipes and users |
+| `seed.sql` | Seeds reference data (allergens, ingredients, source classifications, tags, labels) + sample recipes and users |
+| `seed_themealdb.sql` | Bulk recipe catalog (895 recipes). Generated by `./gradlew importTheMealDb` and checked in for a reproducible seed without a network dependency — regenerate and recommit it if the upstream catalog changes. **Requires `seed.sql` first.** |
+
+> **Order matters, and getting it wrong used to fail silently.** Every junction
+> INSERT in `seed_themealdb.sql` is one multi-row statement referencing curated
+> catalog UUIDs from `seed.sql`. Applied against a bare schema, each one aborts
+> *in its entirety* on the first foreign-key violation — leaving recipes with no
+> tags, no labels and no ingredients, while psql prints three ERROR lines and
+> exits 0. That is how the database behind jmuci/ChefAI#182 ended up with 789
+> ingredient-less recipes. The generated file now opens with a preflight `DO`
+> block that raises instead, but keep `ON_ERROR_STOP=1` on anyway.
 
 > The DB must be running first — `docker compose up db` if it isn't.
+
+### Database-backed integration tests
+
+`./gradlew dbIntegrationTest` runs every `Postgres*IntegrationTest`. Each one
+**drops and recreates the `public` schema**, so it must never point at a
+database whose contents you want to keep. The default target is `chefai_test`,
+deliberately *not* the `chefai_db` used by `docker compose`:
+
+```bash
+psql -h localhost -U postgres -c "CREATE DATABASE chefai_test"
+```
+
+Override with `DB_URL` / `DB_USER` / `DB_PASSWORD`, as CI does.
 
 ## Postgres CheatSheet
 # PostgreSQL psql Command Cheat Sheet

@@ -35,6 +35,8 @@ object SeedSqlWriter {
         appendLine("-- Apply after seed.sql: psql ... -f seed.sql -f seed_themealdb.sql")
         appendLine()
 
+        writePreflightGuard(this)
+
         writeSystemUser(this)
         writeCatalogRows(this, "ingredients", result.newIngredients.map { it.id to it.displayName }, importedAtMillis)
         writeCatalogRows(this, "tags", result.newTags.map { it.id to it.displayName }, importedAtMillis)
@@ -44,6 +46,34 @@ object SeedSqlWriter {
         writeRecipeIngredients(this, result.recipes, importedAtMillis)
         writeRecipeTags(this, result.recipes, importedAtMillis)
         writeRecipeLabels(this, result.recipes, importedAtMillis)
+    }
+
+    /**
+     * Fails loudly when `seed.sql` has not been applied first.
+     *
+     * Every junction INSERT below is one multi-row statement referencing curated catalog UUIDs, so
+     * against a bare schema each one aborts *in its entirety* on the first FK violation — leaving
+     * every recipe with no tags, no labels and no ingredients. Without `ON_ERROR_STOP`, psql prints
+     * three ERROR lines, exits 0, and the import looks like it worked. That is exactly how the
+     * database behind jmuci/ChefAI#182 ended up with 789 ingredient-less recipes.
+     *
+     * `\set ON_ERROR_STOP on` is a psql client directive, harmless to any tool that only reads the
+     * SQL statements; the DO block is the real guard and works through any client.
+     */
+    private fun writePreflightGuard(sb: StringBuilder) {
+        sb.appendLine("-- ===============================")
+        sb.appendLine("-- PREFLIGHT: seed.sql must already be applied")
+        sb.appendLine("-- ===============================")
+        sb.appendLine("\\set ON_ERROR_STOP on")
+        sb.appendLine("DO $$")
+        sb.appendLine("BEGIN")
+        sb.appendLine("  IF NOT EXISTS (SELECT 1 FROM tags WHERE uuid = '50000000-0000-0000-0000-000000000008') THEN")
+        sb.appendLine("    RAISE EXCEPTION 'seed.sql must be applied before seed_themealdb.sql: the curated "  +
+            "catalog (tags/labels/ingredients) is missing, and every junction INSERT in this file would "  +
+            "abort on a foreign-key violation, silently leaving recipes with no tags or ingredients.';")
+        sb.appendLine("  END IF;")
+        sb.appendLine("END $$;")
+        sb.appendLine()
     }
 
     private fun writeSystemUser(sb: StringBuilder) {

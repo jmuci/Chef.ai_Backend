@@ -171,6 +171,24 @@ data class SyncReferenceData(
     val labels: List<SyncLabel> = emptyList()
 )
 
+/**
+ * Response for `GET /api/v1/recipes/{recipeId}` — an anonymous-capable single-recipe fetch
+ * used to hydrate a search result the client hasn't synced yet (see ChefAI#186). Shares
+ * [SyncRecipe]/[SyncReferenceData] with the pull/push-conflict responses so a client can
+ * reuse its existing aggregate-upsert code path.
+ *
+ * [creators] is not part of [SyncReferenceData] (that type is also embedded in
+ * [SyncPushResponse], reused as-is) but is required for the same FK-safety reason
+ * [SyncPullResponse.creators] is: `recipes.creator_id` is itself a foreign key, and a fresh
+ * anonymous client's local `users` table is typically empty.
+ */
+@Serializable
+data class RecipeDetailResponse(
+    val recipe: SyncRecipe,
+    val referenceData: SyncReferenceData,
+    val creators: List<SyncUser>
+)
+
 @Serializable
 data class SyncBookmark(
     val userId: String,

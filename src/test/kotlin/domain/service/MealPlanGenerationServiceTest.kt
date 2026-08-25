@@ -321,7 +321,8 @@ class MealPlanGenerationServiceTest {
         repo.seedUser(uuid = userId)
         repo.seedMealPlan(
             plan = buildDraftPlan(planId, userId),
-            serverUpdatedAtMillis = 1000L
+            serverUpdatedAtMillis = 1000L,
+            userId = userId
         )
 
         val service = makeService(repo)

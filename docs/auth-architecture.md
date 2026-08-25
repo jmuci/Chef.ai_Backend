@@ -17,10 +17,17 @@ rotation** following best practices for RESTful APIs. The architecture consists 
 ### 1. Presentation Layer
 
 - **Authentication Routes** (`AuthRoutes.kt`): Handles user registration, login, and token refresh
-- **Protected Routes** (`Routing.kt`): A single `authenticate("auth-jwt")` block guards `/recipes/*`
-  plus `homeRoutes`, `syncRoutes`, `mealPlanRoutes`, `userPreferencesRoutes`, `recipeImageRoutes`,
-  and `recipeSearchRoutes` — every route group in the app except `/auth/*`, `/health`, and static
-  content requires a valid JWT
+- **Route auth posture** (`Routing.kt`) comes in three tiers, not a single on/off switch:
+  - **Fully public** (no `authenticate` block at all): `/auth/*`, `/health`, static content, and
+    `GET /api/v1/home/layout` — the route reads no principal, so a token has no effect either way
+    (see [`docs/home-layout-sdui.md`](home-layout-sdui.md); this was accidentally JWT-gated for a
+    period and is now fixed).
+  - **Optional auth** (`authenticate("auth-jwt", optional = true)`): `recipeSearchRoutes` and
+    `recipeDetailRoutes` — an anonymous caller is scoped to `PUBLIC` recipes, an authenticated one
+    additionally sees their own `PRIVATE` recipes. See [`docs/recipe-search.md`](recipe-search.md).
+  - **Required auth** (`authenticate("auth-jwt")`, strict): `syncRoutes`, `mealPlanRoutes`,
+    `userPreferencesRoutes`, `recipeImageRoutes`, and `/recipes/*` (CRUD) — missing/invalid token
+    is a hard `401`.
 - **JWT Principal Extraction**: Middleware extracts user context from JWT tokens
 
 ### 2. Domain Layer
@@ -173,11 +180,23 @@ Client                    Server                     Database
 
 | Resource          | Owner | Other Users (Public Recipe) | Other Users (Private Recipe) | Unauthenticated |
 |-------------------|-------|----------------------------|------------------------------|-----------------|
-| View Recipe       | ✅    | ✅                         | ❌                           | ❌              |
+| View Recipe       | ✅    | ✅                         | ❌                           | ✅ (public only) |
 | Create Recipe     | ✅    | N/A                        | N/A                          | ❌              |
 | Update Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | Delete Recipe     | ✅    | ❌                         | ❌                           | ❌              |
 | List All Recipes  | ✅    | ✅ (filtered)              | ❌                           | ❌              |
+| Search Recipes    | ✅    | ✅                         | ❌                           | ✅ (public only) |
+
+`GET /api/v1/recipes/search` and `GET /api/v1/recipes/{recipeId}` are the two endpoints that
+serve unauthenticated callers a data result: both are mounted under
+`authenticate("auth-jwt", optional = true)`, so a missing `Authorization` header scopes them
+to `PUBLIC` recipes instead of being challenged. A *present but invalid* token is still a
+`401` on either — optional auth skips the challenge only when no credentials were offered at
+all. See ChefAI#184 for why search is anonymous-capable (the app is anonymous-first, and
+requiring a JWT made the catalog unreachable for signed-out users) and ChefAI#186 for why
+single-recipe fetch is too (search was reachable but its results weren't — see
+`docs/sync-protocol.md`'s Recipe Detail section). The older `GET /recipes/byId` is a
+different, unrelated endpoint — still fully authenticated, unchanged by either fix.
 
 ### Authorization Logic
 
@@ -234,14 +253,18 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
 │  ┌──────────────────────▼────────────────────────────────────┐ │
 │  │              ROUTING LAYER                                 │ │
 │  │                                                            │ │
-│  │  ┌────────────────┐      ┌────────────────────────────┐  │ │
-│  │  │ Public Routes  │      │   Protected Routes         │  │ │
-│  │  │                │      │   (require JWT)            │  │ │
-│  │  │ /auth/register │      │   /recipes/*                │  │ │
-│  │  │ /auth/login    │      │   /sync/*, /home/*          │  │ │
-│  │  │ /auth/refresh  │      │   /meal-plans/*, /user/*    │  │ │
-│  │  │ /health        │      │   /recipes/*/image, search  │  │ │
-│  │  └────────────────┘      └────────────────────────────┘  │ │
+│  │  ┌───────────────┐  ┌──────────────────┐  ┌──────────────┐│ │
+│  │  │ Public        │  │ Optional Auth     │  │ Required Auth││ │
+│  │  │ (no block)    │  │ (optional = true) │  │ (strict)     ││ │
+│  │  │               │  │                   │  │              ││ │
+│  │  │ /auth/*       │  │ /recipes/search   │  │ /sync/*      ││ │
+│  │  │ /health       │  │ /recipes/{id}     │  │ /meal-plans/*││ │
+│  │  │ /home/layout  │  │  (detail fetch)   │  │ /user/*      ││ │
+│  │  │               │  │                   │  │ /recipes/*/  ││ │
+│  │  │               │  │                   │  │  image       ││ │
+│  │  │               │  │                   │  │ /recipes/*   ││ │
+│  │  │               │  │                   │  │  (CRUD)      ││ │
+│  │  └───────────────┘  └──────────────────┘  └──────────────┘│ │
 │  └────────────────────────────────────────────────────────── │ │
 │                         │                                        │
 │  ┌──────────────────────▼────────────────────────────────────┐ │

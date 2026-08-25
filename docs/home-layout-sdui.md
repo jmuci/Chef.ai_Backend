@@ -6,12 +6,21 @@ PocketChef Home is server-driven. The backend owns the complete Home layout and 
 
 - `GET /api/v1/home/layout`
 
-This endpoint **requires JWT auth** — it's wrapped in the same `authenticate("auth-jwt")` block
-as every other protected route group in `Routing.kt` (since `4ba84d4`/`5bbe028`, 2026-03-26; this
-doc previously described it as public, which is now stale). It currently returns one static
-layout from a bundled resource file; the `userId` isn't used for personalization yet (see
-[Future Personalization Hook](#future-personalization-hook)) but authentication is already
-enforced.
+**This endpoint is anonymous — no `Authorization` header required.** That's the spec'd behavior,
+not an oversight: the Home screen is the anonymous-first entry point, and must load before an
+account exists. `homeRoutes(homeLayoutService)` is mounted directly in `Routing.kt`, outside every
+`authenticate(...)` block, alongside `authRoutes`.
+
+This wasn't always true in practice. For a period (`4ba84d4`/`5bbe028`, 2026-03-26) the route was
+accidentally nested inside `authenticate("auth-jwt")`, which 401'd every anonymous request — the
+Android client fell back to a bundled fixture with dead image URLs, so every Home recipe image
+rendered broken for signed-out sessions. Fixed in `6a4bb33` (2026-08-24), which moved `homeRoutes`
+back outside the auth block; `smoke-test.sh` now asserts a `200` with no auth header as part of
+its standard run, specifically to catch a regression back to the broken state.
+
+It currently returns one static layout from a bundled resource file; the `userId` isn't used for
+personalization yet (see [Future Personalization Hook](#future-personalization-hook)) — there's
+no principal to read in the first place, since the route sits outside any `authenticate` block.
 
 ## Endpoint Contract
 
@@ -19,7 +28,8 @@ enforced.
 
 - Method/Path: `GET /api/v1/home/layout`
 - Headers:
-  - `Authorization: Bearer <jwt>` — **required**
+  - `Authorization: Bearer <jwt>` — **not accepted**. The route reads no auth principal at all;
+    a token, valid or not, has no effect on the response.
   - `If-None-Match: <etag>` for cache revalidation (optional)
 
 ### Success Response
@@ -102,5 +112,10 @@ The custom `HomeComponent` serializer maps unrecognized `type` values to an `Unk
 
 `HomeLayoutService.getHomeLayout(userId: String? = null)` already accepts a `userId` parameter for
 a future user-aware resolution path without changing the API contract — but the route doesn't
-pass one through yet (`homeRoutes` calls `getHomeLayout()` with no argument), so every
-authenticated user currently gets the same static layout and sidecar.
+pass one through yet (`homeRoutes` calls `getHomeLayout()` with no argument, and since the route
+sits outside every `authenticate` block, there's no principal to pass even if it wanted to).
+Every caller, anonymous or not, currently gets the same static layout and sidecar. Personalizing
+this later would need the route to move under `authenticate("auth-jwt", optional = true)` —
+the same anonymous-capable pattern `recipeSearchRoutes`/`recipeDetailRoutes` already use (see
+[`docs/recipe-search.md`](recipe-search.md)) — rather than requiring auth outright, to avoid
+reintroducing the `6a4bb33` regression.

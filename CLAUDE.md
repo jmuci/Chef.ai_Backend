@@ -170,7 +170,7 @@ fun pullIncludesGapTagReferencedByReturnedRecipe() = testApplication {
 - `docs/recipe-image-architecture.md` — Recipe hero image blob upload/serving/reclamation: class diagram, upload/serve sequence diagrams, error states, app startup changes
 - `docs/home-layout-sdui.md` — Server-driven home layout endpoint, component schema, caching/ETag behavior
 - `docs/meal-plan-roadmap.md` — Meal-plan generation phases, recipe sourcing strategy
-- `docs/recipe-search.md` — Postgres full-text recipe search: query builder, ranking, rate limiting
+- `docs/recipe-search.md` — Search endpoint matching/ranking, anonymous access, the browse-card taxonomy, tag-vs-label correctness boundary, query internals, seeding order
 - `docs/themealdb-importer.md` — One-off catalog import tool (`tools/themealdb`): fetch, map, dedup, idempotent seed SQL
 - `README.md` — Quick start, smoke tests, build commands
 
@@ -392,11 +392,15 @@ src/test/kotlin/
 └── infrastructure/database/ ← Fake repositories
 
 docs/
-├── sync-protocol.md            ← Cursor-based sync, conflicts, examples
-├── auth-architecture.md        ← JWT, refresh, auth flow
+├── sync-protocol.md            ← Cursor-based sync, conflicts, examples, recipe detail, meal plans
+├── auth-architecture.md        ← JWT, refresh, auth flow, route auth tiers
 ├── auth-quick-start.md         ← Endpoint reference
 ├── exception-handling.md       ← Error codes
 ├── recipe-image-architecture.md ← Image blob upload/serving/reclamation, diagrams
+├── home-layout-sdui.md         ← Server-driven home layout, sidecar data, anonymous access
+├── meal-plan-roadmap.md        ← Meal-plan generation phases, recipe sourcing strategy
+├── recipe-search.md            ← Search matching/ranking, anonymous access, browse taxonomy, seeding order
+├── themealdb-importer.md       ← TheMealDB catalog import tool: fetch, map, classify, seed SQL
 └── README.md                   ← Build, run, smoke tests
 ```
 
