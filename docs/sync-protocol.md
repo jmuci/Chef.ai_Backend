@@ -218,6 +218,25 @@ Pushes **dirty client recipes** to the server. Server processes each recipe inde
 - Enables client to apply server's version without a separate pull
 - Includes transitive FKs (allergens/source-classifications from returned ingredients)
 
+**Transport-Level Errors** (whole request rejected, not per-recipe):
+
+These are distinct from the per-recipe `errors[]` above — the request never reaches
+`SyncService` at all.
+
+| Status | Trigger |
+|--------|---------|
+| `401` | Missing/invalid JWT |
+| `400` | Body isn't valid JSON, or is missing a required field (e.g. `recipes`) |
+| `400` | `/sync/pull`: `since` missing/non-numeric, or `limit <= 0` |
+| `409` | A DB constraint conflict outside the normal per-recipe conflict path (`ExposedSQLException`) |
+| `500` | Unexpected server/DB failure |
+
+The 400 case is handled by catching Ktor's `BadRequestException` — what
+`call.receive<SyncPushRequest>()` actually throws on a conversion failure, wrapping the
+underlying `JsonConvertException`/`SerializationException`. See
+[`docs/exception-handling.md`](exception-handling.md#sync-pushpull-transport-errors) for why
+that distinction matters: without it, a malformed body answered `500` instead of `400`.
+
 ---
 
 ## Multi-Device Conflict Resolution: Full Example

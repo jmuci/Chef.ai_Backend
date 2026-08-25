@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.userId
 import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.JsonConvertException
+import io.ktor.server.plugins.BadRequestException
 import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
@@ -31,6 +32,18 @@ fun Route.syncRoutes(syncService: SyncService) {
                 val request = call.receive<SyncPushRequest>()
                 val response = syncService.pushRecipes(userId, request)
                 call.respond(HttpStatusCode.OK, response)
+            } catch (ex: BadRequestException) {
+                // What call.receive<SyncPushRequest>() actually throws on a conversion failure -
+                // Ktor's ContentNegotiation wraps the underlying JsonConvertException/
+                // SerializationException in this type, so those two catches below never fire for
+                // a malformed body; they're kept for any exception thrown directly by future code
+                // in this block. Without this clause, every malformed/incomplete client payload
+                // fell through to the generic catch (ex: Exception) below and answered 500.
+                call.application.environment.log.warn("Sync push request conversion failed: ${ex.message}")
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ErrorResponse(buildDetailedError("Malformed sync push payload", ex))
+                )
             } catch (ex: JsonConvertException) {
                 call.application.environment.log.warn("Sync push JSON conversion failed: ${ex.message}")
                 call.respond(
