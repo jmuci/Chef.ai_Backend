@@ -7,7 +7,7 @@ import com.tenmilelabs.infrastructure.database.dao.UserDAO
 fun daoToUser(dao: UserDAO): User = User(
     uuid = dao.id.value,
     email = dao.email,
-    username = dao.displayName,
+    username = dao.username,
     displayName = dao.displayName,
     avatarUrl = dao.avatarUrl,
     createdAt = dao.createdAt.toString(),
