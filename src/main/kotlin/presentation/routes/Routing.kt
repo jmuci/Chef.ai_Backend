@@ -98,6 +98,13 @@ fun Application.configureRouting(
             // Same anonymous-by-remote-address keying rationale as search.
             requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
         }
+        register(MEAL_PLAN_GENERATE_RATE_LIMIT_NAME) {
+            // Tighter than search/detail: generation does real work (candidate scan + ranking +
+            // per-recipe aggregate assembly), not a single indexed lookup. Same anonymous-by-
+            // remote-address keying rationale as the other optional-auth routes.
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
+        }
     }
 
     routing {
@@ -126,6 +133,9 @@ fun Application.configureRouting(
             // ChefAI#186: a search result's tap-through needs to fetch a not-yet-synced recipe
             // by id under the same anonymous-capable rules search itself uses.
             recipeDetailRoutes(syncService)
+            // Anonymous-capable stateless meal-plan generation: closes the 16-vs-789-candidate
+            // gap for a signed-out device generating an INCLUDE_PUBLIC plan (see MealPlanRoutes.kt).
+            mealPlanGenerationRoutes(mealPlanGenerationService, syncService)
         }
 
         // Protected routes - require authentication

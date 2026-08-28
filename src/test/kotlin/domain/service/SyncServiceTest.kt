@@ -424,6 +424,45 @@ class SyncServiceTest {
         assertEquals(setOf(creatorId.toString()), result.creators.map { it.uuid }.toSet())
     }
 
+    // ── getRecipeDetails (batched, for stateless meal-plan generation) ────────
+
+    @Test
+    fun getRecipeDetailsMergesAndDeduplicatesSharedReferenceDataAndCreators() = withService { service, repo ->
+        val creatorId = repo.seedUser()
+        val sharedTagId = repo.seedTag(serverUpdatedAt = 50L)
+        val sharedLabelId = repo.seedLabel(serverUpdatedAt = 50L)
+        val sharedIngredientId = repo.seedIngredient(serverUpdatedAt = 50L)
+
+        val firstRecipeId = UUID.randomUUID()
+        val firstRecipe = sampleRecipe(firstRecipeId, creatorId, 1000L, sharedIngredientId, "PUBLIC")
+            .copy(tagIds = listOf(sharedTagId.toString()), labelIds = listOf(sharedLabelId.toString()))
+        repo.seedRecipe(firstRecipe, serverUpdatedAtMillis = 1000L)
+
+        val secondRecipeId = UUID.randomUUID()
+        val secondRecipe = sampleRecipe(secondRecipeId, creatorId, 1000L, sharedIngredientId, "PUBLIC")
+            .copy(tagIds = listOf(sharedTagId.toString()), labelIds = listOf(sharedLabelId.toString()))
+        repo.seedRecipe(secondRecipe, serverUpdatedAtMillis = 1000L)
+
+        val bundle = service.getRecipeDetails(userId = null, recipeIds = setOf(firstRecipeId, secondRecipeId))
+
+        assertEquals(setOf(firstRecipeId.toString(), secondRecipeId.toString()), bundle.recipes.map { it.uuid }.toSet())
+        assertEquals(1, bundle.referenceData.ingredients.size)
+        assertEquals(1, bundle.referenceData.tags.size)
+        assertEquals(1, bundle.referenceData.labels.size)
+        assertEquals(1, bundle.creators.size)
+    }
+
+    @Test
+    fun getRecipeDetailsOmitsIdsThatResolveToNotFound() = withService { service, repo ->
+        val recipeId = UUID.randomUUID()
+        val recipe = sampleRecipe(recipeId, UUID.randomUUID(), 1000L, repo.seedIngredient(), "PUBLIC")
+        repo.seedRecipe(recipe, serverUpdatedAtMillis = 1000L)
+
+        val bundle = service.getRecipeDetails(userId = null, recipeIds = setOf(recipeId, UUID.randomUUID()))
+
+        assertEquals(listOf(recipeId.toString()), bundle.recipes.map { it.uuid })
+    }
+
     @Test
     fun pushingAMealPlanUpdatesStoredUserPreferences() {
         testApplication {

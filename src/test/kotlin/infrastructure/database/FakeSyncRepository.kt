@@ -257,7 +257,7 @@ class FakeSyncRepository : SyncRepository {
     }
 
     override suspend fun findCandidateRecipeIds(
-        userId: UUID,
+        userId: UUID?,
         recipeSource: String,
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?

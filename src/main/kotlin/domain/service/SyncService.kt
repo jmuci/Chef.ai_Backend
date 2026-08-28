@@ -35,6 +35,13 @@ sealed interface RecipeDetailResult {
     data object NotFound : RecipeDetailResult
 }
 
+/** Merged result of [SyncService.getRecipeDetails] — the aggregate form of several [RecipeDetailResult.Found]. */
+data class RecipeDetailsBundle(
+    val recipes: List<SyncRecipe>,
+    val referenceData: SyncReferenceData,
+    val creators: List<SyncUser>
+)
+
 class SyncService(
     private val syncRepository: SyncRepository,
     private val log: Logger,
@@ -378,6 +385,33 @@ class SyncService(
         )
 
         return RecipeDetailResult.Found(recipe, referenceData, creators)
+    }
+
+    /**
+     * Batched counterpart to [getRecipeDetail], used to hydrate the recipes a stateless-generated
+     * meal plan references (see `MealPlanGenerationService.generateStateless`). Fetches each of
+     * [recipeIds] individually via [getRecipeDetail] and merges the results, de-duplicating
+     * reference entities and creators shared across recipes by `uuid` — a plan's dinner and lunch
+     * picks commonly share tags/labels/ingredients, and repeating them would just bloat the
+     * response. An id that resolves to [RecipeDetailResult.NotFound] (e.g. deleted between
+     * generation and this call) is silently omitted rather than failing the whole batch.
+     */
+    suspend fun getRecipeDetails(userId: UUID?, recipeIds: Set<UUID>): RecipeDetailsBundle {
+        val found = recipeIds.mapNotNull { id ->
+            getRecipeDetail(userId, id) as? RecipeDetailResult.Found
+        }
+
+        return RecipeDetailsBundle(
+            recipes = found.map { it.recipe },
+            referenceData = SyncReferenceData(
+                ingredients = found.flatMap { it.referenceData.ingredients }.distinctBy { it.uuid },
+                allergens = found.flatMap { it.referenceData.allergens }.distinctBy { it.uuid },
+                sourceClassifications = found.flatMap { it.referenceData.sourceClassifications }.distinctBy { it.uuid },
+                tags = found.flatMap { it.referenceData.tags }.distinctBy { it.uuid },
+                labels = found.flatMap { it.referenceData.labels }.distinctBy { it.uuid }
+            ),
+            creators = found.flatMap { it.creators }.distinctBy { it.uuid }
+        )
     }
 
     /**
