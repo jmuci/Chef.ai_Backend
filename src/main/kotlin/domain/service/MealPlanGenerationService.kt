@@ -60,6 +60,27 @@ class MealPlanGenerationService(
         )
     }
 
+    /**
+     * Generates a schedule without persisting anything — no plan row, no [meal_plan_days] write, no
+     * ownership check. The caller (typically an anonymous device, [userId] null) persists the result
+     * locally. Runs synchronously: there is no plan row for a client to poll, so unlike
+     * [startGeneration] this returns the finished days rather than a 202.
+     */
+    suspend fun generateStateless(userId: UUID?, preferencesJson: String): List<SyncMealPlanDayDto> {
+        val prefs = parsePreferences(preferencesJson)
+
+        val candidateIds = syncRepository.findCandidateRecipeIds(
+            userId = userId,
+            recipeSource = prefs.recipeSource,
+            dietaryRestrictionTags = prefs.dietaryRestrictions.filter { it != "NONE" },
+            maxPrepTimeMinutes = prefs.maxPrepTimeMinutes
+        )
+
+        val rankingMetadata = syncRepository.findRecipeRankingMetadata(candidateIds.toSet())
+
+        return assignRecipesToDays(candidateIds, prefs, rankingMetadata, recentlyUsedElsewhere = emptySet())
+    }
+
     // ── Internal generation pipeline ──────────────────────────────────────────
 
     private suspend fun generateAsync(planId: UUID, userId: UUID, preferencesJson: String) {

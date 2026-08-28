@@ -301,6 +301,50 @@ class MealPlanGenerationServiceTest {
         assertTrue(days.all { it.dinnerRecipeId == null && it.lunchRecipeId == null })
     }
 
+    // ── generateStateless ─────────────────────────────────────────────────────
+
+    @Test
+    fun `generateStateless with null userId returns planLengthDays days`() = runTest {
+        val repo = FakeSyncRepository()
+        repeat(5) { repo.seedCandidateRecipe() }
+        val service = makeService(repo)
+
+        val days = service.generateStateless(
+            userId = null,
+            preferencesJson = """{"planLengthDays":4,"recipeSource":"INCLUDE_PUBLIC"}"""
+        )
+
+        assertEquals(4, days.size)
+    }
+
+    @Test
+    fun `generateStateless with no candidates returns days with null slots rather than throwing`() = runTest {
+        val repo = FakeSyncRepository()
+        val service = makeService(repo)
+
+        val days = service.generateStateless(
+            userId = null,
+            preferencesJson = """{"planLengthDays":3,"recipeSource":"INCLUDE_PUBLIC"}"""
+        )
+
+        assertEquals(3, days.size)
+        assertTrue(days.all { it.dinnerRecipeId == null && it.lunchRecipeId == null })
+    }
+
+    @Test
+    fun `generateStateless with mealType DINNER leaves every lunchRecipeId null`() = runTest {
+        val repo = FakeSyncRepository()
+        repeat(5) { repo.seedCandidateRecipe() }
+        val service = makeService(repo)
+
+        val days = service.generateStateless(
+            userId = null,
+            preferencesJson = """{"planLengthDays":5,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}"""
+        )
+
+        assertTrue(days.all { it.lunchRecipeId == null })
+    }
+
     // ── startGeneration ───────────────────────────────────────────────────────
 
     @Test

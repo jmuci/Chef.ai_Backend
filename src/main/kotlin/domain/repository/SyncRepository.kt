@@ -172,6 +172,10 @@ interface SyncRepository {
      * Returns recipe UUIDs that are candidates for meal plan generation given
      * the provided filter criteria.
      *
+     * A null [userId] means an anonymous caller: candidates are scoped to
+     * `privacy = 'PUBLIC' AND deleted_at IS NULL`, and "COLLECTION_ONLY" is not meaningful for a
+     * null user — it is treated as "INCLUDE_PUBLIC".
+     *
      * [recipeSource] — "COLLECTION_ONLY" limits to recipes bookmarked by [userId] or authored
      * by [userId] (so a user's own recipes are always usable, even unbookmarked); "INCLUDE_PUBLIC"
      * includes all recipes owned by [userId] or marked PUBLIC. A bookmark only counts if the
@@ -186,7 +190,7 @@ interface SyncRepository {
      * Null means no time constraint.
      */
     suspend fun findCandidateRecipeIds(
-        userId: UUID,
+        userId: UUID?,
         recipeSource: String,
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?

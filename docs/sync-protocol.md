@@ -1019,6 +1019,77 @@ addressed here — see the ChefAI repo's own fix for #186.
 
 ---
 
+## Meal Plan Generation (Stateless, Anonymous-Capable)
+
+### POST /api/v1/meal-plans/generate
+
+Anonymous-capable, stateless counterpart to the persisted `POST /meal-plans/{mealPlanId}/generate`
+flow described in [`docs/meal-plan-roadmap.md`](meal-plan-roadmap.md). Mounted under
+`authenticate("auth-jwt", optional = true)`, same posture as recipe search and recipe detail —
+it exists to close a specific gap: an anonymous device only has its ~16 locally-seeded recipes to
+generate from, versus the ~789 `PUBLIC` recipes the server can see. No meal-plan row is created,
+no `meal_plan_days` are written — the response is computed and returned in one call, never
+persisted server-side.
+
+**Request**:
+```
+POST /api/v1/meal-plans/generate HTTP/1.1
+Authorization: Bearer <token>   # optional
+Content-Type: application/json
+
+{"preferencesJson": "{\"planLengthDays\":5,\"mealType\":\"DINNER\",\"recipeSource\":\"INCLUDE_PUBLIC\"}"}
+```
+
+`preferencesJson` is the same blob shape `MealPlanTable.preferences` / `UserPreferencesTable`
+already use — see `MealPlanGenerationService.parsePreferences` for the full field list and
+defaults. An authenticated caller's `COLLECTION_ONLY` still means bookmarked-or-authored, same as
+the persisted flow; for an anonymous caller (no token), `COLLECTION_ONLY` is treated as
+`INCLUDE_PUBLIC` — there's no user to own a collection, so falling back to the public catalog
+beats returning an empty plan.
+
+**Response** (`GenerateMealPlanStatelessResponse`, `200`):
+```json
+{
+  "days": [
+    {"uuid": "<uuid>", "dayIndex": 0, "lunchRecipeId": null, "dinnerRecipeId": "abc123"}
+  ],
+  "recipes": [{"uuid": "abc123", "title": "Carbonara", "...": "..."}],
+  "referenceData": {
+    "ingredients": [{"...": "..."}],
+    "allergens": [],
+    "sourceClassifications": [],
+    "tags": [{"...": "..."}],
+    "labels": []
+  },
+  "creators": [{"uuid": "user-uuid", "displayName": "...", "...": "..."}]
+}
+```
+`400` for a blank or unparseable `preferencesJson` (`ErrorResponse`); `401` for a present-but-invalid
+token (challenge, not a downgrade to anonymous); `500` for an unexpected server error.
+
+**Key behavior**:
+- Shaped like a pull page, not a bare day list — `days` alone would leave the client with N
+  recipe UUIDs and no way to resolve them (an anonymous device can't hit `/sync/pull`, which
+  requires auth, and a 7-day `DINNER_AND_LUNCH` plan would otherwise mean up to 14 follow-up
+  `GET /api/v1/recipes/{id}` calls). One round trip in, one round trip out.
+- `recipes`/`referenceData`/`creators` are assembled by `SyncService.getRecipeDetails`, which
+  batches `getRecipeDetail` over every recipe id the assigned `days` reference and merges/dedupes
+  shared tags, labels, ingredients, and creators across recipes — the same FK-safety contract
+  `RecipeDetailResponse` and `/sync/pull` already guarantee, just for a set of recipes instead of
+  one.
+- Reuses the exact same deterministic assignment pipeline (`assignRecipesToDays`, variety/ranking
+  logic) as the persisted flow — see `docs/meal-plan-roadmap.md` for how that algorithm works.
+  `recentlyUsedElsewhere` is always empty here: there's no persisted plan history to weight
+  against for a one-off, unsaved generation.
+- Its own rate-limit bucket (`meal-plan-generate`, 10 requests/60s, keyed on user id or remote
+  address) — tighter than search/detail's 30/10s, because generation does real work (a candidate
+  scan plus per-recipe aggregate assembly), not a single indexed lookup.
+- Nothing is written to `meal_plans` or `meal_plan_days`. A client that wants to keep the result
+  still pushes it through the normal `/sync/push` `mealPlans` flow described above — this endpoint
+  only answers "what would generation produce," it doesn't record that answer.
+
+---
+
 ## Validation & Errors
 
 The server validates each pushed recipe, in this order — the first failing check wins and the rest are skipped:
@@ -1112,3 +1183,4 @@ While the server ensures referential integrity, the client must:
 | **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |
 | **Meal Plans** | Piggybacked on push/pull; same LWW conflict model as recipes; push also writes `UserPreferencesRepository` |
 | **Recipe Detail** | `GET /api/v1/recipes/{recipeId}`, anonymous-capable, PUBLIC (+ owner's own PRIVATE); reuses `SyncRecipe`/reference-data shapes; not-found and not-accessible both 404 |
+| **Meal Plan Generation (Stateless)** | `POST /api/v1/meal-plans/generate`, anonymous-capable, nothing persisted; response bundles `days` + `recipes` + `referenceData` + `creators` in one round trip |

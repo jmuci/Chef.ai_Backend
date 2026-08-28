@@ -555,4 +555,69 @@ class PostgresSyncRepositoryIntegrationTest {
 
         assertEquals(setOf(ownedPrivateId, otherPublicId), candidates.toSet())
     }
+
+    @Test
+    fun findCandidateRecipeIdsWithNullUserIdReturnsOnlyPublicNonDeletedRecipes() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val creatorId = UUID.randomUUID()
+
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(creatorId, UserTable)
+                it[user_name] = "creator"
+                it[email] = "creator-${creatorId}@example.com"
+                it[display_name] = "Creator"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+        }
+
+        fun pushRecipe(id: UUID, title: String, privacy: String) = runBlocking {
+            repo.upsertRecipeAggregate(
+                SyncRecipe(
+                    uuid = id.toString(),
+                    title = title,
+                    description = "desc",
+                    imageUrl = "https://example.com/i.jpg",
+                    imageUrlThumbnail = "https://example.com/t.jpg",
+                    prepTimeMinutes = 10,
+                    cookTimeMinutes = 10,
+                    servings = 2,
+                    creatorId = creatorId.toString(),
+                    recipeExternalUrl = null,
+                    privacy = privacy,
+                    updatedAt = 1_000L,
+                    deletedAt = null,
+                    steps = emptyList(),
+                    ingredients = emptyList(),
+                    tagIds = emptyList(),
+                    labelIds = emptyList()
+                ),
+                Instant.fromEpochMilliseconds(2_000L)
+            )
+        }
+
+        val publicId = UUID.randomUUID()
+        val privateId = UUID.randomUUID()
+        val softDeletedPublicId = UUID.randomUUID()
+
+        pushRecipe(publicId, "Public Recipe", privacy = "PUBLIC")
+        pushRecipe(privateId, "Private Recipe", privacy = "PRIVATE")
+        pushRecipe(softDeletedPublicId, "Soft Deleted Public Recipe", privacy = "PUBLIC")
+
+        transaction {
+            RecipeTable.update({ RecipeTable.id eq EntityID(softDeletedPublicId, RecipeTable) }) {
+                it[deleted_at] = 3_000L
+            }
+        }
+
+        val candidates = repo.findCandidateRecipeIds(
+            userId = null,
+            recipeSource = "INCLUDE_PUBLIC",
+            dietaryRestrictionTags = emptyList(),
+            maxPrepTimeMinutes = null
+        )
+
+        assertEquals(setOf(publicId), candidates.toSet())
+    }
 }

@@ -558,7 +558,7 @@ class PostgresSyncRepository : SyncRepository {
         }
 
     override suspend fun findCandidateRecipeIds(
-        userId: UUID,
+        userId: UUID?,
         recipeSource: String,
         dietaryRestrictionTags: List<String>,
         maxPrepTimeMinutes: Int?
@@ -580,8 +580,8 @@ class PostgresSyncRepository : SyncRepository {
         }
 
         // Step 2: Build the base set of accessible recipe IDs per recipeSource
-        val accessibleIds: Set<UUID> = when (recipeSource) {
-            "COLLECTION_ONLY" -> {
+        val accessibleIds: Set<UUID> = when {
+            recipeSource == "COLLECTION_ONLY" && userId != null -> {
                 val bookmarkedIds = BookmarkedRecipeTable
                     .selectAll()
                     .where {
@@ -618,11 +618,21 @@ class PostgresSyncRepository : SyncRepository {
                     .toSet()
                 accessibleBookmarked + authored
             }
-            else -> RecipeTable
+            // "INCLUDE_PUBLIC", or "COLLECTION_ONLY" with a null (anonymous) userId — a bookmark
+            // collection is meaningless for a caller the server doesn't recognize, so it falls
+            // through to the same public-only query as INCLUDE_PUBLIC.
+            userId != null -> RecipeTable
                 .selectAll()
                 .where {
                     (RecipeTable.deleted_at.isNull()) and
                         ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
+                }
+                .map { it[RecipeTable.id].value }
+                .toSet()
+            else -> RecipeTable
+                .selectAll()
+                .where {
+                    (RecipeTable.deleted_at.isNull()) and (RecipeTable.privacy eq "PUBLIC")
                 }
                 .map { it[RecipeTable.id].value }
                 .toSet()

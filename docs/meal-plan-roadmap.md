@@ -1,7 +1,7 @@
 # Meal Plan Generation — Incremental Roadmap
 
 **Status**: Living document — update as phases complete.
-**Last updated**: 2026-08-20 (Phase 2.1 done)
+**Last updated**: 2026-08-28 (Phase 0.1 done)
 
 This document tracks how meal-plan generation evolves from the current
 rule-based pipeline toward something smarter, and sequences the prerequisite
@@ -80,6 +80,66 @@ plus `RecipeSourceSelector`, `DietaryChipGroup`, `MealTypeSelector`,
 
 **Tests**: `src/test/kotlin/domain/service/MealPlanGenerationServiceTest.kt`,
 `src/test/kotlin/infrastructure/auth/MealPlanIntegrationTest.kt`.
+
+## Phase 0.1 — Done: anonymous-capable stateless generation
+
+**Status: built (2026-08-28).** Phase 0's `/generate` endpoint requires a JWT and only ever reads
+`findCandidateRecipeIds(userId, ...)` with a non-null `userId` — so an anonymous device (no
+account yet) had no server-side generation path at all, and was limited to whatever recipes
+shipped in its local seed data (~16), even though the server holds ~789 `PUBLIC` recipes after
+Phase 1's catalog import. Full design context:
+[`docs/sync-protocol.md`'s Meal Plan Generation section](sync-protocol.md#meal-plan-generation-stateless-anonymous-capable).
+
+**Backend:**
+- `POST /api/v1/meal-plans/generate` —
+  [`presentation/routes/MealPlanRoutes.kt`](../src/main/kotlin/presentation/routes/MealPlanRoutes.kt)
+  (`mealPlanGenerationRoutes`, mounted in `Routing.kt` alongside `recipeSearchRoutes`/
+  `recipeDetailRoutes` under `authenticate("auth-jwt", optional = true)`). Distinct from — and
+  mounted separately from — Phase 0's `mealPlanRoutes`, which stays JWT-required under
+  `authenticate("auth-jwt")` since it persists a plan the caller must own. `400` on a blank or
+  unparseable `preferencesJson`, `500` on unexpected failure, its own rate-limit bucket
+  (`meal-plan-generate`, 10/60s).
+- `MealPlanGenerationService.generateStateless(userId: UUID?, preferencesJson: String)` —
+  [`domain/service/MealPlanGenerationService.kt`](../src/main/kotlin/domain/service/MealPlanGenerationService.kt).
+  Reuses `parsePreferences`/`findCandidateRecipeIds`/`findRecipeRankingMetadata`/
+  `assignRecipesToDays` verbatim (`recentlyUsedElsewhere = emptySet()` — there's no persisted plan
+  history for a one-off, unsaved generation). Computes and returns `List<SyncMealPlanDayDto>`;
+  never calls `replaceMealPlanDays` or touches `meal_plans`/`meal_plan_days`. `startGeneration`/
+  `generateAsync`/`assignRecipesToDays` themselves are untouched.
+- `findCandidateRecipeIds`'s `userId` parameter is now `UUID?` —
+  [`domain/repository/SyncRepository.kt`](../src/main/kotlin/domain/repository/SyncRepository.kt) /
+  [`infrastructure/database/repositoryImpl/PostgresSyncRepository.kt`](../src/main/kotlin/infrastructure/database/repositoryImpl/PostgresSyncRepository.kt).
+  `null` means an anonymous caller and scopes the candidate query to
+  `deleted_at IS NULL AND privacy = 'PUBLIC'` — no `creator_id` branch, since there's no user to
+  own anything. `recipeSource: "COLLECTION_ONLY"` with a `null` userId is treated as
+  `INCLUDE_PUBLIC` rather than returning an empty pool. Every existing call site already passed a
+  non-null `userId`, so this is a backward-compatible widening, not a behavior change for
+  authenticated flows.
+- `SyncService.getRecipeDetails(userId: UUID?, recipeIds: Set<UUID>)` —
+  [`domain/service/SyncService.kt`](../src/main/kotlin/domain/service/SyncService.kt). Batches
+  `getRecipeDetail` per id (not a new bulk repository query — correctness first, per the design
+  discussion; a batched query is a candidate future optimization if per-id calls prove too
+  chatty at scale) and merges the results, de-duplicating shared tags/labels/ingredients/creators
+  across recipes via `distinctBy { it.uuid }`. This is what lets the response bundle every
+  recipe the assigned days reference in one payload, the same reasoning
+  [`docs/sync-protocol.md`'s Recipe Detail section](sync-protocol.md#get-apiv1recipesrecipeid)
+  gives for shipping `creators` alongside `referenceData`.
+
+**Tests**: 3 new cases in `MealPlanGenerationServiceTest.kt` (null-userId day count, empty
+candidate pool leaves null slots rather than throwing, `DINNER` mealType leaves every
+`lunchRecipeId` null); 2 new cases in `SyncServiceTest.kt` (`getRecipeDetails` dedupes shared
+reference data/creators across two recipes; omits ids that resolve to not-found); a new 5-case
+`src/test/kotlin/infrastructure/auth/MealPlanGenerationRoutesIntegrationTest.kt` (no
+`Authorization` header still 200s, a valid JWT still 200s, malformed `preferencesJson` is 400 not
+500, a blank `preferencesJson` is 400, every returned `dinnerRecipeId`/`lunchRecipeId` appears in
+the response's own `recipes` list); a new
+`PostgresSyncRepositoryIntegrationTest.findCandidateRecipeIdsWithNullUserIdReturnsOnlyPublicNonDeletedRecipes`
+(a `null` userId returns only non-deleted `PUBLIC` recipes, excluding another user's `PRIVATE`
+recipe and a soft-deleted `PUBLIC` one).
+
+**Explicitly out of scope for this phase** (Android client, `jmuci/ChefAI`, not this repo): the
+client actually calling this endpoint for signed-out users and upserting the response into Room —
+that's Phase 2 of the plan that introduced this endpoint, tracked in the Android repo.
 
 ## Phase 1 — Recipe catalog growth (~300 recipes, $0, one-off)
 
