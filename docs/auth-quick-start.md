@@ -19,18 +19,18 @@ The application comes with default JWT settings in `src/main/resources/applicati
 jwt:
   secret: "your-secret-key-change-this-in-production"
   issuer: "http://0.0.0.0:8080"
-  audience: "jwt-audience"
-  realm: "ChefAI"
+  audience: "chefai-backend"
+  realm: "ChefAI"  # dead config — not read anywhere; see auth-architecture.md
 ```
 
 **⚠️ Important**: Change the `secret` before deploying to production!
 
-For production, use environment variables:
-
-```bash
-export JWT_SECRET="your-production-secret-key"
-export JWT_ISSUER="https://your-domain.com"
-```
+**These values are hardcoded literals in the checked-in `application.yaml`, not environment
+placeholders** — setting `JWT_SECRET`/`JWT_ISSUER` in your shell has **no effect** on a running
+server today. To make them deploy-time-configurable, the yaml itself needs to change to
+reference the env var (e.g. `secret: "${JWT_SECRET}"`), per
+[Ktor's config docs](https://ktor.io/docs/rsa-keys-generation.html#defining-the-private-key),
+before `export JWT_SECRET=...` will do anything.
 
 ### 2. Start the Application
 
@@ -148,12 +148,14 @@ curl -X POST http://localhost:8080/recipes \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Spaghetti Carbonara",
-    "label": "Italian",
     "description": "Classic Roman pasta dish",
-    "prepTimeMins": "25",
-    "recipeUrl": "https://example.com/carbonara",
     "imageUrl": "https://example.com/carbonara.jpg",
-    "imageUrlThumbnail": "https://example.com/carbonara_thumb.jpg"
+    "imageUrlThumbnail": "https://example.com/carbonara_thumb.jpg",
+    "prepTimeMinutes": 25,
+    "cookTimeMinutes": 15,
+    "servings": 2,
+    "recipeExternalUrl": "https://example.com/carbonara",
+    "privacy": "PRIVATE"
   }'
 
 # Delete your own recipe
@@ -243,12 +245,14 @@ curl -X POST http://localhost:8080/recipes \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Alices Secret Recipe",
-    "label": "Mediterranean",
     "description": "Top secret!",
-    "prepTimeMins": "30",
-    "recipeUrl": "https://example.com/secret",
     "imageUrl": "https://example.com/secret.jpg",
-    "imageUrlThumbnail": "https://example.com/secret_thumb.jpg"
+    "imageUrlThumbnail": "https://example.com/secret_thumb.jpg",
+    "prepTimeMinutes": 30,
+    "cookTimeMinutes": 20,
+    "servings": 4,
+    "recipeExternalUrl": "https://example.com/secret",
+    "privacy": "PRIVATE"
   }'
 
 # Bob tries to access Alice's recipe - should get filtered out
@@ -278,7 +282,9 @@ curl -X GET http://localhost:8080/recipes \
 1. **Store securely**: Keep both tokens in secure storage (not localStorage for web apps)
 2. **Automatic refresh**: Implement automatic token refresh before expiration
 3. **Handle 401s**: Catch 401 errors, attempt refresh, then retry original request
-4. **Logout**: When logging out, discard both tokens (optionally call logout endpoint)
+4. **Logout**: There is no `/auth/logout` endpoint. Logging out means discarding both tokens
+   client-side; to also invalidate them server-side, revoke the refresh token via
+   `AuthService.revokeAllUserTokens()` (not currently exposed as a route)
 
 ### Example: Automatic Token Refresh
 
@@ -322,7 +328,7 @@ You can decode JWT tokens (without verifying) at [jwt.io](https://jwt.io):
 **"Token is not valid or has expired"**
 
 - Token format: Must be `Bearer <token>` with a space
-- Check token hasn't expired (24h default)
+- Check token hasn't expired (1h default — see [Token Expiration & Refresh](#token-expiration--refresh) above)
 - Verify JWT secret in config matches
 
 **"User not authenticated"**
@@ -385,7 +391,7 @@ All inputs are validated and sanitized:
 - ✅ Automatic salt generation
 - ✅ Never stored in plaintext
 - ✅ Never logged or exposed
-- ✅ Timing attack protection (constant-time responses)
+- ✅ Timing attack protection on **login** only (constant-time dummy-hash delay); registration has no equivalent
 
 ### Refresh Token Storage
 

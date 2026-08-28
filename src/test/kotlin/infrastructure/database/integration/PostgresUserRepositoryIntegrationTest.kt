@@ -48,6 +48,7 @@ class PostgresUserRepositoryIntegrationTest {
         )
         assertNotNull(created)
         assertEquals(email, created.email)
+        assertEquals("db-user", created.username)
 
         val byEmail = repo.findUserByEmail(email)
         assertNotNull(byEmail)
@@ -56,5 +57,32 @@ class PostgresUserRepositoryIntegrationTest {
         val byId = repo.findUserById(created.uuid)
         assertNotNull(byId)
         assertEquals(email, byId.email)
+        assertEquals("db-user", byId.username)
+    }
+
+    /**
+     * Regression test for a bug where `daoToUser()` read `username` from the DAO's
+     * `displayName` column instead of its `username` column. `display_name` defaults to `""` at
+     * the DB level and `createUser()` never sets it, so every `User.username` — including
+     * `/auth/register`'s response field — came back blank in production. Unit tests against
+     * `FakeUserRepository` never caught this because the fake bypasses `daoToUser` entirely and
+     * stores the real username directly; only a real Postgres round-trip through the actual DAO
+     * mapping exercises the bug.
+     */
+    @Test
+    fun createdUserUsernameIsNotSilentlyBlank() = runBlocking {
+        val repo = PostgresUserRepository(log)
+        val email = "user-${UUID.randomUUID()}@example.com"
+
+        val created = repo.createUser(
+            email = email,
+            username = "alice",
+            passwordHash = "hashed-password"
+        )
+
+        assertNotNull(created)
+        assertEquals("alice", created.username)
+        assertNotNull(repo.findUserById(created.uuid))
+        assertEquals("alice", repo.findUserById(created.uuid)!!.username)
     }
 }

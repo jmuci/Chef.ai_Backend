@@ -92,6 +92,16 @@ Authorization: Bearer <token>
       "..."
     }
   ],
+  "creators": [
+    {
+      "uuid": "user-uuid",
+      "displayName": "Alice",
+      "email": "alice@example.com",
+      "avatarUrl": "https://example.com/avatar.jpg",
+      "updatedAt": 900,
+      "..."
+    }
+  ],
   "ingredients": [
     {
       "uuid": "egg-uuid",
@@ -119,6 +129,8 @@ Authorization: Bearer <token>
   ],
   "labels": [...],
   "sourceClassifications": [...],
+  "bookmarkedRecipes": [...],
+  "mealPlans": [...],
   "serverTimestamp": 1200,
   "hasMore": false
 }
@@ -126,11 +138,14 @@ Authorization: Bearer <token>
 
 **Key Behavior**:
 - `recipes`: All recipes where `creatorId == userId OR privacy == PUBLIC` AND `server_updated_at > since`
+- `creators`: The `SyncUser` (display name, email, avatar) for every distinct `creatorId` appearing in `recipes`, via the same delta + gap union as reference data — lets the client render "by {creator}" without a separate user lookup
 - `ingredients`, `tags`, `labels`, `allergens`, `sourceClassifications`: Union of delta + gap entities
   - **Delta**: `server_updated_at > since`
   - **Gap**: Referenced by recipes in the current page but old (allows FK resolution)
-- `serverTimestamp`: Client's new cursor = `max(server_updated_at)` from response (or `since` if empty)
-- `hasMore`: True if query found more rows than `limit` (client should paginate)
+- `bookmarkedRecipes`, `mealPlans`: See [Bookmarks](#bookmarks-favourites) and Meal Plans below — same delta model, piggybacked on this endpoint
+- `limit`: Optional; defaults to **100** if omitted. Must be `> 0` (`400` otherwise)
+- `serverTimestamp`: Client's new cursor = the `server_updated_at` of the last recipe actually included in the page (or `since` if the page is empty) — see [Cursor stability guarantee](#cursor-stability-guarantee)
+- `hasMore`: True if there is more data beyond this page. This usually — but not always — means "the query found more than `limit` rows": in the tie-boundary case described in [Cursor stability guarantee](#cursor-stability-guarantee), a page can return *fewer* than `limit` rows while `hasMore` is still `true`, because the remaining tied rows were deliberately deferred to the next page rather than split
 
 **Why Reference Data?**
 Without the union pattern, consider this:
@@ -546,7 +561,14 @@ Two things the server guarantees to make that hold:
 
 ---
 
-## Client Pre-Population / Bundle Strategy
+## Client Pre-Population / Bundle Strategy (PROPOSED — not implemented)
+
+> **This entire section is a design proposal, not shipped behavior.** There is no
+> `getTopRecipes`, `getTopIngredients`, or `ClientBundle` anywhere in the codebase, no export
+> task, and no client-side bundle-import path. Nothing below this line should be treated as a
+> description of what the server or client currently do — it's kept here as a considered design
+> for a feature that hasn't been built, so it isn't lost. If/when this is implemented, move it
+> out of this box and cite the real files.
 
 For production deployments, mobile clients should ship with pre-populated recipe and ingredient data to reduce initial sync time and provide offline-ready content on first launch.
 
@@ -699,6 +721,9 @@ suspend fun initializeApp() {
 }
 ```
 
+> **End of proposal.** Everything from "Client Pre-Population / Bundle Strategy" above this line
+> is unimplemented design, not current behavior — see the note at the top of that section.
+
 ---
 
 ## Bookmarks (Favourites)
@@ -838,6 +863,48 @@ bookmark**. Meal-plan generation's `COLLECTION_ONLY` candidate query
 
 ---
 
+## Meal Plans
+
+Meal plans sync through the same push/pull endpoints as recipes and bookmarks, via a
+`mealPlans` array on both `SyncPushRequest`/`SyncPushResponse` and `SyncPullResponse`. See
+[`docs/meal-plan-roadmap.md`](meal-plan-roadmap.md) for the generation algorithm and domain
+model; this section covers only the sync mechanics.
+
+**Push** — include `mealPlans` in the `POST /sync/push` body:
+
+```json
+{
+  "recipes": [],
+  "mealPlans": [
+    {
+      "uuid": "<uuid>",
+      "name": "This Week",
+      "status": "DRAFT",
+      "preferencesJson": "{...}",
+      "createdAt": 1234567000,
+      "updatedAt": 1234567890,
+      "deletedAt": null,
+      "days": [
+        {"uuid": "<uuid>", "dayIndex": 0, "lunchRecipeId": "<uuid>", "dinnerRecipeId": "<uuid>"}
+      ]
+    }
+  ]
+}
+```
+
+- Same last-write-wins conflict check as recipes: `existing.serverUpdatedAtMillis > plan.updatedAt`.
+- On accept, the plan's `preferencesJson` is also persisted to `UserPreferencesRepository` — a
+  meal-plan push is the only way user preferences get written server-side.
+- **Push response** gains `mealPlans: MealPlanPushResults` — `accepted` (uuid + serverUpdatedAt),
+  `conflicts` (a flat list of conflicting plan UUIDs — no `serverVersion` payload, unlike recipe
+  conflicts), and `errors` (same `SyncError` shape as recipes; only `INVALID_UUID` applies).
+
+**Pull** — `GET /sync/pull` includes `mealPlans: List<SyncMealPlanDto>`, filtered by
+`server_updated_at > since` for the authenticated user, same delta model as recipes (no gap
+clause — meal plans aren't referenced by FK from anything else).
+
+---
+
 ## Recipe Images (Hero Image Blobs)
 
 Unlike bookmarks, image bytes do **not** ride `/sync/push` — that payload is JSON, batched fifty
@@ -954,18 +1021,41 @@ addressed here — see the ChefAI repo's own fix for #186.
 
 ## Validation & Errors
 
-The server validates each pushed recipe:
+The server validates each pushed recipe, in this order — the first failing check wins and the rest are skipped:
 
 | Check | Error Reason | Behavior |
 |-------|--------------|----------|
 | UUID format valid? | `INVALID_UUID` | Skip recipe, record error |
+| creatorId well-formed UUID? | `INVALID_CREATOR` | Skip recipe, record error |
 | creatorId matches auth user? | `CREATOR_MISMATCH` | Skip recipe, record error |
-| Privacy enum valid? | `INVALID_PRIVACY` | Skip recipe, record error |
+| Privacy is `PUBLIC` or `PRIVATE`? | `INVALID_PRIVACY` | Skip recipe, record error |
+| Ingredient UUIDs well-formed? | `INVALID_INGREDIENT` | Skip recipe, record error |
 | Ingredients exist in catalogue? | `INGREDIENT_NOT_FOUND` | Skip recipe, record error |
 | Tag UUIDs well-formed? | `INVALID_TAG` | Skip recipe, record error |
-| Tag UUIDs in database? | (silently ignored) | Accept; unknown tags are allowed |
+| Label UUIDs well-formed? | `INVALID_LABEL` | Skip recipe, record error |
+| Tag/label UUIDs exist in database? | (silently ignored) | Accept; unknown-but-well-formed tags/labels are allowed |
 
 Errors are **per-recipe** and don't fail the entire push request. Client receives all three lists: accepted, conflicts, errors.
+
+### HTTP Status Codes
+
+Beyond the per-recipe `errors` array (always `200`), the endpoints themselves can fail outright:
+
+| Endpoint | Condition | Status |
+|----------|-----------|--------|
+| Both | No/invalid auth token | `401` |
+| `GET /sync/pull` | Missing `since` | `400` |
+| `GET /sync/pull` | `limit <= 0` | `400` |
+| `GET /sync/pull` | Any DB or unexpected server error | `500` |
+| `POST /sync/push` | Malformed JSON body | `400` |
+| `POST /sync/push` | DB constraint violation (`ExposedSQLException`) | `409` |
+| `POST /sync/push` | Any other DB or unexpected server error | `500` |
+
+**Known asymmetry**: `POST /sync/push` maps a DB constraint violation to `409 Conflict`, but
+`GET /sync/pull` maps the identical exception type to `500` — pull has no per-recipe conflict
+concept to signal, so a `409` there would be misleading, but the inconsistency itself is
+undocumented elsewhere and worth knowing if you're writing client retry logic (see
+`SyncRoutes.kt`).
 
 ---
 
@@ -977,8 +1067,14 @@ Errors are **per-recipe** and don't fail the entire push request. Client receive
 - All recipes in a push are processed atomically as a batch (single transaction for sync)
 
 ### Clock
-- Server uses `Clock.System.now()` for `serverUpdatedAtMillis`
-- In Kotlin/Ktor: epoch milliseconds, monotonically increasing per machine
+- Any write to `server_updated_at` (recipes, bookmarks, meal plans) uses
+  `millisecondPrecisionNow()` (`domain/util/SyncClock.kt`), **not** raw `Clock.System.now()` —
+  see [Cursor stability guarantee](#cursor-stability-guarantee) for why the distinction matters.
+- The push response's top-level `serverTimestamp` field is `Clock.System.now().toEpochMilliseconds()`
+  — this is fine even though it skips `millisecondPrecisionNow()`, because `.toEpochMilliseconds()`
+  already truncates to millisecond precision at the point of conversion; the precision bug only
+  bites when an untruncated `Instant` is persisted into a `TIMESTAMPTZ` column that a later `>`
+  comparison reads back.
 - Client assumes server timestamps are ordered: push(T1) before push(T2) → serverTs(T1) < serverTs(T2)
 
 ### Reference Data Isolation
@@ -1012,6 +1108,7 @@ While the server ensures referential integrity, the client must:
 | **Pagination** | Cursor-based; each page's reference data is independent |
 | **Atomicity** | Batch; all recipes processed in single transaction |
 | **Errors** | Per-recipe; don't fail batch |
-| **Client Pre-Population** | Ship bundle (100 recipes, 500 ingredients) with initial cursor; first sync fetches deltas only |
+| **Client Pre-Population** | **Proposed, not implemented** — see the disposition note in that section |
 | **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |
+| **Meal Plans** | Piggybacked on push/pull; same LWW conflict model as recipes; push also writes `UserPreferencesRepository` |
 | **Recipe Detail** | `GET /api/v1/recipes/{recipeId}`, anonymous-capable, PUBLIC (+ owner's own PRIVATE); reuses `SyncRecipe`/reference-data shapes; not-found and not-accessible both 404 |

@@ -1,8 +1,10 @@
 # Recipe Search & the Browse Taxonomy
 
 `GET /api/v1/recipes/search` backs both the Search tab's typed search and its
-browse category cards. This document covers how a query is matched, and the
-editorial taxonomy that makes the browse cards return anything at all.
+browse category cards. This document covers how a query is matched, the
+editorial taxonomy that makes the browse cards return anything at all, and
+the implementation details (query sanitization, SQL, rate limiting, tests)
+underneath both.
 
 ---
 
@@ -116,6 +118,69 @@ honest way to inflate it now.
 `Cookies` tag to satisfy a category card would be the tail wagging the dog.
 
 ---
+
+## Query sanitization internals
+
+Raw user input never reaches `to_tsquery` directly — Postgres's tsquery syntax
+has its own operators (`&`, `|`, `!`, `(`, `)`, `:`, `'`), so a bound parameter
+prevents SQL injection but does nothing to stop `to_tsquery('english', "chef's
+salad")` from raising a syntax error. `RecipeSearchQueryBuilder.build()`
+(`domain/service/RecipeSearchQueryBuilder.kt`) handles this:
+
+1. Lowercase the input.
+2. Split on any run of non-letter/non-digit characters (`\p{L}`/`\p{N}` —
+   Unicode-aware, so accented and non-Latin scripts survive).
+3. Drop blank tokens, truncate each to 40 chars, keep at most the first 8
+   tokens.
+4. Join with `" & "`, suffixing every token with `:*` for prefix matching.
+
+`"chef's salad!!"` → `"chefs:* & salad:*"`. A query that sanitizes down to
+nothing (all punctuation, or blank) returns `null`, and the caller **must**
+treat that as "zero results" — calling `to_tsquery` with an empty string, or
+falling back to the raw input, both raise a Postgres syntax error.
+`RecipeSearchService.search()` short-circuits on `null` before touching the
+repository at all.
+
+## Why raw SQL, not the Exposed DSL
+
+`PostgresRecipeSearchRepository` is a deliberate exception to the usual house
+style (see `CLAUDE.md`): Exposed 0.56 has no way to express
+`@@`/`to_tsquery`/`ts_rank`, and `search_vector` isn't a declared Exposed
+column on `RecipeTable` for the DSL to build an expression against in the
+first place. There are two near-identical raw SQL templates —
+`SEARCH_SQL_AUTHENTICATED` and `SEARCH_SQL_PUBLIC_ONLY` — built from one
+shared template string with a `__VISIBILITY__` marker substituted per case,
+rather than always binding `userId` and letting `NULL` flow through the query:
+an anonymous caller has no creator to match, so the `r.creator_id = ?::uuid OR
+...` disjunct (and its placeholder) disappear entirely for that path instead
+of being bound to `NULL`. The `exec()` call needs `explicitStatementType =
+StatementType.SELECT` because both statements start with `WITH` (a CTE),
+which `exec()`'s keyword-based inference doesn't recognize — without it, the
+call is routed through `executeUpdate()` instead of `executeQuery()`, which
+PgJDBC rejects for a statement returning a `ResultSet` (confirmed by
+decompiling `exposed-core-0.56.0`).
+
+## Rate limiting
+
+30 requests / 10 seconds (`RECIPE_SEARCH_RATE_LIMIT_NAME`, registered in
+`Routing.kt`), keyed on `call.userId ?: call.request.origin.remoteAddress` —
+not a literal `"anonymous"` key, which would put every signed-out device on
+the planet in one shared bucket. That falls back to the proxy's address if
+one is ever put in front of the JVM (nothing does today — docker-compose
+publishes 8080 directly). `GET /api/v1/recipes/{recipeId}` (see
+[`docs/sync-protocol.md`](sync-protocol.md#recipe-detail-single-recipe-fetch))
+shares this anonymous-keying approach but has its own separate rate-limit
+bucket, so exhausting one doesn't block the other.
+
+## Testing
+
+| Layer | File | Covers |
+|---|---|---|
+| Query sanitization | `RecipeSearchQueryBuilderTest.kt` | Token/char clamping, tsquery construction |
+| Meal-type classification | `MealTypeClassifierTest.kt` | Tag/label derivation rules, the eggs/dessert nutritional-label guards |
+| Route integration | `RecipeSearchRoutesIntegrationTest.kt` | Anonymous vs. authenticated results, validation |
+| Real-Postgres integration | `PostgresRecipeSearchRepositoryIntegrationTest.kt` (`@Tag("db-integration")`) | The actual `tsvector`/`to_tsquery`/`ts_rank` SQL, both visibility branches, and — see "Keeping it working" above — that every browse-card term is answered by its curated tag or label |
+| Seed-catalog coverage | `SeedCatalogLoaderTest.kt` | Every browse-category tag actually exists in `seed.sql` |
 
 ## Keeping it working
 

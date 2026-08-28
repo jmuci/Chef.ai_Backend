@@ -17,7 +17,17 @@ rotation** following best practices for RESTful APIs. The architecture consists 
 ### 1. Presentation Layer
 
 - **Authentication Routes** (`AuthRoutes.kt`): Handles user registration, login, and token refresh
-- **Protected Routes** (`Routing.kt`): All `/recipes` endpoints require valid JWT
+- **Route auth posture** (`Routing.kt`) comes in three tiers, not a single on/off switch:
+  - **Fully public** (no `authenticate` block at all): `/auth/*`, `/health`, static content, and
+    `GET /api/v1/home/layout` — the route reads no principal, so a token has no effect either way
+    (see [`docs/home-layout-sdui.md`](home-layout-sdui.md); this was accidentally JWT-gated for a
+    period and is now fixed).
+  - **Optional auth** (`authenticate("auth-jwt", optional = true)`): `recipeSearchRoutes` and
+    `recipeDetailRoutes` — an anonymous caller is scoped to `PUBLIC` recipes, an authenticated one
+    additionally sees their own `PRIVATE` recipes. See [`docs/recipe-search.md`](recipe-search.md).
+  - **Required auth** (`authenticate("auth-jwt")`, strict): `syncRoutes`, `mealPlanRoutes`,
+    `userPreferencesRoutes`, `recipeImageRoutes`, and `/recipes/*` (CRUD) — missing/invalid token
+    is a hard `401`.
 - **JWT Principal Extraction**: Middleware extracts user context from JWT tokens
 
 ### 2. Domain Layer
@@ -243,12 +253,18 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
 │  ┌──────────────────────▼────────────────────────────────────┐ │
 │  │              ROUTING LAYER                                 │ │
 │  │                                                            │ │
-│  │  ┌────────────────┐      ┌────────────────────────────┐  │ │
-│  │  │ Public Routes  │      │   Protected Routes         │  │ │
-│  │  │                │      │   (require JWT)            │  │ │
-│  │  │ /auth/register │      │   /recipes/*               │  │ │
-│  │  │ /auth/login    │      │                            │  │ │
-│  │  └────────────────┘      └────────────────────────────┘  │ │
+│  │  ┌───────────────┐  ┌──────────────────┐  ┌──────────────┐│ │
+│  │  │ Public        │  │ Optional Auth     │  │ Required Auth││ │
+│  │  │ (no block)    │  │ (optional = true) │  │ (strict)     ││ │
+│  │  │               │  │                   │  │              ││ │
+│  │  │ /auth/*       │  │ /recipes/search   │  │ /sync/*      ││ │
+│  │  │ /health       │  │ /recipes/{id}     │  │ /meal-plans/*││ │
+│  │  │ /home/layout  │  │  (detail fetch)   │  │ /user/*      ││ │
+│  │  │               │  │                   │  │ /recipes/*/  ││ │
+│  │  │               │  │                   │  │  image       ││ │
+│  │  │               │  │                   │  │ /recipes/*   ││ │
+│  │  │               │  │                   │  │  (CRUD)      ││ │
+│  │  └───────────────┘  └──────────────────┘  └──────────────┘│ │
 │  └────────────────────────────────────────────────────────── │ │
 │                         │                                        │
 │  ┌──────────────────────▼────────────────────────────────────┐ │
@@ -284,7 +300,7 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
 │  ┌────────────────┐     ┌─────────────────────┐    ┌─────────────┐│
 │  │  users table   │     │ refresh_tokens      │    │ recipe      ││
 │  │                │     │                     │    │             ││
-│  │  • id (PK)     │     │  • id (PK)          │    │  • uuid     ││
+│  │  • uuid (PK)   │     │  • id (PK)          │    │  • uuid     ││
 │  │  • email       │◄────┤  • user_id (FK)     │    │  • user     ││
 │  │  • username    │ 1:M │  • token_hash*      │    │  • title    ││
 │  │  • password    │     │  • expires_at       │    │  • desc     ││
@@ -313,17 +329,26 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
 #### Access Tokens (JWT)
 
 - **Algorithm**: HMAC-SHA256 (HS256)
-- **Expiration**: 1 hour (configurable)
-- **Claims**: Minimal (userId, email, jti, iat, exp)
+- **Expiration**: 1 hour — hardcoded default parameter on `JwtService` (`expirationMs`), not read
+  from config or environment; changing it requires a code change, not a deploy-time setting
+- **Claims**: `userId`, `email`, `type` (`"access"`), `jti`, `iat`, `exp`
 - **Signature**: Verified on every request
-- **Secret**: Configurable via environment variable
+- **Secret, issuer, audience**: Read from `jwt.secret` / `jwt.issuer` / `jwt.audience` in
+  `application.yaml`, which currently hardcodes literal values rather than `${JWT_SECRET}`-style
+  placeholders — so the `export JWT_SECRET=...` instructions in the Quick Start guide have **no
+  effect** today. To actually override at deploy time, the yaml needs to reference the env var
+  first (see `docs/auth-quick-start.md`).
+- **`jwt.realm`** in `application.yaml` is dead configuration — `JwtConfig.kt`'s `challenge { }`
+  block receives `realm` as a Ktor-internal lambda parameter, not from app config; the yaml value
+  is never read anywhere.
 - **Uniqueness**: Each token has unique JWT ID (jti) and issued-at (iat)
 
 #### Refresh Tokens (Opaque)
 
 - **Format**: 64-byte cryptographically secure random bytes (Base64 encoded)
 - **Storage**: SHA-256 hashed in database (never stored in plaintext)
-- **Expiration**: 30 days (configurable)
+- **Expiration**: 30 days — same as access tokens, a hardcoded `JwtService` default parameter, not
+  config/env-driven
 - **Rotation**: Old token invalidated immediately when new token issued
 - **Reuse Detection**: Attempting to reuse a revoked token triggers full account logout
 - **Database Indexes**: Unique index on token_hash for fast O(1) lookups
@@ -354,10 +379,16 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
 - **Email Validation**: RFC 5321 compliant (max 254 chars), normalized to lowercase
 - **Username Validation**: 3-100 chars, alphanumeric + `.`, `-`, `_` only
 - **Password Validation**: 8-128 chars, requires letter + digit
-- **XSS Prevention**: Dangerous patterns rejected (script tags, SQL keywords)
+- **XSS Prevention**: `<script`, `javascript:`, `on*=` event-handler patterns, and null bytes are
+  rejected (`InputValidator.DANGEROUS_PATTERNS`). There is **no SQL-keyword filtering** — SQL
+  injection protection comes entirely from Exposed ORM's parameterized queries, not input
+  validation.
 - **Control Characters**: Rejected in all inputs
 - **Reserved Usernames**: admin, root, system, etc. blocked
-- **Timing Attack Prevention**: Constant-time responses for failed login/register
+- **Timing Attack Prevention**: Constant-time dummy-hash delay on failed **login** only
+  (`AuthService.simulatePasswordCheck()`, invoked on both bad-credentials and user-not-found
+  paths so the two are indistinguishable in timing). Registration has no equivalent — a
+  duplicate-email check on `/auth/register` returns as soon as the lookup completes.
 
 ### Rate Limiting (Recommended)
 
@@ -403,15 +434,21 @@ The application now includes a complete refresh token implementation with:
 - **Database Storage**: Refresh tokens tracked with expiration and revocation status
 
 ```kotlin
-// Endpoint implemented in AuthRoutes.kt
+// Endpoint implemented in AuthRoutes.kt — refreshToken() throws typed exceptions
+// rather than returning null; the route maps each to its own status code.
 post("/auth/refresh") {
-    val refreshRequest = call.receive<RefreshTokenRequest>()
-    val refreshResponse = authService.refreshToken(refreshRequest)
-    if (refreshResponse != null) {
-        call.respond(HttpStatusCode.OK, refreshResponse)
-    } else {
-        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid or expired refresh token"))
+    try {
+        val request = call.receive<RefreshTokenRequest>()
+        val response = authService.refreshToken(request)
+        call.respond(HttpStatusCode.OK, response)
+    } catch (ex: InvalidRefreshTokenException) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse(ex.message ?: "Invalid or expired refresh token"))
+    } catch (ex: TokenReuseDetectedException) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse(ex.message ?: "Security breach detected"))
+    } catch (ex: UserNotFoundException) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid refresh token"))
     }
+    // ...AuthInternalException -> 500, generic Exception -> 400; see AuthRoutes.kt
 }
 ```
 
