@@ -13,28 +13,34 @@ This guide will help you get started with the new authentication system in ChefA
 
 ### 1. Configure JWT Settings
 
-The application comes with default JWT settings in `src/main/resources/application.yaml`:
+JWT settings live in `src/main/resources/application.yaml`:
 
 ```yaml
 jwt:
-  secret: "your-secret-key-change-this-in-production"
+  secret: "$JWT_SECRET:"   # resolved from the environment; empty default
   issuer: "http://0.0.0.0:8080"
   audience: "chefai-backend"
   realm: "ChefAI"  # dead config — not read anywhere; see auth-architecture.md
 ```
 
-**⚠️ Important**: Change the `secret` before deploying to production!
+**`JWT_SECRET` is required.** The application refuses to start without it, and also rejects a
+secret shorter than 32 characters or equal to a placeholder previously published in this
+repository. Generate one and export it before running:
 
-**These values are hardcoded literals in the checked-in `application.yaml`, not environment
-placeholders** — setting `JWT_SECRET`/`JWT_ISSUER` in your shell has **no effect** on a running
-server today. To make them deploy-time-configurable, the yaml itself needs to change to
-reference the env var (e.g. `secret: "${JWT_SECRET}"`), per
-[Ktor's config docs](https://ktor.io/docs/rsa-keys-generation.html#defining-the-private-key),
-before `export JWT_SECRET=...` will do anything.
+```bash
+export JWT_SECRET="$(openssl rand -base64 48)"
+```
+
+The one exception is Ktor's development mode, where a missing secret falls back to an obviously
+worthless constant and logs a warning — that path exists so tests and local experiments work, and
+is never active in a normal `./gradlew run` or container start.
+
+`issuer` and `audience` are not secret and keep their literal defaults.
 
 ### 2. Start the Application
 
 ```bash
+export JWT_SECRET="$(openssl rand -base64 48)"   # once per shell
 ./gradlew run
 ```
 

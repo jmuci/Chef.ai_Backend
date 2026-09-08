@@ -51,28 +51,51 @@ class RecipesServiceTest {
     fun `getAccessibleRecipes returns own plus public distinct`() = runTest {
         val recipes = recipesService.getAccessibleRecipes(testUserId)
         assertEquals(2, recipes.size)
-        assertTrue(recipes.any { it.uuid == "1" })
-        assertTrue(recipes.any { it.uuid == "2" })
+        assertTrue(recipes.any { it.uuid == FakeRecipesRepository.PUBLIC_RECIPE_ID.toString() })
+        assertTrue(recipes.any { it.uuid == FakeRecipesRepository.OWNED_PRIVATE_RECIPE_ID.toString() })
     }
 
     @Test
     fun `getRecipeById returns owned private recipe`() = runTest {
-        val recipe = recipesService.getRecipeById("2", testUserId)
+        val recipe = recipesService.getRecipeById(FakeRecipesRepository.OWNED_PRIVATE_RECIPE_ID.toString(), testUserId)
         assertNotNull(recipe)
-        assertEquals("2", recipe.uuid)
+        assertEquals(FakeRecipesRepository.OWNED_PRIVATE_RECIPE_ID.toString(), recipe.uuid)
     }
 
     @Test
     fun `getRecipeById returns public recipe even when not owner`() = runTest {
         val otherUserId = UUID.randomUUID()
-        val recipe = recipesService.getRecipeById("1", otherUserId)
+        val recipe = recipesService.getRecipeById(FakeRecipesRepository.PUBLIC_RECIPE_ID.toString(), otherUserId)
         assertNotNull(recipe)
         assertEquals(Privacy.PUBLIC, recipe.privacy)
     }
 
     @Test
     fun `getRecipeById returns null for private recipe of another user`() = runTest {
-        val recipe = recipesService.getRecipeById("3", testUserId)
+        val recipe = recipesService.getRecipeById(FakeRecipesRepository.FOREIGN_PRIVATE_RECIPE_ID.toString(), testUserId)
+        assertNull(recipe)
+    }
+
+    // Regression: security audit F4. /recipes/byName used to hit the repository directly, which
+    // applies no visibility predicate, so any authenticated caller could read any private recipe
+    // by guessing its title.
+    @Test
+    fun `getRecipeByTitle returns owned private recipe`() = runTest {
+        val recipe = recipesService.getRecipeByTitle("Recipe 2", testUserId)
+        assertNotNull(recipe)
+        assertEquals(FakeRecipesRepository.OWNED_PRIVATE_RECIPE_ID.toString(), recipe.uuid)
+    }
+
+    @Test
+    fun `getRecipeByTitle returns public recipe even when not owner`() = runTest {
+        val recipe = recipesService.getRecipeByTitle("Recipe 1", UUID.randomUUID())
+        assertNotNull(recipe)
+        assertEquals(Privacy.PUBLIC, recipe.privacy)
+    }
+
+    @Test
+    fun `getRecipeByTitle returns null for private recipe of another user`() = runTest {
+        val recipe = recipesService.getRecipeByTitle("Recipe 3", testUserId)
         assertNull(recipe)
     }
 
@@ -114,13 +137,13 @@ class RecipesServiceTest {
 
     @Test
     fun `deleteRecipe returns true when user owns recipe`() = runTest {
-        val deleted = recipesService.deleteRecipe("1", testUserId)
+        val deleted = recipesService.deleteRecipe(FakeRecipesRepository.PUBLIC_RECIPE_ID.toString(), testUserId)
         assertTrue(deleted)
     }
 
     @Test
     fun `deleteRecipe returns false when user does not own recipe`() = runTest {
-        val deleted = recipesService.deleteRecipe("3", testUserId)
+        val deleted = recipesService.deleteRecipe(FakeRecipesRepository.FOREIGN_PRIVATE_RECIPE_ID.toString(), testUserId)
         assertFalse(deleted)
     }
 }

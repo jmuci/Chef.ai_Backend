@@ -217,6 +217,39 @@ class InputValidatorTest {
         }
     }
 
+    // Regression: security audit F10. The cap was 128 *characters* and commented "BCrypt max",
+    // but BCrypt hashes at most 72 bytes and the library throws rather than truncating - so a
+    // 73-128 character password passed validation and then blew up inside hashPassword, reaching
+    // the user as "Invalid request format".
+    @Test
+    fun `validatePassword rejects passwords bcrypt cannot hash`() {
+        val seventyThreeChars = "Passw0rd" + "a".repeat(65)
+        assertEquals(73, seventyThreeChars.length)
+        assertFalse(
+            InputValidator.validatePassword(seventyThreeChars).isValid,
+            "73 bytes is past bcrypt's 72-byte limit and must not reach hashPassword"
+        )
+    }
+
+    @Test
+    fun `validatePassword accepts a password exactly at the bcrypt limit`() {
+        val seventyTwoChars = "Passw0rd" + "a".repeat(64)
+        assertEquals(72, seventyTwoChars.length)
+        assertTrue(InputValidator.validatePassword(seventyTwoChars).isValid)
+    }
+
+    @Test
+    fun `validatePassword counts bytes not characters`() {
+        // 40 multi-byte characters: comfortably under any character cap, over the byte one.
+        val multiByte = "pa55" + "\u00e9".repeat(40)
+        assertTrue(multiByte.length <= 72, "under a character-based cap")
+        assertTrue(
+            multiByte.toByteArray(Charsets.UTF_8).size > 72,
+            "but over the byte-based one bcrypt actually enforces"
+        )
+        assertFalse(InputValidator.validatePassword(multiByte).isValid)
+    }
+
     @Test
     fun `validatePassword should reject passwords that are too long`() {
         val longPassword = "Pass1" + "a".repeat(130)

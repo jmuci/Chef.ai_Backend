@@ -142,9 +142,15 @@ class FakeSyncRepository : SyncRepository {
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
         // Mirrors PostgresSyncRepository: imageBlobId is set exclusively by the image-upload
         // endpoints, never by a push payload — preserve whatever the server already had.
-        val existingImageBlobId = recipes[UUID.fromString(recipe.uuid)]?.recipe?.imageBlobId
+        val existing = recipes[UUID.fromString(recipe.uuid)]?.recipe
         recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
-            recipe = recipe.copy(imageBlobId = existingImageBlobId),
+            recipe = recipe.copy(
+                imageBlobId = existing?.imageBlobId,
+                // Also mirrors PostgresSyncRepository: creator_id is written at insert only, so an
+                // update can never transfer ownership. Keeping the fake honest here is what lets
+                // the takeover regression test below actually exercise the production rule.
+                creatorId = existing?.creatorId ?: recipe.creatorId
+            ),
             serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
         )
     }

@@ -26,8 +26,7 @@ fun Route.syncRoutes(syncService: SyncService) {
                 return@post
             }
 
-            // TODO(security): Replace detailed client-facing error strings with stable error codes + traceId.
-            // Keep full exception details only in server logs to avoid leaking internals.
+            val traceId = UUID.randomUUID().toString()
             try {
                 val request = call.receive<SyncPushRequest>()
                 val response = syncService.pushRecipes(userId, request)
@@ -39,46 +38,46 @@ fun Route.syncRoutes(syncService: SyncService) {
                 // a malformed body; they're kept for any exception thrown directly by future code
                 // in this block. Without this clause, every malformed/incomplete client payload
                 // fell through to the generic catch (ex: Exception) below and answered 500.
-                call.application.environment.log.warn("Sync push request conversion failed: ${ex.message}")
+                call.application.environment.log.warn("Sync push request conversion failed [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse(buildDetailedError("Malformed sync push payload", ex))
+                    ErrorResponse(errorWithTrace("Malformed sync push payload", traceId))
                 )
             } catch (ex: JsonConvertException) {
-                call.application.environment.log.warn("Sync push JSON conversion failed: ${ex.message}")
+                call.application.environment.log.warn("Sync push JSON conversion failed [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse(buildDetailedError("Malformed sync push payload", ex))
+                    ErrorResponse(errorWithTrace("Malformed sync push payload", traceId))
                 )
             } catch (ex: SerializationException) {
-                call.application.environment.log.warn("Sync push serialization failed: ${ex.message}")
+                call.application.environment.log.warn("Sync push serialization failed [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse(buildDetailedError("Malformed sync push payload", ex))
+                    ErrorResponse(errorWithTrace("Malformed sync push payload", traceId))
                 )
             } catch (ex: IllegalArgumentException) {
-                call.application.environment.log.warn("Sync push validation failed: ${ex.message}")
+                call.application.environment.log.warn("Sync push validation failed [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    ErrorResponse(buildDetailedError("Invalid sync push payload", ex))
+                    ErrorResponse(errorWithTrace("Invalid sync push payload", traceId))
                 )
             } catch (ex: ExposedSQLException) {
-                call.application.environment.log.error("Sync push database constraint failure", ex)
+                call.application.environment.log.error("Sync push database constraint failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.Conflict,
-                    ErrorResponse(buildDetailedError("Sync push database conflict", ex))
+                    ErrorResponse(errorWithTrace("Sync push database conflict", traceId))
                 )
             } catch (ex: SQLException) {
-                call.application.environment.log.error("Sync push SQL failure", ex)
+                call.application.environment.log.error("Sync push SQL failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse(buildDetailedError("Sync push database error", ex))
+                    ErrorResponse(errorWithTrace("Sync push database error", traceId))
                 )
             } catch (ex: Exception) {
-                call.application.environment.log.error("Sync push unexpected failure", ex)
+                call.application.environment.log.error("Sync push unexpected failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse(buildDetailedError("Sync push failed unexpectedly", ex))
+                    ErrorResponse(errorWithTrace("Sync push failed unexpectedly", traceId))
                 )
             }
         }
@@ -101,26 +100,27 @@ fun Route.syncRoutes(syncService: SyncService) {
                 return@get
             }
 
+            val traceId = UUID.randomUUID().toString()
             try {
                 val response = syncService.pullRecipes(userId, since, limit)
                 call.respond(HttpStatusCode.OK, response)
             } catch (ex: ExposedSQLException) {
-                call.application.environment.log.error("Sync pull database failure", ex)
+                call.application.environment.log.error("Sync pull database failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse(buildDetailedError("Sync pull database error", ex))
+                    ErrorResponse(errorWithTrace("Sync pull database error", traceId))
                 )
             } catch (ex: SQLException) {
-                call.application.environment.log.error("Sync pull SQL failure", ex)
+                call.application.environment.log.error("Sync pull SQL failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse(buildDetailedError("Sync pull database error", ex))
+                    ErrorResponse(errorWithTrace("Sync pull database error", traceId))
                 )
             } catch (ex: Exception) {
-                call.application.environment.log.error("Sync pull unexpected failure", ex)
+                call.application.environment.log.error("Sync pull unexpected failure [traceId=$traceId]", ex)
                 call.respond(
                     HttpStatusCode.InternalServerError,
-                    ErrorResponse(buildDetailedError("Sync pull failed unexpectedly", ex))
+                    ErrorResponse(errorWithTrace("Sync pull failed unexpectedly", traceId))
                 )
             }
         }
@@ -134,8 +134,12 @@ private fun parseUserId(rawUserId: String?): UUID? =
         null
     }
 
-private fun buildDetailedError(prefix: String, ex: Throwable): String {
-    val type = ex::class.simpleName ?: ex::class.java.name
-    val detail = ex.message?.trim()?.take(300) ?: "no details"
-    return "$prefix [$type]: $detail"
-}
+/**
+ * Client-facing error text: a stable message plus a correlation id, never the exception itself.
+ *
+ * This used to append the exception type and 300 characters of its message. For the
+ * ExposedSQLException/SQLException branches below that handed the caller constraint names, column
+ * names and SQL fragments - a free schema map, and what the TODO above was about. Callers get the
+ * traceId; the detail goes to the log under the same id.
+ */
+private fun errorWithTrace(message: String, traceId: String): String = "$message (traceId=$traceId)"

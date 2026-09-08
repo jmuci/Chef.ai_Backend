@@ -93,7 +93,7 @@ class ApplicationTest {
         }
         val token = client.getAuthToken()
 
-        val response = client.get("/recipes/byId?uuid=1") {
+        val response = client.get("/recipes/byId?uuid=${FakeRecipesRepository.PUBLIC_RECIPE_ID}") {
             bearerAuth(token)
             header(HttpHeaders.ContentType, ContentType.Application.Json)
         }
@@ -118,14 +118,14 @@ class ApplicationTest {
         }
         val token = client.getAuthToken()
 
-        val response = client.delete("/recipes?uuid=1") {
+        val response = client.delete("/recipes?uuid=${FakeRecipesRepository.PUBLIC_RECIPE_ID}") {
             bearerAuth(token)
             header(HttpHeaders.ContentType, ContentType.Application.Json)
         }
 
         assertEquals(HttpStatusCode.NoContent, response.status)
 
-        val response2 = client.get("/recipes/byId?uuid=1") {
+        val response2 = client.get("/recipes/byId?uuid=${FakeRecipesRepository.PUBLIC_RECIPE_ID}") {
             bearerAuth(token)
             header(HttpHeaders.ContentType, ContentType.Application.Json)
         }

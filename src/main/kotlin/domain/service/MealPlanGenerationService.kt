@@ -300,12 +300,17 @@ class MealPlanGenerationService(
             ?: VarietyPreference.HIGH
 
         return MealPlanPreferences(
-            planLengthDays = planLengthDays.coerceAtLeast(1),
+            // Both bounds matter. The floor keeps a zero/negative value from producing an empty
+            // plan; the ceiling is what stops `POST /api/v1/meal-plans/generate` — which is
+            // anonymous-capable — from being handed planLengthDays=2_000_000_000 and spinning in
+            // assignRecipesToDays, which ranks the whole candidate set once per day and appends to
+            // a list that has nothing else bounding it.
+            planLengthDays = planLengthDays.coerceIn(1, MAX_PLAN_LENGTH_DAYS),
             mealType = mealType,
             dietaryRestrictions = dietaryRestrictions,
             recipeSource = recipeSource,
             maxPrepTimeMinutes = maxPrepTimeMinutes?.takeIf { it > 0 },
-            servingsPerMeal = servingsPerMeal,
+            servingsPerMeal = servingsPerMeal.coerceIn(1, MAX_SERVINGS_PER_MEAL),
             batchCooking = batchCooking,
             leftoverFriendly = leftoverFriendly,
             varietyPreference = varietyPreference
@@ -318,6 +323,12 @@ class MealPlanGenerationService(
 
         /** How many of the user's most recent READY plans count toward [SyncRepository.findRecentlyUsedRecipeIds]. */
         internal const val RECENT_PLAN_HISTORY_LIMIT = 3
+
+        /** Longest plan a caller may request. Comfortably past any real meal plan. */
+        const val MAX_PLAN_LENGTH_DAYS = 31
+
+        /** Upper bound on `servingsPerMeal`; it feeds ranking arithmetic, so it can't be unbounded. */
+        const val MAX_SERVINGS_PER_MEAL = 20
 
         private val lenientJson = Json { ignoreUnknownKeys = true }
     }

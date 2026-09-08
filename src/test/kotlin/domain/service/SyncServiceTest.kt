@@ -506,6 +506,123 @@ class SyncServiceTest {
         }
     }
 
+    // ── Regression: cross-tenant push (security audit F1/F3) ────────────────────
+    //
+    // A push names its own creatorId, so the pre-existing CREATOR_MISMATCH check only proves the
+    // payload is self-consistent. These cover the second check — that the row already at that
+    // uuid belongs to the caller.
+
+    @Test
+    fun pushRejectsRecipeOwnedByAnotherUserEvenWithFutureUpdatedAt() = withService { service, repo ->
+        val victimId = UUID.randomUUID()
+        val attackerId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        repo.seedRecipe(
+            sampleRecipe(recipeId, victimId, updatedAt = 1000L, ingredientId = ingredientId)
+                .copy(title = "Victim recipe"),
+            serverUpdatedAtMillis = 2000L
+        )
+
+        // Long.MAX_VALUE defeats the staleness check, which is not a permission check.
+        val takeover = sampleRecipe(recipeId, attackerId, updatedAt = Long.MAX_VALUE, ingredientId = ingredientId)
+            .copy(title = "PWNED", privacy = "PUBLIC")
+
+        val response = service.pushRecipes(attackerId, SyncPushRequest(listOf(takeover)))
+
+        assertEquals(0, response.accepted.size, "takeover must not be accepted")
+        assertEquals(0, response.conflicts.size)
+        assertEquals(1, response.errors.size)
+        assertEquals(SyncErrors.CREATOR_MISMATCH, response.errors.first().reason)
+
+        val stored = repo.getRecipe(recipeId)
+        assertEquals("Victim recipe", stored?.recipe?.title, "victim's recipe must be untouched")
+        assertEquals(victimId.toString(), stored?.recipe?.creatorId, "ownership must not transfer")
+    }
+
+    @Test
+    fun pushDoesNotLeakAnotherUsersRecipeInConflictPayload() = withService { service, repo ->
+        val victimId = UUID.randomUUID()
+        val attackerId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        repo.seedRecipe(
+            sampleRecipe(recipeId, victimId, updatedAt = 9000L, ingredientId = ingredientId)
+                .copy(title = "Victim secret recipe"),
+            serverUpdatedAtMillis = 9000L
+        )
+
+        // updatedAt = 0 forces the server-is-newer branch, which used to echo serverVersion back.
+        val probe = sampleRecipe(recipeId, attackerId, updatedAt = 0L, ingredientId = ingredientId)
+
+        val response = service.pushRecipes(attackerId, SyncPushRequest(listOf(probe)))
+
+        assertTrue(response.conflicts.isEmpty(), "must not answer with a conflict carrying the row")
+        assertEquals(1, response.errors.size)
+        assertEquals(SyncErrors.CREATOR_MISMATCH, response.errors.first().reason)
+        assertFalse(
+            response.toString().contains("Victim secret recipe"),
+            "no part of the response may carry the victim's recipe"
+        )
+    }
+
+    @Test
+    fun pushStillAcceptsAnUpdateToTheCallersOwnRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        repo.seedRecipe(
+            sampleRecipe(recipeId, userId, updatedAt = 1000L, ingredientId = ingredientId),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val update = sampleRecipe(recipeId, userId, updatedAt = 5000L, ingredientId = ingredientId)
+            .copy(title = "Renamed by owner")
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(update)))
+
+        assertEquals(1, response.accepted.size)
+        assertEquals(0, response.errors.size)
+        assertEquals("Renamed by owner", repo.getRecipe(recipeId)?.recipe?.title)
+    }
+
+    // ── Regression: pull limit (security audit F5) ──────────────────────────────
+
+    @Test
+    fun pullClampsLimitInsteadOfOverflowing() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        repeat(3) { i ->
+            repo.seedRecipe(
+                sampleRecipe(UUID.randomUUID(), userId, updatedAt = 1000L, ingredientId = ingredientId),
+                serverUpdatedAtMillis = (i + 1) * 1000L
+            )
+        }
+
+        // limit + 1 used to overflow to Int.MIN_VALUE and reach Exposed's .limit() as a negative.
+        val response = service.pullRecipes(userId, sinceMillis = 0L, limit = Int.MAX_VALUE)
+
+        assertEquals(3, response.recipes.size)
+        assertFalse(response.hasMore)
+    }
+
+    @Test
+    fun pullClampReportsHasMoreRatherThanReturningEverything() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        repeat(SyncService.MAX_PULL_LIMIT + 10) { i ->
+            repo.seedRecipe(
+                sampleRecipe(UUID.randomUUID(), userId, updatedAt = 1000L, ingredientId = ingredientId),
+                serverUpdatedAtMillis = (i + 1).toLong()
+            )
+        }
+
+        val response = service.pullRecipes(userId, sinceMillis = 0L, limit = Int.MAX_VALUE)
+
+        assertEquals(SyncService.MAX_PULL_LIMIT, response.recipes.size)
+        assertTrue(response.hasMore, "clamped page must still advertise more")
+    }
+
     private fun sampleRecipe(
         uuid: UUID,
         creatorId: UUID,

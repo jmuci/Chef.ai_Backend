@@ -333,15 +333,35 @@ suspend fun deleteRecipe(recipeId: String, userId: String): Boolean {
   from config or environment; changing it requires a code change, not a deploy-time setting
 - **Claims**: `userId`, `email`, `type` (`"access"`), `jti`, `iat`, `exp`
 - **Signature**: Verified on every request
-- **Secret, issuer, audience**: Read from `jwt.secret` / `jwt.issuer` / `jwt.audience` in
-  `application.yaml`, which currently hardcodes literal values rather than `${JWT_SECRET}`-style
-  placeholders — so the `export JWT_SECRET=...` instructions in the Quick Start guide have **no
-  effect** today. To actually override at deploy time, the yaml needs to reference the env var
-  first (see `docs/auth-quick-start.md`).
+- **Secret**: Read from `jwt.secret` in `application.yaml`, which resolves `$JWT_SECRET` from the
+  environment. **The secret is mandatory.** `resolveJwtSecret()` in `Application.kt` refuses to
+  start the application when it is missing, shorter than 32 characters, or one of the placeholder
+  values this repository has published (`"secret"`, `"your-secret-key-change-this-in-production"`).
+  Only in Ktor's development mode does it fall back — to a deliberately worthless constant, with a
+  warning. Generate one with `openssl rand -base64 48`.
+
+  This used to be `config["jwt.secret"] ?: "secret"` against a yaml that hardcoded the placeholder,
+  so every deployment signed tokens with a string published in this repository and anyone holding
+  it could mint a token for any `userId`. Rotating the secret invalidates every access token
+  already issued; refresh tokens are opaque database rows and survive rotation, so clients recover
+  on their next `/auth/refresh`.
+- **Issuer, audience**: Read from `jwt.issuer` / `jwt.audience` in `application.yaml`. Neither is
+  secret, so both keep their literal defaults.
 - **`jwt.realm`** in `application.yaml` is dead configuration — `JwtConfig.kt`'s `challenge { }`
   block receives `realm` as a Ktor-internal lambda parameter, not from app config; the yaml value
   is never read anywhere.
 - **Uniqueness**: Each token has unique JWT ID (jti) and issued-at (iat)
+
+#### Rate Limiting
+
+All three `/auth` endpoints share one bucket, `AUTH_RATE_LIMIT_NAME`: **20 requests per minute,
+keyed by peer address**. They are unauthenticated by definition, so there is no principal to key
+on. `/auth/refresh` sits in the same bucket, which is why the limit is not tighter — access tokens
+last an hour and several devices behind one NAT address legitimately refresh through the same key.
+
+As with the search and recipe-detail limiters, the key is the socket peer, which would be a
+reverse proxy's address if one is ever put in front of the JVM; seeing through it needs
+`io.ktor:ktor-server-forwarded-header`, which is not currently a dependency.
 
 #### Refresh Tokens (Opaque)
 

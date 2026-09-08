@@ -33,6 +33,34 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SyncRoutesIntegrationTest {
+    // Regression: security audit F5. /sync/pull validated only `limit <= 0`, so an unbounded
+    // value reached fetchStablePage, where `limit + 1` overflowed to Int.MIN_VALUE and was passed
+    // to Exposed's .limit() as a negative - answering 500.
+    @Test
+    fun pullClampsAnAbsurdLimitInsteadOfFailing() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(
+                configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/sync/pull?since=0&limit=${Int.MAX_VALUE}") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+    }
+
     @Test
     fun pushRouteAcceptsValidRecipeAggregate() = testApplication {
         val syncRepository = FakeSyncRepository()
