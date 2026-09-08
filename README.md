@@ -268,24 +268,91 @@ Expected outcomes:
 
 ## Building & Running
 
-To build or run the project, use one of the following tasks:
+### Prerequisite: `JWT_SECRET`
 
-| Task                                        | Description                                                                |
-|---------------------------------------------|----------------------------------------------------------------------------|
-| `./gradlew test`                            | Run the tests                                                              |
-| `./gradlew build`                           | Build everything                                                           |
-| `buildFatJar`                               | Build an executable JAR of the server with all dependencies included       |
-| `buildImage`                                | Build the docker image to use with the fat JAR                             |
-| `publishImageToLocalRegistry`               | Publish the docker image locally                                           |
-| `run`                                       | Run the server                                                             |
-| `runDocker`                                 | Run using the local docker image                                           |
-| ` docker compose -f docker-compose.yaml up` | Run with docker compose which will also start and connect to a Postgres Db |
+**The server will not start without it.** It signs access tokens, there is no safe default, and
+the app refuses to boot on a missing, too-short (<32 char), or previously-published value rather
+than falling back to a guessable one — see
+[Auth Architecture § Access Tokens](docs/auth-architecture.md).
 
-If the server starts successfully, you'll see the following output:
+```bash
+export JWT_SECRET="$(openssl rand -base64 48)"
+```
+
+Keep the same value across restarts: changing it invalidates every access token already issued.
+(Refresh tokens are opaque database rows and survive, so clients recover on their next
+`/auth/refresh`.) To avoid re-exporting per shell, put it in a `.env` file next to
+`docker-compose.yaml` — Docker Compose reads that automatically. **Add `.env` to `.gitignore`
+first; it is not currently ignored.**
+
+Without it you get:
+
+```
+Exception in thread "main" java.lang.IllegalStateException: Refusing to start: no jwt.secret is
+configured. Set the JWT_SECRET environment variable to a random value of at least 32 characters
+(e.g. `openssl rand -base64 48`). See docs/auth-architecture.md.
+```
+
+### Option A — everything in Docker
+
+The whole stack, app included. Nothing else needs to be running.
+
+```bash
+export JWT_SECRET="$(openssl rand -base64 48)"
+docker compose -f docker-compose.yaml up --build
+```
+
+Server on [http://localhost:8080](http://localhost:8080); Postgres published on 5432. Drop
+`--build` to reuse the existing image, and add `-d` to detach. Note `docker compose build` only
+builds the image — it does **not** start anything; you still need `up`.
+
+### Option B — Postgres in Docker, app from Gradle or the IDE
+
+The usual loop when you're changing server code and want a debugger attached.
+
+```bash
+docker compose up db -d                            # Postgres only
+export JWT_SECRET="$(openssl rand -base64 48)"
+./gradlew run
+```
+
+Stop the database with `docker compose down db`.
+
+Running from the IDE instead of Gradle? `JWT_SECRET` has to be in **the IDE's** run configuration
+environment — an `export` in your terminal won't reach it, and the run will fail with the error
+above.
+
+To run alongside a container already holding 8080, pass a different port:
+
+```bash
+./gradlew run --args="-port=8082"
+```
+
+### Gradle tasks
+
+| Task                            | Description                                                          |
+|---------------------------------|----------------------------------------------------------------------|
+| `./gradlew run`                 | Run the server (needs `JWT_SECRET` + a reachable DB)                 |
+| `./gradlew test`                | Run the unit and route tests                                         |
+| `./gradlew dbIntegrationTest`   | Run the database-backed tests (see below)                            |
+| `./gradlew build`               | Build everything                                                     |
+| `./gradlew buildFatJar`         | Build an executable JAR with all dependencies included               |
+| `./gradlew buildImage`          | Build the docker image to use with the fat JAR                       |
+| `./gradlew publishImageToLocalRegistry` | Publish the docker image locally                             |
+| `./gradlew runDocker`           | Run using the local docker image                                     |
+
+Tests don't need `JWT_SECRET`: Ktor's test harness runs in development mode, where the app falls
+back to an obviously worthless signing key rather than refusing to start.
+
+### Confirming it started
 
 ```
 2024-12-04 14:32:45.584 [main] INFO  Application - Application started in 0.303 seconds.
 2024-12-04 14:32:45.682 [main] INFO  Application - Responding at http://0.0.0.0:8080
+```
+
+```bash
+curl http://localhost:8080/health   # -> OK
 ```
 
 Two background jobs also log their state at startup — both disabled by default outside
@@ -300,28 +367,10 @@ Image blob reclamation job started with config=ImageBlobReclamationConfig(...)
 `false`). See [Recipe Image Architecture § Application Startup Changes](docs/recipe-image-architecture.md#application-startup-changes)
 for what's new there and the `IMAGE_BLOB_STORAGE_ROOT` env var.
 
-**NOTE**: The service requires the DB to be running (see [next section](#docker-compose))
-
-### Docker Compose
-To start only the DB (as you might want to start the service on the IDE for debugging):
-```bash
-docker compose up db
-```
-Add -d for detached mode. 
-
-```bash
-docker compose down db
-```
-To start both the DB and the service, run: 
-```bash
-export JWT_SECRET="$(openssl rand -base64 48)"
-docker compose -f docker-compose.yaml up --build
-```
-
-`JWT_SECRET` is **required** — compose refuses to start without it, and the application itself
-refuses to boot on a missing, too-short, or previously-published secret. Use the same value across
-restarts to keep already-issued access tokens valid; see
-[Auth Architecture § Access Tokens](docs/auth-architecture.md).
+A normal run refuses to start outright when `JWT_SECRET` is missing. The one case that starts
+anyway is Ktor development mode (`-Dio.ktor.development=true`), which logs `falling back to the
+insecure development signing key` and issues tokens anyone can forge — fine for local
+experimentation, never for an instance anyone else can reach.
 
 ### Database Setup
 
