@@ -58,7 +58,11 @@ class PostgresSyncRepository : SyncRepository {
                 it[prep_time_minutes] = recipe.prepTimeMinutes
                 it[cook_time_minutes] = recipe.cookTimeMinutes
                 it[servings] = recipe.servings
-                it[creator_id] = EntityID(UUID.fromString(recipe.creatorId), UserTable)
+                // creator_id is deliberately NOT written on the update path. Ownership is set once
+                // at insert and is not a client-editable field: writing it here let a push payload
+                // transfer someone else's recipe to the caller. SyncService rejects a push against
+                // a row the caller doesn't own before reaching this point; this keeps the column
+                // immutable even if some future caller misses that check.
                 it[recipe_external_url] = recipe.recipeExternalUrl
                 it[privacy] = recipe.privacy
                 it[updated_at] = recipe.updatedAt

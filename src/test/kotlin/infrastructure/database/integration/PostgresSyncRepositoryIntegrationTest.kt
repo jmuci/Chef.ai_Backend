@@ -49,6 +49,72 @@ class PostgresSyncRepositoryIntegrationTest {
         initDatabaseAndSchema()
     }
 
+    /**
+     * Regression for security audit F1's defence-in-depth half: the UPDATE branch of
+     * [PostgresSyncRepository.upsertRecipeAggregate] used to write `creator_id` from the payload,
+     * so an upsert could transfer a recipe to a different owner. SyncService now rejects a push
+     * against a row the caller doesn't own, but the column must be immutable at the SQL level too.
+     */
+    @Test
+    fun upsertDoesNotReassignCreatorOnUpdate() = runBlocking {
+        val repo = PostgresSyncRepository()
+
+        val ownerId = UUID.randomUUID()
+        val attackerId = UUID.randomUUID()
+        val recipeId = UUID.randomUUID()
+
+        transaction {
+            listOf(ownerId to "owner", attackerId to "attacker").forEach { (id, name) ->
+                UserTable.insert {
+                    it[UserTable.id] = EntityID(id, UserTable)
+                    it[user_name] = name
+                    it[email] = "$name-$id@example.com"
+                    it[display_name] = name
+                    it[avatar_url] = ""
+                    it[password_hash] = "hash"
+                }
+            }
+        }
+
+        fun aggregate(creatorId: UUID, title: String, updatedAt: Long) = SyncRecipe(
+            uuid = recipeId.toString(),
+            title = title,
+            description = "d",
+            imageUrl = "",
+            imageUrlThumbnail = "",
+            prepTimeMinutes = 1,
+            cookTimeMinutes = 1,
+            servings = 1,
+            creatorId = creatorId.toString(),
+            recipeExternalUrl = null,
+            privacy = "PRIVATE",
+            updatedAt = updatedAt,
+            deletedAt = null,
+            steps = emptyList(),
+            ingredients = emptyList(),
+            tagIds = emptyList(),
+            labelIds = emptyList()
+        )
+
+        // Insert establishes ownership...
+        repo.upsertRecipeAggregate(
+            aggregate(ownerId, "Owner recipe", 1_000L),
+            Instant.fromEpochMilliseconds(1_000L)
+        )
+        assertEquals(ownerId.toString(), repo.getRecipe(recipeId)?.recipe?.creatorId)
+
+        // ...and a later update naming a different creator must not move it.
+        repo.upsertRecipeAggregate(
+            aggregate(attackerId, "Retitled", 2_000L),
+            Instant.fromEpochMilliseconds(2_000L)
+        )
+
+        val loaded = repo.getRecipe(recipeId)
+        assertNotNull(loaded)
+        assertEquals(ownerId.toString(), loaded.recipe.creatorId, "creator_id must be immutable after insert")
+        assertEquals("Retitled", loaded.recipe.title, "other columns still update normally")
+    }
+
     @Test
     fun upsertAndQueryRecipeAggregateAgainstPostgres() = runBlocking {
         val repo = PostgresSyncRepository()

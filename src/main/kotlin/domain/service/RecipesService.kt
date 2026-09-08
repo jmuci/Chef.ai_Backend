@@ -28,12 +28,25 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
 
     suspend fun getRecipeById(id: String, userId: UUID): Recipe? {
         val recipe = recipesRepository.recipeById(id)
-        return if (recipe != null && (recipe.creatorId == userId.toString() || recipe.privacy == Privacy.PUBLIC)) {
-            recipe
-        } else {
-            null
-        }
+        return recipe?.takeIf { it.isVisibleTo(userId) }
     }
+
+    /**
+     * Title-scoped counterpart to [getRecipeById], applying the same visibility rule.
+     *
+     * Note the repository returns the first title match regardless of owner, so a private recipe
+     * owned by someone else shadows a same-titled one of the caller's and this returns null rather
+     * than the caller's copy. That is the safe direction to fail, and titles are not a stable way
+     * to address a recipe anyway — `/api/v1/recipes/search` is the supported lookup.
+     */
+    suspend fun getRecipeByTitle(title: String, userId: UUID): Recipe? {
+        val recipe = recipesRepository.recipeByTitle(title)
+        return recipe?.takeIf { it.isVisibleTo(userId) }
+    }
+
+    /** A recipe is visible to its creator, or to anyone when it is PUBLIC. */
+    private fun Recipe.isVisibleTo(userId: UUID): Boolean =
+        creatorId == userId.toString() || privacy == Privacy.PUBLIC
 
     suspend fun createRecipe(request: CreateRecipeRequest, userId: UUID): RecipeResponse? {
         try {

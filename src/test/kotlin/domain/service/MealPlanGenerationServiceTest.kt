@@ -56,6 +56,40 @@ class MealPlanGenerationServiceTest {
         assertEquals(VarietyPreference.HIGH, prefs.varietyPreference)
     }
 
+    // Regression: security audit F6. planLengthDays was coerceAtLeast(1) - a floor with no
+    // ceiling - and assignRecipesToDays loops over it once per day, ranking the whole candidate
+    // set each time. POST /api/v1/meal-plans/generate is anonymous-capable, so an unauthenticated
+    // caller could send planLengthDays=2_000_000_000 and tie up a worker.
+    @Test
+    fun `parsePreferences clamps an absurd planLengthDays`() {
+        val service = makeService(FakeSyncRepository())
+        val prefs = service.parsePreferences("""{"planLengthDays": 2000000000}""")
+        assertEquals(MealPlanGenerationService.MAX_PLAN_LENGTH_DAYS, prefs.planLengthDays)
+    }
+
+    @Test
+    fun `parsePreferences clamps a non-positive planLengthDays up to one`() {
+        val service = makeService(FakeSyncRepository())
+        assertEquals(1, service.parsePreferences("""{"planLengthDays": 0}""").planLengthDays)
+        assertEquals(1, service.parsePreferences("""{"planLengthDays": -5}""").planLengthDays)
+    }
+
+    @Test
+    fun `parsePreferences leaves a realistic planLengthDays alone`() {
+        val service = makeService(FakeSyncRepository())
+        assertEquals(14, service.parsePreferences("""{"planLengthDays": 14}""").planLengthDays)
+    }
+
+    @Test
+    fun `parsePreferences clamps servingsPerMeal`() {
+        val service = makeService(FakeSyncRepository())
+        assertEquals(
+            MealPlanGenerationService.MAX_SERVINGS_PER_MEAL,
+            service.parsePreferences("""{"servingsPerMeal": 100000}""").servingsPerMeal
+        )
+        assertEquals(1, service.parsePreferences("""{"servingsPerMeal": 0}""").servingsPerMeal)
+    }
+
     @Test
     fun `parsePreferences uses defaults for missing fields`() {
         val service = makeService(FakeSyncRepository())

@@ -9,13 +9,23 @@ import java.util.*
 
 class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository {
 
+    companion object {
+        // Real UUIDs, not "1"/"2"/"3". PostgresRecipesRepository parses every id through
+        // UUID.fromString, so a fake using sequential strings quietly accepted ids that
+        // production rejects — which is how a 500 on a malformed /recipes/byId?uuid= went
+        // unnoticed. Fixed values (not randomUUID) keep tests deterministic.
+        val PUBLIC_RECIPE_ID: UUID = UUID.fromString("11111111-1111-4111-8111-111111111111")
+        val OWNED_PRIVATE_RECIPE_ID: UUID = UUID.fromString("22222222-2222-4222-8222-222222222222")
+        val FOREIGN_PRIVATE_RECIPE_ID: UUID = UUID.fromString("33333333-3333-4333-8333-333333333333")
+    }
+
     private val recipes = mutableListOf<Recipe>()
 
     init {
         recipes.addAll(
             listOf(
                 Recipe(
-                    uuid = "1",
+                    uuid = PUBLIC_RECIPE_ID.toString(),
                     title = "Recipe 1",
                     description = "Test recipe",
                     imageUrl = "http://example.com/image.jpg",
@@ -31,7 +41,7 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
                 ),
                 Recipe(
-                    uuid = "2",
+                    uuid = OWNED_PRIVATE_RECIPE_ID.toString(),
                     title = "Recipe 2",
                     description = "Another test recipe",
                     imageUrl = "http://example.com/image2.jpg",
@@ -47,7 +57,7 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
                     serverUpdatedAt = "2023-01-01T00:00:00Z"
                 ),
                 Recipe(
-                    uuid = "3",
+                    uuid = FOREIGN_PRIVATE_RECIPE_ID.toString(),
                     title = "Recipe 3",
                     description = "Another test recipe",
                     imageUrl = "http://example.com/image3.jpg",
@@ -87,7 +97,7 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
         if (recipeByTitle(recipeRequest.title) != null) {
             throw IllegalStateException("Cannot duplicate recipe titles!")
         }
-        val nextId = (recipes.size + 1).toString()
+        val nextId = UUID.randomUUID().toString()
         val recipe = Recipe(
             uuid = nextId,
             title = recipeRequest.title,

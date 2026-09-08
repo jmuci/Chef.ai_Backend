@@ -51,8 +51,17 @@ class SyncService(
      * Safety cap on how far [fetchStablePage] will widen a fetch to find the end of a
      * `server_updated_at` tie that starts at the pull's own `since` cursor.
      */
-    private companion object {
+    companion object {
         private const val TIE_ESCAPE_FETCH_LIMIT = 5_000
+
+        /**
+         * Upper bound on `/sync/pull`'s `limit`. Mirrors what [RecipeSearchService] does with its
+         * own params: the repository trusts its callers, so the clamp lives here rather than in
+         * the route. Without it a caller could ask for `Int.MAX_VALUE` rows — and worse, the
+         * `limit + 1` in [fetchStablePage] would overflow to `Int.MIN_VALUE` and reach Exposed's
+         * `.limit()` as a negative.
+         */
+        const val MAX_PULL_LIMIT = 500
     }
 
     /**
@@ -100,6 +109,25 @@ class SyncService(
             }
 
             val existing = syncRepository.getRecipe(recipeUuid)
+
+            // The CREATOR_MISMATCH check above only proves the *payload* names the caller as
+            // creator. It says nothing about who owns the row already sitting at this uuid, and
+            // `getRecipe` is deliberately unscoped (it backs the anonymous-capable detail fetch
+            // too). Without this second check a caller could address any recipe in the table by
+            // uuid: the staleness check below is not a permission check, and `updatedAt` is
+            // client-supplied, so a far-future value walks straight past it into an upsert that
+            // overwrites the row and reassigns its creator. Rejecting before the conflict branch
+            // also stops the conflict response from echoing another user's recipe back as
+            // `serverVersion`.
+            if (existing != null && existing.recipe.creatorId != userId.toString()) {
+                errors += SyncError(
+                    uuid = recipe.uuid,
+                    reason = SyncErrors.CREATOR_MISMATCH,
+                    message = SyncErrors.CREATOR_MISMATCH.message
+                )
+                return@forEach
+            }
+
             if (existing != null && existing.serverUpdatedAtMillis > recipe.updatedAt) {
                 conflicts += ConflictEntity(
                     uuid = recipe.uuid,
@@ -290,7 +318,8 @@ class SyncService(
         require(sinceMillis >= 0) { "since must be non-negative" }
         require(limit > 0) { "limit must be greater than 0" }
 
-        val (page, hasMore) = fetchStablePage(userId, sinceMillis, limit)
+        val effectiveLimit = limit.coerceAtMost(MAX_PULL_LIMIT)
+        val (page, hasMore) = fetchStablePage(userId, sinceMillis, effectiveLimit)
         val cursor = page.lastOrNull()?.serverUpdatedAtMillis ?: sinceMillis
 
         val ingredientIds = page

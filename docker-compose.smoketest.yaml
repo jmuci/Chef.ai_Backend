@@ -24,6 +24,10 @@ services:
       DB_URL: jdbc:postgresql://db:5432/chefai_db
       DB_USER: postgres
       DB_PASSWORD: password
+      # Fixed throwaway value so the smoke test stays hermetic. The app refuses to boot without
+      # a real secret (see resolveJwtSecret in Application.kt); this container is torn down at
+      # the end of the run and never serves anything but the smoke test itself.
+      JWT_SECRET: smoketest-only-jwt-secret-not-used-anywhere-else-0123456789
     ports:
       - "8082:8080"
     depends_on:

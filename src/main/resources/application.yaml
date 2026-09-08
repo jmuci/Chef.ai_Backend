@@ -9,7 +9,10 @@ ktor:
  # with a docker-compose started postgres DB
 
 jwt:
-  secret: "your-secret-key-change-this-in-production"
+  # Sourced from the environment, with an empty default so a missing variable falls through to
+  # Application.kt's resolveJwtSecret(), which fails startup outside development mode rather than
+  # signing with a guessable key. Generate one with: openssl rand -base64 48
+  secret: "$JWT_SECRET:"
   issuer: "http://0.0.0.0:8080"
   audience: "chefai-backend"
   realm: "ChefAI"
@@ -34,8 +37,7 @@ imageBlob:
     intervalHours: 24
     batchSize: 100
 
-# WARNING - For prod use env variables:
-# Look at https://ktor.io/docs/rsa-keys-generation.html#defining-the-private-key for key gen
-#  secret: "${JWT_SECRET}"  # Use environment variable
-#  export JWT_SECRET="your-production-secret-key"
-#  export JWT_ISSUER="https://your-domain.com"
+# JWT_SECRET is mandatory outside development mode - the app refuses to boot without it.
+#   export JWT_SECRET="$(openssl rand -base64 48)"
+# Rotating it invalidates every access token already issued (refresh tokens are opaque DB rows
+# and survive). See docs/auth-architecture.md.

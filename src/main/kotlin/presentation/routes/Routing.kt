@@ -3,7 +3,6 @@ package com.tenmilelabs.presentation.routes
 import com.tenmilelabs.application.dto.CreateRecipeRequest
 import com.tenmilelabs.application.dto.ErrorResponse
 import com.tenmilelabs.domain.repository.FilterFields
-import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
@@ -22,6 +21,7 @@ import io.ktor.server.http.content.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.origin
 import io.ktor.server.plugins.ratelimit.RateLimit
+import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -37,7 +37,6 @@ private const val ACCEPT_APP_JSON = "application/json"
 private const val ACCEPT_WILDCARD = "*/*"
 
 fun Application.configureRouting(
-    recipeRepository: RecipesRepository,
     recipesService: RecipesService,
     authService: AuthService,
     syncService: SyncService,
@@ -60,8 +59,13 @@ fun Application.configureRouting(
     }
     install(StatusPages) {
         exception<IllegalStateException> { call, cause ->
+            // The message can carry internals (constraint names, SQL fragments, paths). Log it,
+            // and hand the client only a correlation id — CLAUDE.md's "no stack traces or
+            // internal errors" rule.
+            val traceId = UUID.randomUUID().toString()
+            call.application.log.error("Unhandled IllegalStateException [traceId=$traceId]", cause)
             call.respondText(
-                "500: App in illegal state as ${cause.message}",
+                "500: Internal server error (traceId=$traceId)",
                 status = HttpStatusCode.InternalServerError
             )
         }
@@ -98,6 +102,20 @@ fun Application.configureRouting(
             // Same anonymous-by-remote-address keying rationale as search.
             requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
         }
+        register(AUTH_RATE_LIMIT_NAME) {
+            // The /auth routes were the only unthrottled surface left. Login is a credential-
+            // stuffing target and register mints a bcrypt cost-12 hash per call, which is an
+            // asymmetric DoS on its own. Always keyed by peer address: these routes are
+            // unauthenticated by definition, so there is no principal to key on.
+            //
+            // 20/min rather than something tighter because /auth/refresh shares this bucket, and
+            // access tokens last an hour - several devices behind one NAT address (a household,
+            // an office) legitimately refresh through the same key. That still caps a stuffing
+            // run at a rate no attacker can work with. Same proxy caveat as the search limiter:
+            // without XForwardedHeaders this is the proxy's address if one is ever put in front.
+            rateLimiter(limit = 20, refillPeriod = 60.seconds)
+            requestKey { call -> call.request.origin.remoteAddress }
+        }
         register(MEAL_PLAN_GENERATE_RATE_LIMIT_NAME) {
             // Tighter than search/detail: generation does real work (candidate scan + ranking +
             // per-recipe aggregate assembly), not a single indexed lookup. Same anonymous-by-
@@ -115,8 +133,10 @@ fun Application.configureRouting(
         get("/health") { // Docker health check
             call.respondText("OK")
         }
-        // Public authentication routes
-        authRoutes(authService)
+        // Public authentication routes. Throttled per peer address - see AUTH_RATE_LIMIT_NAME.
+        rateLimit(AUTH_RATE_LIMIT_NAME) {
+            authRoutes(authService)
+        }
 
         // Public: the anonymous-first Home screen must load before any account exists.
         // homeRoutes reads no auth principal, so it belongs outside authenticate("auth-jwt").
@@ -150,10 +170,10 @@ fun Application.configureRouting(
                     handleGetAllRecipes(recipesService, call)
                 }
                 get("/byName") {
-                    findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipeRepository)
+                    findRecipeByField(FilterFields.BY_TITLE, call, application.log, recipesService)
                 }
                 get("/byId") {
-                    findRecipeByField(FilterFields.BY_ID, call, application.log, recipeRepository)
+                    findRecipeByField(FilterFields.BY_ID, call, application.log, recipesService)
                 }
                 post {
                     handlePostNewRecipe(call, application.log, recipesService)
@@ -166,6 +186,24 @@ fun Application.configureRouting(
     }
 }
 
+/**
+ * The caller's id from the validated JWT, or null when the token carries no usable `userId`
+ * claim.
+ *
+ * `call.userId` is a `String?` read straight off the token payload, so the claim can be absent
+ * (null) or present but not a UUID. Both used to reach `UUID.fromString` directly here and throw —
+ * NPE and IllegalArgumentException respectively — answering 500 on what is really an
+ * unauthenticated request, while the `if (userId == null)` guard that followed was dead code
+ * (`UUID.fromString` never returns null). SyncRoutes/RecipeImageRoutes/RecipeSearchRoutes each
+ * already parse defensively; this is the same idiom for the routes in this file.
+ */
+private fun RoutingCall.authenticatedUserId(): UUID? =
+    try {
+        userId?.let(UUID::fromString)
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
 private suspend fun handleDeleteRecipe(
     call: RoutingCall,
     log: Logger,
@@ -177,7 +215,7 @@ private suspend fun handleDeleteRecipe(
         return
     }
 
-    val userId = UUID.fromString(call.userId)
+    val userId = call.authenticatedUserId()
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
@@ -193,7 +231,7 @@ private suspend fun handleDeleteRecipe(
 }
 
 private suspend fun RoutingContext.handleGetAllRecipes(recipesService: RecipesService, call: RoutingCall) {
-    val userId = UUID.fromString(call.userId)
+    val userId = call.authenticatedUserId()
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
@@ -214,7 +252,7 @@ private suspend fun handlePostNewRecipe(
     log: Logger,
     recipesService: RecipesService
 ) {
-    val userId = UUID.fromString(call.userId)
+    val userId = call.authenticatedUserId()
     if (userId == null) {
         call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
         return
@@ -239,11 +277,21 @@ private suspend fun handlePostNewRecipe(
     }
 }
 
+/**
+ * Backs `/recipes/byName` and `/recipes/byId`.
+ *
+ * Goes through [RecipesService] rather than the repository directly. The repository's
+ * `recipeByTitle`/`recipeById` apply no visibility predicate at all, so calling them from here
+ * let any authenticated caller read any other user's PRIVATE recipe by uuid — or by guessing its
+ * title. The service methods apply the same `owned or PUBLIC` rule `handleGetAllRecipes` has
+ * always used, and a recipe the caller may not see is reported as 404, not 403, so this cannot be
+ * used to probe for a private recipe's existence.
+ */
 private suspend fun findRecipeByField(
     field: FilterFields,
     call: RoutingCall,
     log: Logger,
-    recipeRepository: RecipesRepository
+    recipesService: RecipesService
 ) {
     val filterField = call.request.queryParameters[field.label]
     if (filterField == null) {
@@ -252,9 +300,25 @@ private suspend fun findRecipeByField(
         return
     }
 
+    val userId = call.authenticatedUserId()
+    if (userId == null) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("User not authenticated"))
+        return
+    }
+
     val recipe = when (field) {
-        FilterFields.BY_TITLE -> recipeRepository.recipeByTitle(filterField)
-        FilterFields.BY_ID -> recipeRepository.recipeById(filterField)
+        FilterFields.BY_TITLE -> recipesService.getRecipeByTitle(filterField, userId)
+        // PostgresRecipesRepository.recipeById parses this straight into a UUID, so a malformed
+        // value threw IllegalArgumentException and surfaced as a 500. It's a bad request.
+        FilterFields.BY_ID -> {
+            val parsed = try {
+                UUID.fromString(filterField)
+            } catch (_: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("uuid is not a valid UUID"))
+                return
+            }
+            recipesService.getRecipeById(parsed.toString(), userId)
+        }
     }
     if (recipe == null) {
         log.warn("No recipe found for $filterField")

@@ -9,7 +9,11 @@ object InputValidator {
     private const val MAX_EMAIL_LENGTH = 254 // RFC 5321
     private const val MAX_USERNAME_LENGTH = 100
     private const val MIN_USERNAME_LENGTH = 3
-    private const val MAX_PASSWORD_LENGTH = 128 // BCrypt max
+    // BCrypt hashes at most 72 bytes and the library throws rather than truncating, so this is a
+    // byte budget, not a character count - a 72-character password of multi-byte characters still
+    // overflows it. This was 128, which let a long password pass validation and then blow up
+    // inside hashPassword, surfacing to the user as "Invalid request format".
+    private const val MAX_PASSWORD_BYTES = 72
     private const val MIN_PASSWORD_LENGTH = 8
 
     // Validation patterns
@@ -119,8 +123,8 @@ object InputValidator {
             return ValidationResult(false, "Password must be at least $MIN_PASSWORD_LENGTH characters")
         }
 
-        if (password.length > MAX_PASSWORD_LENGTH) {
-            return ValidationResult(false, "Password is too long (max $MAX_PASSWORD_LENGTH characters)")
+        if (password.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES) {
+            return ValidationResult(false, "Password is too long (max $MAX_PASSWORD_BYTES bytes)")
         }
 
         // Strength check - require letter and number
@@ -189,7 +193,7 @@ object InputValidator {
             return ValidationResult(false, "Password is required")
         }
 
-        if (password.length > MAX_PASSWORD_LENGTH) {
+        if (password.toByteArray(Charsets.UTF_8).size > MAX_PASSWORD_BYTES) {
             return ValidationResult(false, "Invalid credentials")
         }
 

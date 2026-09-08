@@ -69,7 +69,11 @@ fun Application.module(
     val refreshTokenRepository = refreshTokenRepository
 
     // Configure JWT settings
-    val jwtSecret = environment.config.propertyOrNull("jwt.secret")?.getString() ?: "secret"
+    val jwtSecret = resolveJwtSecret(
+        configured = environment.config.propertyOrNull("jwt.secret")?.getString(),
+        developmentMode = developmentMode,
+        log = log,
+    )
     val jwtIssuer = environment.config.propertyOrNull("jwt.issuer")?.getString() ?: "http://0.0.0.0:8080"
     val jwtAudience = environment.config.propertyOrNull("jwt.audience")?.getString() ?: "jwt-audience"
 
@@ -98,7 +102,6 @@ fun Application.module(
     }
     configureJwtAuth(jwtService)
     configureRouting(
-        recipeRepository = recipeRepository,
         recipesService = recipesService,
         authService = authService,
         syncService = syncService,
@@ -119,6 +122,16 @@ fun Application.module(
                     softDeletePurgeService.purgeOnce(purgeConfig)
                 } catch (ex: Exception) {
                     log.error("Soft-delete purge job failed", ex)
+                }
+                try {
+                    // deleteExpiredTokens() was implemented but never called, so hashed refresh
+                    // tokens accumulated for the life of the deployment. Rides along with the
+                    // existing sweep rather than starting a third coroutine scope; caught
+                    // separately so a failure here doesn't skip the recipe purge next tick.
+                    val deleted = refreshTokenRepository.deleteExpiredTokens()
+                    if (deleted > 0) log.info("Expired refresh token purge removed $deleted token(s)")
+                } catch (ex: Exception) {
+                    log.error("Expired refresh token purge failed", ex)
                 }
                 delay(purgeConfig.intervalHours * MILLIS_PER_HOUR)
             }
@@ -201,3 +214,62 @@ private fun Application.imageBlobReclamationConfig(): ImageBlobReclamationConfig
 }
 
 private const val MILLIS_PER_HOUR = 60L * 60L * 1000L
+
+/**
+ * The signing key used for access tokens in development, when no real secret is configured.
+ *
+ * Only ever reachable with `developmentMode = true` (which `testApplication` sets, and which
+ * production never does). It is a constant on purpose: it must be obviously worthless, so that a
+ * token minted under it is never mistaken for a real one.
+ */
+internal const val DEVELOPMENT_JWT_SECRET = "development-only-insecure-jwt-secret-do-not-deploy"
+
+/** Shortest secret accepted in production. HMAC-SHA256's key should be at least its 256-bit block. */
+internal const val MIN_JWT_SECRET_LENGTH = 32
+
+/**
+ * Secrets that have been published in this repository and must never sign a real token again.
+ * Checked explicitly rather than left to the length rule, because rejecting them by accident (one
+ * happens to be long enough) is exactly the kind of thing that regresses silently.
+ */
+internal val PUBLISHED_JWT_SECRETS = setOf(
+    "secret",
+    "your-secret-key-change-this-in-production",
+)
+
+/**
+ * Resolves the JWT signing secret, refusing to start rather than falling back to a guessable one.
+ *
+ * This used to be `config["jwt.secret"] ?: "secret"`, with `application.yaml` shipping a literal
+ * placeholder — so every deployment signed tokens with a string published in the repository, and
+ * anyone holding it could mint a token for any `userId`. There is no safe default for this value,
+ * so an unusable one is a startup failure in production and a loud warning in development.
+ *
+ * Kept as a pure function (rather than reading config inline) so the rules are unit-testable
+ * without booting an application.
+ */
+internal fun resolveJwtSecret(
+    configured: String?,
+    developmentMode: Boolean,
+    log: org.slf4j.Logger? = null,
+): String {
+    val secret = configured?.trim().orEmpty()
+    val rejection = when {
+        secret.isEmpty() -> "no jwt.secret is configured"
+        secret in PUBLISHED_JWT_SECRETS -> "jwt.secret is a placeholder published in this repository"
+        secret.length < MIN_JWT_SECRET_LENGTH ->
+            "jwt.secret is shorter than $MIN_JWT_SECRET_LENGTH characters"
+        else -> null
+    } ?: return secret
+
+    check(developmentMode) {
+        "Refusing to start: $rejection. Set the JWT_SECRET environment variable to a random " +
+            "value of at least $MIN_JWT_SECRET_LENGTH characters " +
+            "(e.g. `openssl rand -base64 48`). See docs/auth-architecture.md."
+    }
+    log?.warn(
+        "$rejection - falling back to the insecure development signing key. " +
+            "Tokens issued now are forgeable by anyone; never use this outside local development."
+    )
+    return DEVELOPMENT_JWT_SECRET
+}

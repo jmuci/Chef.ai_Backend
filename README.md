@@ -314,8 +314,14 @@ docker compose down db
 ```
 To start both the DB and the service, run: 
 ```bash
- docker compose -f docker-compose.yaml up --build
+export JWT_SECRET="$(openssl rand -base64 48)"
+docker compose -f docker-compose.yaml up --build
 ```
+
+`JWT_SECRET` is **required** — compose refuses to start without it, and the application itself
+refuses to boot on a missing, too-short, or previously-published secret. Use the same value across
+restarts to keep already-issued access tokens valid; see
+[Auth Architecture § Access Tokens](docs/auth-architecture.md).
 
 ### Database Setup
 
