@@ -238,6 +238,45 @@ returns `404`, never `403`, so the endpoint can't be used to probe whether a rec
 
 ---
 
+## Household Errors
+
+`domain/exception/HouseholdExceptions.kt` — no HTTP surface yet (`HouseholdRoutes` lands in a
+follow-up PR); documented now so the exception-to-status mapping is settled before routes need it.
+See [`docs/household-architecture.md`](household-architecture.md) for the full feature.
+
+```kotlin
+sealed class HouseholdException(message: String) : Exception(message)
+
+├── HouseholdNotFoundException       // 404 Not Found
+├── NotHouseholdOwnerException       // 403 Forbidden
+├── NotHouseholdMemberException      // 403 Forbidden
+├── AlreadyInHouseholdException      // 409 Conflict
+├── HouseholdValidationException     // 400 Bad Request
+├── InviteNotFoundException          // 404 Not Found
+├── InviteNotForCallerException      // 403 Forbidden
+├── InviteeNotFoundException         // 404 Not Found
+└── HouseholdInternalException       // 500 Internal Server Error
+```
+
+| Exception | HTTP Status | Notes |
+|-----------|-------------|-------|
+| `HouseholdNotFoundException` | 404 Not Found | Household id doesn't resolve, or caller has none |
+| `NotHouseholdOwnerException` | 403 Forbidden | Caller isn't `OWNER` — rename/delete/invite/remove all require it |
+| `NotHouseholdMemberException` | 403 Forbidden | Caller has no ACTIVE membership in the household |
+| `AlreadyInHouseholdException` | 409 Conflict | A user belongs to at most one household; thrown both by `createHousehold`'s pre-check and by `PostgresHouseholdRepository.addMember` translating a losing race against the partial unique index |
+| `HouseholdValidationException` | 400 Bad Request | Blank name, removing yourself via the owner-remove path, removing the owner |
+| `InviteNotFoundException` | 404 Not Found | Deliberately reused for expired/revoked/exhausted too — enumeration resistance, see below |
+| `InviteNotForCallerException` | 403 Forbidden | Invite's `invitee_user_id` names a different account |
+| `InviteeNotFoundException` | 404 Not Found | Email-addressed invite created for an email with no matching account |
+| `HouseholdInternalException` | 500 Internal Server Error | Unexpected DB/internal failure |
+
+**Enumeration resistance**: `InviteNotFoundException` covers four distinct underlying states — the
+invite id/token doesn't exist, it's expired, it's revoked, or its use budget is exhausted
+(`HouseholdInvite.isUsable`). They're deliberately not distinguished, so accepting an invite can't
+be used to probe which one applied.
+
+---
+
 ## Future Enhancements
 
 - Custom exception handler plugin for consistent error responses

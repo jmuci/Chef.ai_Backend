@@ -32,6 +32,66 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 
 -- ===============================
+-- HOUSEHOLDS
+-- ===============================
+CREATE TABLE IF NOT EXISTS households (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    owner_id    UUID NOT NULL REFERENCES users(uuid) ON DELETE RESTRICT,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMPTZ NULL
+);
+CREATE INDEX IF NOT EXISTS idx_households_owner_id ON households(owner_id);
+
+-- ===============================
+-- HOUSEHOLD_MEMBERS
+-- ===============================
+CREATE TABLE IF NOT EXISTS household_members (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    household_id      UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    user_id           UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    role              TEXT NOT NULL CHECK (role IN ('OWNER','MEMBER')),
+    status            TEXT NOT NULL CHECK (status IN ('ACTIVE','REMOVED')),
+    joined_at         TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    removed_at        TIMESTAMPTZ NULL,
+    server_removed_at TIMESTAMPTZ NULL
+);
+-- At most one ACTIVE household per user. Must be partial (WHERE status = 'ACTIVE'): REMOVED rows
+-- are kept as the tombstone source, and a plain unique index would permanently block rejoining a
+-- household after leaving one. Exposed cannot express a filtered index, so this is also
+-- hand-written in DatabaseInit.kt's createHouseholdConstraintsIfMissing() — the two must stay in
+-- sync by hand, same category as the recipes.search_vector index.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_household_members_one_active_per_user
+    ON household_members(user_id) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS idx_household_members_household_id ON household_members(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_members_server_removed_at ON household_members(server_removed_at)
+    WHERE server_removed_at IS NOT NULL;
+
+-- ===============================
+-- HOUSEHOLD_INVITES
+-- ===============================
+CREATE TABLE IF NOT EXISTS household_invites (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    household_id    UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+    created_by      UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    token_hash      VARCHAR(255) NOT NULL UNIQUE,  -- sha256(raw token); raw token NEVER stored
+    invitee_user_id UUID NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    invitee_email   TEXT NULL,                     -- denormalized, display/audit only
+    single_use      BOOLEAN NOT NULL DEFAULT TRUE,
+    max_uses        INTEGER NULL,
+    use_count       INTEGER NOT NULL DEFAULT 0,
+    expires_at      TIMESTAMPTZ NOT NULL,
+    accepted_by     UUID NULL REFERENCES users(uuid) ON DELETE SET NULL,
+    accepted_at     TIMESTAMPTZ NULL,
+    revoked_at      TIMESTAMPTZ NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_household_invites_household_id ON household_invites(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_invites_invitee_user_id ON household_invites(invitee_user_id)
+    WHERE invitee_user_id IS NOT NULL;
+
+-- ===============================
 -- ALLERGENS
 -- ===============================
 CREATE TABLE IF NOT EXISTS allergens (
@@ -227,3 +287,49 @@ CREATE TABLE IF NOT EXISTS bookmarked_recipes (
     CONSTRAINT fk_bookmarked_recipe FOREIGN KEY (recipe_id) REFERENCES recipes(uuid) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_bookmarked_recipes_server_updated_at ON bookmarked_recipes(server_updated_at);
+
+-- ===============================
+-- MEAL_PLANS
+-- ===============================
+-- Was missing from this file entirely (only ever created via Exposed's
+-- createMissingTablesAndColumns) — backfilled here for fresh-install parity, with household_id
+-- included from the start even though it's only populated once the plan-sharing PR lands.
+CREATE TABLE IF NOT EXISTS meal_plans (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id           UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    household_id      UUID NULL REFERENCES households(id) ON DELETE SET NULL,
+    name              TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    preferences       TEXT NOT NULL,
+    created_at        BIGINT NOT NULL,
+    updated_at        BIGINT NOT NULL,
+    deleted_at        BIGINT,
+    server_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_meal_plans_user_id ON meal_plans(user_id);
+CREATE INDEX IF NOT EXISTS idx_meal_plans_household_id ON meal_plans(household_id) WHERE household_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_meal_plans_server_updated_at ON meal_plans(server_updated_at);
+
+-- ===============================
+-- MEAL_PLAN_DAYS
+-- ===============================
+-- Also backfilled — same staleness as meal_plans above.
+CREATE TABLE IF NOT EXISTS meal_plan_days (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    meal_plan_id      UUID NOT NULL REFERENCES meal_plans(id) ON DELETE CASCADE,
+    day_index         INTEGER NOT NULL,
+    dinner_recipe_id  UUID NULL REFERENCES recipes(uuid) ON DELETE SET NULL,
+    lunch_recipe_id   UUID NULL REFERENCES recipes(uuid) ON DELETE SET NULL,
+    UNIQUE (meal_plan_id, day_index)
+);
+CREATE INDEX IF NOT EXISTS idx_meal_plan_days_meal_plan_id ON meal_plan_days(meal_plan_id);
+
+-- ===============================
+-- USER_PREFERENCES
+-- ===============================
+-- Also backfilled — same staleness as meal_plans above.
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id     UUID PRIMARY KEY REFERENCES users(uuid) ON DELETE CASCADE,
+    preferences TEXT NOT NULL,
+    updated_at  TIMESTAMPTZ NOT NULL
+);
