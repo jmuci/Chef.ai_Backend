@@ -274,6 +274,26 @@ class HouseholdServiceTest {
     }
 
     @Test
+    fun `createInvite with a non-positive maxUses fails`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+
+        assertFailsWith<HouseholdValidationException> {
+            householdService.createInvite(household.id, ownerId, inviteeEmail = null, maxUses = 0, expiresInHours = null)
+        }
+    }
+
+    @Test
+    fun `createInvite with a non-positive expiresInHours fails`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+
+        assertFailsWith<HouseholdValidationException> {
+            householdService.createInvite(household.id, ownerId, inviteeEmail = null, maxUses = null, expiresInHours = -1)
+        }
+    }
+
+    @Test
     fun `createInvite for an email with no matching account fails`() = runTest {
         val ownerId = UUID.randomUUID()
         val household = householdService.createHousehold("Household", ownerId)
@@ -298,6 +318,48 @@ class HouseholdServiceTest {
 
         assertFailsWith<AlreadyInHouseholdException> {
             householdService.joinByToken(rawToken, alreadyMember)
+        }
+    }
+
+    // ── Preview ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `previewInvite returns the household name and inviter display name`() = runTest {
+        // previewInvite resolves the inviter's displayName via UserRepository (not the household
+        // membership row), so the owner must be a real registered user for that lookup to hit.
+        // FakeUserRepository.createUser always stamps displayName = "Test User".
+        val owner = userRepository.createUser("owner@example.com", "owner", "hash")
+        assertNotNull(owner)
+        val household = householdService.createHousehold("The Muciente House", owner.uuid)
+        val (_, rawToken) = householdService.createInvite(
+            household.id, owner.uuid, inviteeEmail = null, maxUses = null, expiresInHours = null
+        )
+
+        val preview = householdService.previewInvite(rawToken)
+
+        assertEquals("The Muciente House", preview.householdName)
+        assertEquals("Test User", preview.inviterDisplayName)
+    }
+
+    @Test
+    fun `previewInvite with an unknown token fails as not found`() = runTest {
+        assertFailsWith<InviteNotFoundException> {
+            householdService.previewInvite("not-a-real-token")
+        }
+    }
+
+    @Test
+    fun `previewInvite with an expired invite fails as not found`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+        val rawToken = seedRawInvite(
+            householdId = household.id,
+            createdBy = ownerId,
+            expiresAt = Clock.System.now().minus(1.hours),
+        )
+
+        assertFailsWith<InviteNotFoundException> {
+            householdService.previewInvite(rawToken)
         }
     }
 

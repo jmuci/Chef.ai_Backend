@@ -22,12 +22,15 @@ rotation** following best practices for RESTful APIs. The architecture consists 
     `GET /api/v1/home/layout` — the route reads no principal, so a token has no effect either way
     (see [`docs/home-layout-sdui.md`](home-layout-sdui.md); this was accidentally JWT-gated for a
     period and is now fixed).
-  - **Optional auth** (`authenticate("auth-jwt", optional = true)`): `recipeSearchRoutes` and
-    `recipeDetailRoutes` — an anonymous caller is scoped to `PUBLIC` recipes, an authenticated one
-    additionally sees their own `PRIVATE` recipes. See [`docs/recipe-search.md`](recipe-search.md).
+  - **Optional auth** (`authenticate("auth-jwt", optional = true)`): `recipeSearchRoutes`,
+    `recipeDetailRoutes`, and `mealPlanGenerationRoutes` — an anonymous caller is scoped to
+    `PUBLIC` recipes, an authenticated one additionally sees their own `PRIVATE` recipes. See
+    [`docs/recipe-search.md`](recipe-search.md). `householdPreviewRoutes` (the invite-preview
+    endpoint) is also here, though its response never actually depends on caller identity — see
+    [`docs/household-architecture.md`](household-architecture.md#endpoints).
   - **Required auth** (`authenticate("auth-jwt")`, strict): `syncRoutes`, `mealPlanRoutes`,
-    `userPreferencesRoutes`, `recipeImageRoutes`, and `/recipes/*` (CRUD) — missing/invalid token
-    is a hard `401`.
+    `userPreferencesRoutes`, `recipeImageRoutes`, `householdRoutes`, and `/recipes/*` (CRUD) —
+    missing/invalid token is a hard `401`.
 - **JWT Principal Extraction**: Middleware extracts user context from JWT tokens
 
 ### 2. Domain Layer

@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.repository.FilterFields
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
+import com.tenmilelabs.domain.service.HouseholdService
 import com.tenmilelabs.domain.service.ImageBlobConfig
 import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.domain.service.RecipeImageService
@@ -31,6 +32,7 @@ import io.ktor.util.logging.*
 import kotlinx.serialization.json.Json
 import org.thymeleaf.templateresolver.ClassLoaderTemplateResolver
 import java.util.*
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 
 private const val ACCEPT_APP_JSON = "application/json"
@@ -46,6 +48,8 @@ fun Application.configureRouting(
     imageBlobConfig: ImageBlobConfig,
     userPreferencesRepository: UserPreferencesRepository,
     recipeSearchService: RecipeSearchService,
+    householdService: HouseholdService,
+    householdInviteBaseUrl: String,
 ) {
     // Install plugins related to routing
     install(ContentNegotiation) {
@@ -123,6 +127,22 @@ fun Application.configureRouting(
             rateLimiter(limit = 10, refillPeriod = 60.seconds)
             requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
         }
+        register(HOUSEHOLD_INVITE_CREATE_RATE_LIMIT_NAME) {
+            // Required-auth route; call.userId is always non-null by the time this runs, but keyed
+            // defensively the same way RECIPE_IMAGE_UPLOAD_RATE_LIMIT_NAME is.
+            rateLimiter(limit = 20, refillPeriod = 1.hours)
+            requestKey { call -> call.userId ?: "anonymous" }
+        }
+        register(HOUSEHOLD_JOIN_RATE_LIMIT_NAME) {
+            rateLimiter(limit = 10, refillPeriod = 60.seconds)
+            requestKey { call -> call.userId ?: "anonymous" }
+        }
+        register(HOUSEHOLD_INVITE_PREVIEW_RATE_LIMIT_NAME) {
+            // Optional-auth route (a signed-out link tap): same anonymous-by-remote-address
+            // rationale as RECIPE_SEARCH_RATE_LIMIT_NAME.
+            rateLimiter(limit = 30, refillPeriod = 10.seconds)
+            requestKey { call -> call.userId ?: call.request.origin.remoteAddress }
+        }
     }
 
     routing {
@@ -156,6 +176,10 @@ fun Application.configureRouting(
             // Anonymous-capable stateless meal-plan generation: closes the 16-vs-789-candidate
             // gap for a signed-out device generating an INCLUDE_PUBLIC plan (see MealPlanRoutes.kt).
             mealPlanGenerationRoutes(mealPlanGenerationService, syncService)
+            // The response never depends on caller identity - see the KDoc on
+            // householdPreviewRoutes for why this still belongs under optional auth rather than
+            // being fully public.
+            householdPreviewRoutes(householdService)
         }
 
         // Protected routes - require authentication
@@ -164,6 +188,7 @@ fun Application.configureRouting(
             mealPlanRoutes(mealPlanGenerationService)
             userPreferencesRoutes(userPreferencesRepository, mealPlanGenerationService)
             recipeImageRoutes(recipeImageService, imageBlobConfig)
+            householdRoutes(householdService, householdInviteBaseUrl)
             route("/recipes") {
 
                 get {

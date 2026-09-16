@@ -25,6 +25,12 @@ cleanup:
     batchSize: 500
     dryRun: false
 
+household:
+  # Base URL an invite's raw token is appended to as `?token=...`, forming the shareable link
+  # returned once by POST /api/v1/households/{id}/invites. Override in production - this default
+  # is a placeholder, not a real deployed domain.
+  inviteBaseUrl: "https://chefai.app/invite"
+
 imageBlob:
   allowScrapedImageUpload: true
   serveScrapedBlobsToNonOwners: true

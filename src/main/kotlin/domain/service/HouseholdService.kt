@@ -10,6 +10,7 @@ import com.tenmilelabs.domain.exception.NotHouseholdMemberException
 import com.tenmilelabs.domain.exception.NotHouseholdOwnerException
 import com.tenmilelabs.domain.model.Household
 import com.tenmilelabs.domain.model.HouseholdInvite
+import com.tenmilelabs.domain.model.HouseholdInvitePreview
 import com.tenmilelabs.domain.model.HouseholdMembership
 import com.tenmilelabs.domain.model.HouseholdRole
 import com.tenmilelabs.domain.model.NewHouseholdInvite
@@ -98,6 +99,12 @@ class HouseholdService(
         expiresInHours: Long?,
     ): Pair<HouseholdInvite, String> {
         requireOwner(householdId, callerId)
+        if (maxUses != null && maxUses <= 0) {
+            throw HouseholdValidationException("maxUses must be positive")
+        }
+        if (expiresInHours != null && expiresInHours <= 0) {
+            throw HouseholdValidationException("expiresInHours must be positive")
+        }
 
         val inviteeUserId = inviteeEmail?.let { email ->
             userRepository.findUserByEmail(email)?.uuid
@@ -155,6 +162,27 @@ class HouseholdService(
             throw InviteNotForCallerException("Invite $inviteId is not addressed to caller $callerId")
         }
         householdRepository.revokeInvite(inviteId, millisecondPrecisionNow())
+    }
+
+    /**
+     * Unauthenticated-friendly preview of what a token invites the caller into — just enough for a
+     * signed-out link tap to show "Join Jose's household?" before forcing sign-in. Applies the same
+     * [HouseholdInvite.isUsable] check as accepting: an expired/revoked/exhausted invite previews
+     * the same as a nonexistent one, for the same enumeration-resistance reason.
+     */
+    suspend fun previewInvite(token: String): HouseholdInvitePreview {
+        val invite = householdRepository.findInviteByTokenHash(TokenHasher.sha256Base64(token))
+            ?: throw InviteNotFoundException("No invite found for the given token")
+        if (!invite.isUsable(millisecondPrecisionNow())) {
+            throw InviteNotFoundException("No invite found for the given token")
+        }
+        val household = householdRepository.getHousehold(invite.householdId)
+            ?: throw InviteNotFoundException("No invite found for the given token")
+        val inviter = userRepository.findUserById(invite.createdBy)
+        return HouseholdInvitePreview(
+            householdName = household.name,
+            inviterDisplayName = inviter?.displayName ?: "",
+        )
     }
 
     suspend fun joinByToken(token: String, callerId: UUID): Household {
