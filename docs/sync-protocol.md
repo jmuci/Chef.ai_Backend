@@ -1015,9 +1015,6 @@ UPDATE grocery_list_item_checks SET server_updated_at = :now
   WHERE meal_plan_id IN (SELECT id FROM meal_plans WHERE household_id = :id);
 ```
 
-(The `grocery_list_item_checks` half is a no-op until that table exists — see
-`docs/household-architecture.md`.)
-
 Without this, a plan that was already shared before the joiner's device last synced could sit
 *behind* their cursor forever: `findDeltaMealPlans`'s `server_updated_at > since` filter would
 never admit a row stamped before the joiner even owned a cursor that new. Bumping every
@@ -1032,6 +1029,75 @@ and transiently re-delivers already-synced rows to every *existing* member too (
 idempotent upserts). The alternative, a per-source cursor floor, is more surgical but requires
 threading a second `since` value through every widened delta query — a far larger blast radius for
 what a household of 2–6 people doesn't need.
+
+---
+
+## Grocery List
+
+Grocery-item checkbox state syncs through the same push/pull endpoints, via a `groceryListItems`
+array on `SyncPushRequest`, `SyncPushResponse` (as `GroceryItemPushResults`), and
+`SyncPullResponse`. An item only ever exists inside a meal plan's household-sharing scope — there
+is no standalone grocery-list entity or endpoint.
+
+**Push** — include `groceryListItems` in the `POST /sync/push` body:
+
+```json
+{
+  "recipes": [],
+  "groceryListItems": [
+    {
+      "mealPlanId": "<uuid>",
+      "itemKey": "eggs",
+      "checked": true,
+      "checkedBy": null,
+      "updatedAt": 1234567890,
+      "deletedAt": null
+    }
+  ]
+}
+```
+
+- **`itemKey`** — client-derived and opaque (e.g. a normalized ingredient name); the server never
+  interprets it, only validates it non-blank and ≤ 256 characters. Together with `mealPlanId` it's
+  the item's whole identity — there's no surrogate id.
+- **`checked`** is an explicit boolean, **not** a tombstone-on-uncheck. This is a deliberate
+  departure from the tombstone pattern every other sync-participating row uses: unchecking an item
+  is an ordinary LWW update, so a check/uncheck cycle never accumulates `deleted_at` rows the way a
+  delete-then-recreate would. `deletedAt` means only "this item left the list" (e.g. removed from
+  the plan), a genuinely different event from unchecking it.
+- **`checkedBy`** in the request is ignored. The server always derives it from the pushing caller —
+  whoever's device performed the toggle — never trusting the payload: `userId` when `checked` is
+  `true`, `null` when `checked` is `false` (nobody currently has an unchecked item "checked").
+- **Authorization choke point**: `SyncRepository.getMealPlanForMember(mealPlanId, callerId) != null`,
+  the identical check meal-plan pushes use. Without it, any authenticated caller could write
+  checkbox state against an arbitrary meal-plan id.
+- Same LWW conflict check as recipes and meal plans: `existing.serverUpdatedAtMillis >
+  item.updatedAt`.
+- **Push response** gains `groceryListItems: GroceryItemPushResults` — `accepted` (mealPlanId +
+  itemKey + serverUpdatedAt), `conflicts` (a flat list of `{mealPlanId, itemKey}` identifiers — no
+  `serverVersion` payload, same posture as meal-plan conflicts), and `errors`:
+
+| Code | Meaning |
+|------|---------|
+| `INVALID_MEAL_PLAN_ID` | `mealPlanId` is not a valid UUID |
+| `MEAL_PLAN_NOT_ACCESSIBLE` | Plan doesn't exist, or the caller isn't its owner or an active member of its household |
+| `INVALID_ITEM_KEY` | `itemKey` is blank or longer than 256 characters |
+
+**Pull** — `GET /sync/pull` includes `groceryListItems: List<SyncGroceryListItem>`. Visible items
+are those on a meal plan the caller owns or their active household shares — the same
+`getMealPlanForMember` reach, widened to every item on every accessible plan. Not paginated (same
+as `bookmarkedRecipes`/`mealPlans`): every call returns its full matching set, and plays no part in
+the pull cursor, which recipes alone drive.
+
+**Removal tombstones**: identical mechanism to meal plans (see above) — if the caller was removed
+from a household after their `since` cursor, every grocery item on a plan still under that
+household is returned with `deletedAt` synthesized to that removal's `server_removed_at`, per
+caller, without touching the real row.
+
+**Cursor backfill on join**: `HouseholdRepository.bumpServerUpdatedAtForHouseholdRows` bumps
+`grocery_list_item_checks.server_updated_at` for every item under the household's plans, in the
+same transaction and for the same reason it bumps `meal_plans` (see "Cursor Backfill on Join"
+above).
 
 ---
 

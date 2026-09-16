@@ -6,10 +6,16 @@ import com.tenmilelabs.application.dto.BookmarkPushError
 import com.tenmilelabs.application.dto.BookmarkPushResult
 import com.tenmilelabs.application.dto.ConflictEntity
 import com.tenmilelabs.application.dto.ConflictReasons
+import com.tenmilelabs.application.dto.GroceryItemErrors
+import com.tenmilelabs.application.dto.GroceryItemIdentifier
+import com.tenmilelabs.application.dto.GroceryItemPushError
+import com.tenmilelabs.application.dto.GroceryItemPushResult
+import com.tenmilelabs.application.dto.GroceryItemPushResults
 import com.tenmilelabs.application.dto.MealPlanPushResult
 import com.tenmilelabs.application.dto.MealPlanPushResults
 import com.tenmilelabs.application.dto.SyncError
 import com.tenmilelabs.application.dto.SyncErrors
+import com.tenmilelabs.application.dto.SyncGroceryListItem
 import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushRequest
@@ -196,6 +202,7 @@ class SyncService(
 
         val (bookmarkResults, bookmarkErrors) = processBookmarks(userId, request)
         val mealPlanResults = processMealPlans(userId, request.mealPlans)
+        val groceryResults = processGroceryListItems(userId, request.groceryListItems)
 
         return SyncPushResponse(
             accepted = accepted,
@@ -205,7 +212,8 @@ class SyncService(
             referenceData = conflictReferenceData,
             bookmarkedRecipes = bookmarkResults,
             bookmarkErrors = bookmarkErrors,
-            mealPlans = mealPlanResults
+            mealPlans = mealPlanResults,
+            groceryListItems = groceryResults
         )
     }
 
@@ -306,6 +314,75 @@ class SyncService(
         }
 
         return MealPlanPushResults(accepted = accepted, conflicts = conflicts, errors = errors)
+    }
+
+    /**
+     * Mirrors [processMealPlans]'s per-item shape (backend prompt §6.4). The authorization choke
+     * point is [SyncRepository.getMealPlanForMember] — without it, any authenticated caller could
+     * write checks against an arbitrary meal plan id.
+     */
+    private suspend fun processGroceryListItems(
+        userId: UUID,
+        items: List<SyncGroceryListItem>
+    ): GroceryItemPushResults {
+        if (items.isEmpty()) return GroceryItemPushResults()
+
+        val accepted = mutableListOf<GroceryItemPushResult>()
+        val conflicts = mutableListOf<GroceryItemIdentifier>()
+        val errors = mutableListOf<GroceryItemPushError>()
+
+        items.forEach { item ->
+            val mealPlanId = try {
+                UUID.fromString(item.mealPlanId)
+            } catch (_: IllegalArgumentException) {
+                errors += GroceryItemPushError(
+                    item.mealPlanId,
+                    item.itemKey,
+                    GroceryItemErrors.INVALID_MEAL_PLAN_ID,
+                    GroceryItemErrors.INVALID_MEAL_PLAN_ID.message
+                )
+                return@forEach
+            }
+
+            if (item.itemKey.isBlank() || item.itemKey.length > 256) {
+                errors += GroceryItemPushError(
+                    item.mealPlanId,
+                    item.itemKey,
+                    GroceryItemErrors.INVALID_ITEM_KEY,
+                    GroceryItemErrors.INVALID_ITEM_KEY.message
+                )
+                return@forEach
+            }
+
+            if (syncRepository.getMealPlanForMember(mealPlanId, userId) == null) {
+                errors += GroceryItemPushError(
+                    item.mealPlanId,
+                    item.itemKey,
+                    GroceryItemErrors.MEAL_PLAN_NOT_ACCESSIBLE,
+                    GroceryItemErrors.MEAL_PLAN_NOT_ACCESSIBLE.message
+                )
+                return@forEach
+            }
+
+            val existing = syncRepository.getGroceryListItem(mealPlanId, item.itemKey)
+            if (existing != null && existing.serverUpdatedAtMillis > item.updatedAt) {
+                conflicts += GroceryItemIdentifier(item.mealPlanId, item.itemKey)
+                log.info(
+                    "Grocery item push conflict for user $userId, mealPlanId=${item.mealPlanId}, " +
+                        "itemKey=${item.itemKey}: server is newer"
+                )
+                return@forEach
+            }
+
+            val now = millisecondPrecisionNow()
+            // checkedBy reflects who actually performed the toggle - the pushing caller - never
+            // trusted from the payload; null when unchecking (nobody currently has it checked).
+            val effectiveItem = item.copy(checkedBy = if (item.checked) userId.toString() else null)
+            syncRepository.upsertGroceryListItem(effectiveItem, now)
+            accepted += GroceryItemPushResult(item.mealPlanId, item.itemKey, now.toEpochMilliseconds())
+        }
+
+        return GroceryItemPushResults(accepted = accepted, conflicts = conflicts, errors = errors)
     }
 
     private suspend fun processBookmarks(
@@ -421,6 +498,7 @@ class SyncService(
 
         val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
         val mealPlans = syncRepository.findDeltaMealPlans(userId, sinceMillis)
+        val groceryItems = syncRepository.findDeltaGroceryListItems(userId, sinceMillis)
 
         // Union of recipe creators and meal-plan owners (backend prompt §0.2): the client upserts
         // `creators` before meal plans to satisfy a local FK on the owner id, so a household
@@ -451,6 +529,7 @@ class SyncService(
             labels = refData.labels,
             bookmarkedRecipes = bookmarks,
             mealPlans = mealPlans.map { it.plan },
+            groceryListItems = groceryItems.map { it.item },
             serverTimestamp = cursor,
             hasMore = hasMore
         )

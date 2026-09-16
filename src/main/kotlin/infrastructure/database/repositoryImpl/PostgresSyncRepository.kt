@@ -2,6 +2,7 @@ package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.application.dto.*
 import com.tenmilelabs.domain.repository.RecipeRankingMetadata
+import com.tenmilelabs.domain.repository.SyncGroceryItemRecord
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
@@ -548,22 +549,7 @@ class PostgresSyncRepository : SyncRepository {
                 }
                 .map(::toSyncMealPlanRecord)
 
-            // Removal tombstones: for every household userId was removed from after sinceMillis,
-            // synthesize deletedAt = that removal's server_removed_at on every plan still under
-            // it. Per-caller and synthetic — see findDeltaMealPlans's KDoc.
-            val removals = HouseholdMemberTable
-                .selectAll()
-                .where {
-                    (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
-                        (HouseholdMemberTable.status eq "REMOVED") and
-                        (HouseholdMemberTable.server_removed_at greater sinceInstant)
-                }
-                .mapNotNull { row ->
-                    val removedAt = row[HouseholdMemberTable.server_removed_at] ?: return@mapNotNull null
-                    row[HouseholdMemberTable.household_id].value to removedAt.toEpochMilliseconds()
-                }
-
-            val tombstones = removals.flatMap { (removedHouseholdId, removedAtMillis) ->
+            val tombstones = removedHouseholdsSince(userId, sinceInstant).flatMap { (removedHouseholdId, removedAtMillis) ->
                 MealPlanTable
                     .selectAll()
                     .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
@@ -574,6 +560,116 @@ class PostgresSyncRepository : SyncRepository {
                 .distinctBy { it.plan.uuid }
                 .sortedBy { it.serverUpdatedAtMillis }
         }
+
+    override suspend fun getGroceryListItem(mealPlanId: UUID, itemKey: String): SyncGroceryItemRecord? =
+        suspendTransaction {
+            GroceryListItemCheckTable
+                .selectAll()
+                .where {
+                    (GroceryListItemCheckTable.meal_plan_id eq EntityID(mealPlanId, MealPlanTable)) and
+                        (GroceryListItemCheckTable.item_key eq itemKey)
+                }
+                .firstOrNull()
+                ?.let(::toSyncGroceryItemRecord)
+        }
+
+    override suspend fun upsertGroceryListItem(item: SyncGroceryListItem, serverUpdatedAt: Instant): Unit =
+        suspendTransaction {
+            val planEntityId = EntityID(UUID.fromString(item.mealPlanId), MealPlanTable)
+            val checkedByEntityId = item.checkedBy?.let { EntityID(UUID.fromString(it), UserTable) }
+
+            val exists = GroceryListItemCheckTable
+                .selectAll()
+                .where {
+                    (GroceryListItemCheckTable.meal_plan_id eq planEntityId) and
+                        (GroceryListItemCheckTable.item_key eq item.itemKey)
+                }
+                .limit(1)
+                .any()
+
+            if (exists) {
+                GroceryListItemCheckTable.update({
+                    (GroceryListItemCheckTable.meal_plan_id eq planEntityId) and
+                        (GroceryListItemCheckTable.item_key eq item.itemKey)
+                }) {
+                    it[checked] = item.checked
+                    it[checked_by] = checkedByEntityId
+                    it[updated_at] = item.updatedAt
+                    it[deleted_at] = item.deletedAt
+                    it[GroceryListItemCheckTable.server_updated_at] = serverUpdatedAt
+                }
+            } else {
+                GroceryListItemCheckTable.insert {
+                    it[meal_plan_id] = planEntityId
+                    it[item_key] = item.itemKey
+                    it[checked] = item.checked
+                    it[checked_by] = checkedByEntityId
+                    it[updated_at] = item.updatedAt
+                    it[deleted_at] = item.deletedAt
+                    it[GroceryListItemCheckTable.server_updated_at] = serverUpdatedAt
+                }
+            }
+        }
+
+    override suspend fun findDeltaGroceryListItems(userId: UUID, sinceMillis: Long): List<SyncGroceryItemRecord> =
+        suspendTransaction {
+            val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
+            val householdId = resolveActiveHouseholdId(userId)
+
+            val accessiblePlanIds = MealPlanTable
+                .selectAll()
+                .where { memberAccessClause(userId, householdId) }
+                .map { it[MealPlanTable.id] }
+
+            val normal = if (accessiblePlanIds.isEmpty()) {
+                emptyList()
+            } else {
+                GroceryListItemCheckTable
+                    .selectAll()
+                    .where {
+                        (GroceryListItemCheckTable.server_updated_at greater sinceInstant) and
+                            (GroceryListItemCheckTable.meal_plan_id inList accessiblePlanIds)
+                    }
+                    .map(::toSyncGroceryItemRecord)
+            }
+
+            val tombstones = removedHouseholdsSince(userId, sinceInstant).flatMap { (removedHouseholdId, removedAtMillis) ->
+                val planIdsUnderHousehold = MealPlanTable
+                    .selectAll()
+                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
+                    .map { it[MealPlanTable.id] }
+                if (planIdsUnderHousehold.isEmpty()) {
+                    emptyList()
+                } else {
+                    GroceryListItemCheckTable
+                        .selectAll()
+                        .where { GroceryListItemCheckTable.meal_plan_id inList planIdsUnderHousehold }
+                        .map { toSyncGroceryItemRecord(it).withSyntheticDeletedAt(removedAtMillis) }
+                }
+            }
+
+            (normal + tombstones)
+                .distinctBy { it.item.mealPlanId to it.item.itemKey }
+                .sortedBy { it.serverUpdatedAtMillis }
+        }
+
+    /**
+     * Households [userId] was removed from after [sinceInstant], as (householdId,
+     * removedAtEpochMillis) pairs — the shared basis for [findDeltaMealPlans] and
+     * [findDeltaGroceryListItems]'s per-caller removal tombstones (backend prompt §6.2).
+     */
+    private fun removedHouseholdsSince(userId: UUID, sinceInstant: Instant): List<Pair<UUID, Long>> =
+        HouseholdMemberTable
+            .selectAll()
+            .where {
+                (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
+                    (HouseholdMemberTable.status eq "REMOVED") and
+                    (HouseholdMemberTable.server_removed_at greater sinceInstant)
+            }
+            .mapNotNull { row ->
+                val removedAt = row[HouseholdMemberTable.server_removed_at] ?: return@mapNotNull null
+                row[HouseholdMemberTable.household_id].value to removedAt.toEpochMilliseconds()
+            }
 
     override suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID> = suspendTransaction {
         val householdId = resolveActiveHouseholdId(userId) ?: return@suspendTransaction emptySet()
@@ -897,6 +993,22 @@ class PostgresSyncRepository : SyncRepository {
     /** Synthesizes a per-caller removal tombstone — the real row's `deleted_at` is untouched. */
     private fun SyncMealPlanRecord.withSyntheticDeletedAt(deletedAtMillis: Long): SyncMealPlanRecord =
         copy(plan = plan.copy(deletedAt = deletedAtMillis))
+
+    /** Synthesizes a per-caller removal tombstone — the real row's `deleted_at` is untouched. */
+    private fun SyncGroceryItemRecord.withSyntheticDeletedAt(deletedAtMillis: Long): SyncGroceryItemRecord =
+        copy(item = item.copy(deletedAt = deletedAtMillis))
+
+    private fun toSyncGroceryItemRecord(row: ResultRow): SyncGroceryItemRecord = SyncGroceryItemRecord(
+        item = SyncGroceryListItem(
+            mealPlanId = row[GroceryListItemCheckTable.meal_plan_id].value.toString(),
+            itemKey = row[GroceryListItemCheckTable.item_key],
+            checked = row[GroceryListItemCheckTable.checked],
+            checkedBy = row[GroceryListItemCheckTable.checked_by]?.value?.toString(),
+            updatedAt = row[GroceryListItemCheckTable.updated_at],
+            deletedAt = row[GroceryListItemCheckTable.deleted_at]
+        ),
+        serverUpdatedAtMillis = row[GroceryListItemCheckTable.server_updated_at].toEpochMilliseconds()
+    )
 
     /**
      * Maps one recipe row into a sync aggregate payload plus server cursor value.

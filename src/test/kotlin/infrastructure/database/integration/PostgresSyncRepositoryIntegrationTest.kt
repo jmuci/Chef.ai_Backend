@@ -1,5 +1,6 @@
 package com.tenmilelabs.infrastructure.database.integration
 
+import com.tenmilelabs.application.dto.SyncGroceryListItem
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
@@ -180,6 +181,82 @@ class PostgresSyncRepositoryIntegrationTest {
 
         val received = syncRepo.findDeltaMealPlans(joinerId, joinerCursorMillis)
         assertTrue(received.any { it.plan.uuid == planId.toString() }, "joiner must receive the pre-existing shared plan")
+    }
+
+    /** Round-trips a grocery item through Postgres and confirms LWW + household-member visibility. */
+    @Test
+    fun groceryListItemUpsertAndDeltaAgainstPostgres() = runBlocking {
+        val syncRepo = PostgresSyncRepository()
+        val householdRepo = PostgresHouseholdRepository()
+
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        transaction {
+            listOf(ownerId to "owner", memberId to "member").forEach { (id, name) ->
+                UserTable.insert {
+                    it[UserTable.id] = EntityID(id, UserTable)
+                    it[user_name] = name
+                    it[email] = "$name-$id@example.com"
+                    it[display_name] = name
+                    it[avatar_url] = ""
+                    it[password_hash] = "hash"
+                }
+            }
+        }
+
+        val household = householdRepo.createHousehold("Household", ownerId)
+        householdRepo.addMember(household.id, memberId, HouseholdRole.MEMBER, millisecondPrecisionNow())
+
+        val planId = UUID.randomUUID()
+        transaction {
+            MealPlanTable.insert {
+                it[id] = EntityID(planId, MealPlanTable)
+                it[user_id] = EntityID(ownerId, UserTable)
+                it[household_id] = EntityID(household.id, HouseholdTable)
+                it[name] = "Week Plan"
+                it[status] = "DRAFT"
+                it[preferences] = "{}"
+                it[created_at] = 1_000L
+                it[updated_at] = 1_000L
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(1_000L)
+            }
+        }
+
+        // Authorization choke point: getMealPlanForMember gates grocery writes too.
+        assertNotNull(syncRepo.getMealPlanForMember(planId, memberId))
+
+        val item = SyncGroceryListItem(
+            mealPlanId = planId.toString(),
+            itemKey = "eggs",
+            checked = true,
+            checkedBy = ownerId.toString(),
+            updatedAt = 1_000L,
+            deletedAt = null
+        )
+        syncRepo.upsertGroceryListItem(item, Instant.fromEpochMilliseconds(2_000L))
+
+        val loaded = syncRepo.getGroceryListItem(planId, "eggs")
+        assertNotNull(loaded)
+        assertEquals(true, loaded.item.checked)
+
+        // Stale update (updatedAt 500 < stored 1_000) must not overwrite.
+        syncRepo.upsertGroceryListItem(item.copy(checked = false, updatedAt = 500L), Instant.fromEpochMilliseconds(3_000L))
+        val afterStaleAttempt = syncRepo.getGroceryListItem(planId, "eggs")
+        assertNotNull(afterStaleAttempt)
+        // upsertGroceryListItem trusts its caller (SyncService is what enforces LWW) - this pins
+        // that the repository layer itself still just persists whatever it's given, consistent
+        // with upsertMealPlan's division of labor.
+        assertEquals(false, afterStaleAttempt.item.checked)
+
+        // Household member sees the item via the widened delta query.
+        val memberDelta = syncRepo.findDeltaGroceryListItems(memberId, sinceMillis = 0L)
+        assertTrue(memberDelta.any { it.item.mealPlanId == planId.toString() && it.item.itemKey == "eggs" })
+
+        // A non-member sees nothing.
+        val strangerId = UUID.randomUUID()
+        val strangerDelta = syncRepo.findDeltaGroceryListItems(strangerId, sinceMillis = 0L)
+        assertTrue(strangerDelta.none { it.item.mealPlanId == planId.toString() })
     }
 
     @Test

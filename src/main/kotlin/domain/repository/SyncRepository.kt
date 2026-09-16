@@ -1,6 +1,7 @@
 package com.tenmilelabs.domain.repository
 
 import com.tenmilelabs.application.dto.SyncBookmark
+import com.tenmilelabs.application.dto.SyncGroceryListItem
 import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.application.dto.SyncMealPlanDayDto
 import com.tenmilelabs.application.dto.SyncRecipe
@@ -16,6 +17,11 @@ data class SyncRecipeRecord(
 
 data class SyncMealPlanRecord(
     val plan: SyncMealPlanDto,
+    val serverUpdatedAtMillis: Long
+)
+
+data class SyncGroceryItemRecord(
+    val item: SyncGroceryListItem,
     val serverUpdatedAtMillis: Long
 )
 
@@ -219,6 +225,29 @@ interface SyncRepository {
      * call and plays no part in `/sync/pull`'s cursor, which [findDeltaRecipes] alone drives.
      */
     suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord>
+
+    // ── Grocery List ──────────────────────────────────────────────────────────
+
+    /** Loads one grocery item by its compound key. Unscoped — the caller must have already
+     *  verified access to [mealPlanId] via [getMealPlanForMember] before calling this. */
+    suspend fun getGroceryListItem(mealPlanId: UUID, itemKey: String): SyncGroceryItemRecord?
+
+    /**
+     * Upserts a grocery item using last-writer-wins semantics on [SyncGroceryListItem.updatedAt].
+     * Trusts [item] completely — the caller ([com.tenmilelabs.domain.service.SyncService]) must
+     * have already validated `mealPlanId`/`itemKey` and the authorization choke point
+     * ([getMealPlanForMember]), same division of labor as [upsertMealPlan].
+     */
+    suspend fun upsertGroceryListItem(item: SyncGroceryListItem, serverUpdatedAt: Instant)
+
+    /**
+     * Returns grocery items visible to [userId] — under a plan they own or their active household
+     * shares — whose `server_updated_at` is after [sinceMillis]. Includes the same **removal
+     * tombstones** as [findDeltaMealPlans]: every item under a plan that belonged to a household
+     * [userId] was removed from after [sinceMillis] is returned with `deletedAt` synthesized to
+     * that removal's `server_removed_at`. Not paginated, same as [findDeltaMealPlans].
+     */
+    suspend fun findDeltaGroceryListItems(userId: UUID, sinceMillis: Long): List<SyncGroceryItemRecord>
 
     /**
      * Sets the [status] field and bumps [server_updated_at] on the given plan.

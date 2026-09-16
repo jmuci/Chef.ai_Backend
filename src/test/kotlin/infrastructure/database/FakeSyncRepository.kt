@@ -1,6 +1,7 @@
 package com.tenmilelabs.infrastructure.database
 
 import com.tenmilelabs.application.dto.SyncBookmark
+import com.tenmilelabs.application.dto.SyncGroceryListItem
 import com.tenmilelabs.application.dto.SyncIngredient
 import com.tenmilelabs.application.dto.SyncLabel
 import com.tenmilelabs.application.dto.SyncMealPlanDayDto
@@ -10,6 +11,7 @@ import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.RecipeRankingMetadata
+import com.tenmilelabs.domain.repository.SyncGroceryItemRecord
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
@@ -40,6 +42,8 @@ class FakeSyncRepository : SyncRepository {
     // key: userId, value: (householdId, serverRemovedAtMillis) of their most recent removal -
     // mirrors the household_members query findDeltaMealPlans's tombstone branch runs
     private val removedHouseholdMembership = mutableMapOf<UUID, Pair<UUID, Long>>()
+    // key: (mealPlanId, itemKey), value: record with server timestamp
+    private val groceryItems = mutableMapOf<Pair<UUID, String>, SyncGroceryItemRecord>()
     // candidate recipe IDs for generation (injectable per-test)
     private val candidateRecipeIds = mutableListOf<UUID>()
     private val rankingMetadataByRecipe = mutableMapOf<UUID, RecipeRankingMetadata>()
@@ -120,6 +124,11 @@ class FakeSyncRepository : SyncRepository {
         val uuid = UUID.fromString(plan.uuid)
         mealPlans[uuid] = SyncMealPlanRecord(plan = plan, serverUpdatedAtMillis = serverUpdatedAtMillis)
         return uuid
+    }
+
+    fun seedGroceryItem(item: SyncGroceryListItem, serverUpdatedAtMillis: Long = 0L) {
+        val key = UUID.fromString(item.mealPlanId) to item.itemKey
+        groceryItems[key] = SyncGroceryItemRecord(item = item, serverUpdatedAtMillis = serverUpdatedAtMillis)
     }
 
     /** Test helper — makes [userId] appear as an ACTIVE member of [householdId]. */
@@ -302,6 +311,39 @@ class FakeSyncRepository : SyncRepository {
             .flatMap { record -> record.plan.days.flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) } }
             .map { UUID.fromString(it) }
             .toSet()
+
+    // ── Grocery List ──────────────────────────────────────────────────────────
+
+    override suspend fun getGroceryListItem(mealPlanId: UUID, itemKey: String): SyncGroceryItemRecord? =
+        groceryItems[mealPlanId to itemKey]
+
+    override suspend fun upsertGroceryListItem(item: SyncGroceryListItem, serverUpdatedAt: Instant) {
+        val key = UUID.fromString(item.mealPlanId) to item.itemKey
+        groceryItems[key] = SyncGroceryItemRecord(item = item, serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds())
+    }
+
+    override suspend fun findDeltaGroceryListItems(userId: UUID, sinceMillis: Long): List<SyncGroceryItemRecord> {
+        val normal = groceryItems.values.filter { record ->
+            record.serverUpdatedAtMillis > sinceMillis &&
+                mealPlans[UUID.fromString(record.item.mealPlanId)]?.let { hasMemberAccess(it, userId) } == true
+        }
+
+        val removal = removedHouseholdMembership[userId]
+        val tombstones = if (removal != null && removal.second > sinceMillis) {
+            val (removedHouseholdId, serverRemovedAtMillis) = removal
+            groceryItems.values
+                .filter { record ->
+                    mealPlans[UUID.fromString(record.item.mealPlanId)]?.plan?.householdId == removedHouseholdId.toString()
+                }
+                .map { it.copy(item = it.item.copy(deletedAt = serverRemovedAtMillis)) }
+        } else {
+            emptyList()
+        }
+
+        return (normal + tombstones)
+            .distinctBy { it.item.mealPlanId to it.item.itemKey }
+            .sortedBy { it.serverUpdatedAtMillis }
+    }
 
     override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant) {
         val existing = mealPlans[planId] ?: return

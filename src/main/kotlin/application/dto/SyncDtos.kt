@@ -8,7 +8,8 @@ import kotlinx.serialization.Serializable
 data class SyncPushRequest(
     val recipes: List<SyncRecipe>,
     val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
-    val mealPlans: List<SyncMealPlanDto> = emptyList()
+    val mealPlans: List<SyncMealPlanDto> = emptyList(),
+    val groceryListItems: List<SyncGroceryListItem> = emptyList()
 )
 
 @Serializable
@@ -64,7 +65,8 @@ data class SyncPushResponse(
     val referenceData: SyncReferenceData,
     @EncodeDefault val bookmarkedRecipes: List<BookmarkPushResult> = emptyList(),
     @EncodeDefault val bookmarkErrors: List<BookmarkPushError> = emptyList(),
-    @EncodeDefault val mealPlans: MealPlanPushResults = MealPlanPushResults()
+    @EncodeDefault val mealPlans: MealPlanPushResults = MealPlanPushResults(),
+    @EncodeDefault val groceryListItems: GroceryItemPushResults = GroceryItemPushResults()
 )
 
 @Serializable
@@ -254,6 +256,7 @@ data class SyncPullResponse(
     val labels: List<SyncLabel>,
     @EncodeDefault val bookmarkedRecipes: List<SyncBookmark> = emptyList(),
     @EncodeDefault val mealPlans: List<SyncMealPlanDto> = emptyList(),
+    @EncodeDefault val groceryListItems: List<SyncGroceryListItem> = emptyList(),
     val serverTimestamp: Long,
     val hasMore: Boolean
 )
@@ -309,4 +312,61 @@ data class GenerateMealPlanResponse(
     val uuid: String,
     val status: String,
     val updatedAt: Long
+)
+
+// ── Grocery List DTOs ───────────────────────────────────────────────────────
+
+/**
+ * An explicit `checked: Boolean`, not a tombstone-on-uncheck: unchecking an item is an ordinary
+ * LWW update, not a delete-then-recreate, so a toggle/untoggle cycle never accumulates tombstone
+ * rows. [deletedAt] means only "this item left the list entirely" (e.g. removed from the plan).
+ */
+@Serializable
+data class SyncGroceryListItem(
+    val mealPlanId: String,
+    /** Client-derived, opaque (e.g. a normalized ingredient name); validated non-blank, <= 256 chars. */
+    val itemKey: String,
+    val checked: Boolean,
+    /** Whoever last checked/unchecked this item. Server-derived from the pushing caller, never
+     *  trusted from the payload — see [com.tenmilelabs.domain.service.SyncService]. */
+    val checkedBy: String?,
+    /** Client logical clock; the LWW comparand against `serverUpdatedAtMillis`. */
+    val updatedAt: Long,
+    val deletedAt: Long?
+)
+
+@Serializable
+data class GroceryItemPushResult(
+    val mealPlanId: String,
+    val itemKey: String,
+    val serverUpdatedAt: Long
+)
+
+/** Identifies one grocery item by its compound key — used where a full item body isn't needed. */
+@Serializable
+data class GroceryItemIdentifier(
+    val mealPlanId: String,
+    val itemKey: String
+)
+
+@Serializable
+data class GroceryItemPushError(
+    val mealPlanId: String,
+    val itemKey: String,
+    val reason: GroceryItemErrors,
+    val message: String
+)
+
+@Serializable
+enum class GroceryItemErrors(val message: String) {
+    INVALID_MEAL_PLAN_ID("mealPlanId is not a valid UUID"),
+    MEAL_PLAN_NOT_ACCESSIBLE("meal plan does not exist or caller cannot edit it"),
+    INVALID_ITEM_KEY("itemKey must be non-blank and at most 256 characters")
+}
+
+@Serializable
+data class GroceryItemPushResults(
+    val accepted: List<GroceryItemPushResult> = emptyList(),
+    val conflicts: List<GroceryItemIdentifier> = emptyList(),
+    val errors: List<GroceryItemPushError> = emptyList()
 )

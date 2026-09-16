@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.Database
 // Import all table objects
 import com.tenmilelabs.infrastructure.database.tables.AllergenTable
 import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
+import com.tenmilelabs.infrastructure.database.tables.GroceryListItemCheckTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdInviteTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
@@ -56,7 +57,8 @@ fun initDatabaseAndSchema() {
             UserPreferencesTable,
             HouseholdTable,
             HouseholdMemberTable,
-            HouseholdInviteTable
+            HouseholdInviteTable,
+            GroceryListItemCheckTable
         )
 
         createRecipeSearchIndexIfMissing()
