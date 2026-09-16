@@ -43,12 +43,37 @@ interface SyncRepository {
      * Results are ordered by [server_updated_at] ascending for deterministic
      * cursor-based paging. Pass [limit] + 1 at the call site to cheaply detect
      * whether a next page exists.
+     *
+     * Deliberately does **not** also widen for household-shared recipes (see
+     * [findHouseholdVisibleRecipeIds]) — that set is unconditional on `server_updated_at` (a
+     * true gap, like [collectReferenceData]'s helpers), and blending an unconditional set into
+     * this method's own `ORDER BY server_updated_at` pagination would let old gap rows drag the
+     * `/sync/pull` cursor backwards. [com.tenmilelabs.domain.service.SyncService.pullRecipes]
+     * merges the two as separate steps instead, exactly as it already does for `creators`.
      */
     suspend fun findDeltaRecipes(
         userId: UUID,
         sinceMillis: Long,
         limit: Int
     ): List<SyncRecipeRecord>
+
+    /**
+     * Recipe UUIDs visible to [userId] purely through household sharing: referenced (as a dinner
+     * or lunch pick) by a day in a non-deleted meal plan under the caller's active household —
+     * regardless of the recipe's own `privacy` or who created it. A household member shares a
+     * recipe simply by using it in a shared plan; this read path trusts that every such reference
+     * was already validated accessible-to-its-pusher at push time (see [upsertMealPlan]'s KDoc),
+     * so it applies no further filtering itself. Empty if [userId] has no active household.
+     */
+    suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID>
+
+    /**
+     * True if [recipeId] is visible to [userId] specifically via [findHouseholdVisibleRecipeIds]
+     * — i.e. neither owned by [userId] nor `PUBLIC`, but reachable through a shared meal plan.
+     * Used by [com.tenmilelabs.domain.service.SyncService.getRecipeDetail] to extend the
+     * single-recipe-fetch visibility rule the same way the pull-side gap clause does.
+     */
+    suspend fun isRecipeHouseholdVisible(userId: UUID, recipeId: UUID): Boolean
 
     /**
      * Returns true if an ingredient with [uuid] exists in the catalogue,
@@ -137,22 +162,61 @@ interface SyncRepository {
     // ── Meal Plans ────────────────────────────────────────────────────────────
 
     /**
-     * Loads a single meal plan by [uuid] scoped to [userId].
-     * Returns null if not found or owned by a different user.
+     * True if [userId] is currently an ACTIVE member of [householdId]. Used only to validate a
+     * brand-new shared plan's claimed `householdId` at push time — an unvalidated claim would let
+     * a push plant a plan (and, via the recipe gap clause, leak referenced recipes) into a
+     * household the pusher doesn't actually belong to.
      */
-    suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord?
+    suspend fun isActiveHouseholdMember(userId: UUID, householdId: UUID): Boolean
 
     /**
-     * Upserts a meal plan using last-writer-wins semantics on [updated_at].
-     * Replaces all [meal_plan_days] rows atomically (delete + re-insert).
-     * When [plan.deletedAt] is non-null the plan is soft-deleted.
+     * Loads a single meal plan by [uuid], visible to [userId] if they own it OR are an active
+     * member of the household it's shared with (`household_id`). Returns null if not found, or
+     * found but not accessible to [userId] — same "don't leak existence" posture as
+     * [isRecipeAccessibleBy]. This is the sole authorization choke point for meal-plan writes:
+     * [com.tenmilelabs.domain.service.SyncService] must reject a push this returns null for
+     * (after using [mealPlanExists] to tell "doesn't exist yet" apart from "exists but forbidden")
+     * rather than letting [upsertMealPlan] silently overwrite a plan the caller can't edit.
      */
-    suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant)
+    suspend fun getMealPlanForMember(uuid: UUID, userId: UUID): SyncMealPlanRecord?
 
     /**
-     * Returns meal plans for [userId] whose [server_updated_at] is after [sinceMillis].
-     * Includes soft-deleted plans (deletedAt non-null) so the client can tombstone them.
-     * Days are nested inside each returned plan.
+     * True if a meal plan with [uuid] exists at all, regardless of ownership/membership. Exists
+     * only to disambiguate [getMealPlanForMember] returning null: "doesn't exist" (a legitimate
+     * new plan — proceed to insert) vs. "exists but the caller can't write it" (reject).
+     */
+    suspend fun mealPlanExists(uuid: UUID): Boolean
+
+    /**
+     * Upserts a meal plan using last-writer-wins semantics on [updated_at]. Replaces all
+     * [meal_plan_days] rows atomically (delete + re-insert). When [plan.deletedAt] is non-null the
+     * plan is soft-deleted.
+     *
+     * [plan.ownerId] and [plan.householdId] are persisted as-is on insert; neither is ever
+     * touched on update (a plan's owner and household assignment change only through
+     * [com.tenmilelabs.domain.service.HouseholdService], never through sync). The caller
+     * ([com.tenmilelabs.domain.service.SyncService]) must have already verified via
+     * [getMealPlanForMember] that the pushing user may write this plan, and — for a brand-new
+     * plan — that [plan.ownerId] names the caller and [plan.householdId] (if any) names their own
+     * active household. This method trusts that verification; it performs none itself.
+     */
+    suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant)
+
+    /**
+     * Returns meal plans visible to [userId] whose [server_updated_at] is after [sinceMillis]:
+     * their own plans, plus plans shared with their current active household. Includes
+     * soft-deleted plans (deletedAt non-null) so the client can tombstone them.
+     *
+     * Also includes **removal tombstones**: if [userId] was removed from a household after
+     * [sinceMillis] (`household_members.status = 'REMOVED' AND server_removed_at > sinceMillis`),
+     * every plan still under that household's `household_id` is returned with `deletedAt`
+     * synthesized to that removal's `server_removed_at` — for this caller only. The underlying
+     * row's real `deleted_at` stays null for everyone still in the household; this is purely a
+     * per-caller signal to drop plans they no longer have access to. See
+     * docs/household-architecture.md.
+     *
+     * Not paginated — same as [findDeltaBookmarks], this returns its full matching set every
+     * call and plays no part in `/sync/pull`'s cursor, which [findDeltaRecipes] alone drives.
      */
     suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord>
 

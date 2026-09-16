@@ -10,6 +10,7 @@ import com.tenmilelabs.application.dto.SyncMealPlanDayDto
 import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.domain.service.RecipeDetailResult
 import com.tenmilelabs.domain.service.SyncService
+import com.tenmilelabs.infrastructure.database.FakeSyncRepository
 import com.tenmilelabs.infrastructure.database.FakeUserPreferencesRepository
 import io.ktor.server.testing.TestApplicationBuilder
 import io.ktor.server.testing.testApplication
@@ -18,6 +19,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class SyncServiceTest {
@@ -475,7 +477,10 @@ class SyncServiceTest {
 
             val response = service.pushRecipes(
                 userId,
-                SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, preferencesJson = preferencesJson)))
+                SyncPushRequest(
+                    recipes = emptyList(),
+                    mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, ownerId = userId, preferencesJson = preferencesJson))
+                )
             )
 
             assertEquals(1, response.mealPlans.accepted.size)
@@ -492,18 +497,290 @@ class SyncServiceTest {
             val userId = UUID.randomUUID()
             val planId = UUID.randomUUID()
 
-            // Server already has a newer version of this plan
-            syncRepo.seedMealPlan(buildMealPlan(planId, updatedAt = 9000L), serverUpdatedAtMillis = 9000L)
+            // Server already has a newer version of this plan, owned by the same user pushing the stale update.
+            syncRepo.seedMealPlan(buildMealPlan(planId, updatedAt = 9000L, ownerId = userId), serverUpdatedAtMillis = 9000L)
 
             val staleJson = """{"planLengthDays":1,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}"""
             val response = service.pushRecipes(
                 userId,
-                SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, preferencesJson = staleJson)))
+                SyncPushRequest(
+                    recipes = emptyList(),
+                    mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, ownerId = userId, preferencesJson = staleJson))
+                )
             )
 
             assertEquals(1, response.mealPlans.conflicts.size)
             assertEquals(null, prefsRepo.getUserPreferences(userId))
         }
+    }
+
+    // ── Households: shared meal plans (backend prompt §6.1–§6.3) ────────────────
+
+    @Test
+    fun sharedPlanPushByANonCreatorMemberIsAccepted() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val response = service.pushRecipes(
+            memberId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                mealPlans = listOf(
+                    buildMealPlan(planId, updatedAt = 2000L, ownerId = ownerId).copy(householdId = householdId.toString())
+                )
+            )
+        )
+
+        assertEquals(1, response.mealPlans.accepted.size)
+    }
+
+    @Test
+    fun pushOfANewPlanClaimingAHouseholdTheCallerIsNotAMemberOfIsRejected() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val foreignHouseholdId = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                mealPlans = listOf(
+                    buildMealPlan(planId, updatedAt = 1000L, ownerId = userId).copy(householdId = foreignHouseholdId.toString())
+                )
+            )
+        )
+
+        assertEquals(1, response.mealPlans.errors.size)
+        assertEquals(SyncErrors.INVALID_HOUSEHOLD, response.mealPlans.errors.single().reason)
+    }
+
+    @Test
+    fun pushOfANewPlanWithAnOwnerIdNotMatchingTheCallerIsRejected() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val someoneElse = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                mealPlans = listOf(buildMealPlan(planId, updatedAt = 1000L, ownerId = someoneElse))
+            )
+        )
+
+        assertEquals(1, response.mealPlans.errors.size)
+        assertEquals(SyncErrors.OWNER_MISMATCH, response.mealPlans.errors.single().reason)
+    }
+
+    @Test
+    fun pushOfAnExistingPlanTheCallerCannotAccessIsRejected() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val strangerId = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId), serverUpdatedAtMillis = 1000L)
+
+        val response = service.pushRecipes(
+            strangerId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                mealPlans = listOf(buildMealPlan(planId, updatedAt = 2000L, ownerId = ownerId))
+            )
+        )
+
+        assertEquals(1, response.mealPlans.errors.size)
+        assertEquals(SyncErrors.MEAL_PLAN_NOT_ACCESSIBLE, response.mealPlans.errors.single().reason)
+    }
+
+    @Test
+    fun sharedPlanPushReferencingARecipeTheCallerCannotAccessIsRejected() = withService { service, repo ->
+        // Closes a leak the recipe gap clause would otherwise open: without this check, any
+        // household member could reference an unrelated private recipe (owned by a third party,
+        // not the pusher) in a shared plan's day and have it leaked to the whole household.
+        val householdId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(memberId, householdId)
+        val strangerId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val strangersPrivateRecipe = sampleRecipe(UUID.randomUUID(), strangerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(strangersPrivateRecipe, serverUpdatedAtMillis = 100L)
+
+        val planId = UUID.randomUUID()
+        val plan = buildMealPlan(planId, updatedAt = 1000L, ownerId = memberId).copy(
+            householdId = householdId.toString(),
+            days = listOf(
+                SyncMealPlanDayDto(
+                    uuid = UUID.randomUUID().toString(),
+                    dayIndex = 0,
+                    dinnerRecipeId = strangersPrivateRecipe.uuid,
+                    lunchRecipeId = null
+                )
+            )
+        )
+
+        val response = service.pushRecipes(memberId, SyncPushRequest(recipes = emptyList(), mealPlans = listOf(plan)))
+
+        assertEquals(1, response.mealPlans.errors.size)
+        assertEquals(SyncErrors.MEAL_PLAN_RECIPE_NOT_ACCESSIBLE, response.mealPlans.errors.single().reason)
+    }
+
+    @Test
+    fun pullTombstonesARemovedMembersSharedPlanButNotAnActiveMembersPlan() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val removedMemberId = UUID.randomUUID()
+        val activeMemberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(activeMemberId, householdId)
+        repo.seedRemovedFromHousehold(removedMemberId, householdId, serverRemovedAtMillis = 5000L)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val removedPull = service.pullRecipes(removedMemberId, sinceMillis = 0L, limit = 10)
+        val tombstoned = removedPull.mealPlans.firstOrNull { it.uuid == planId.toString() }
+        assertNotNull(tombstoned)
+        assertEquals(5000L, tombstoned.deletedAt)
+
+        val activePull = service.pullRecipes(activeMemberId, sinceMillis = 0L, limit = 10)
+        val stillShared = activePull.mealPlans.firstOrNull { it.uuid == planId.toString() }
+        assertNotNull(stillShared)
+        assertEquals(null, stillShared.deletedAt)
+    }
+
+    @Test
+    fun pullIncludesAHouseholdMatesOldPreCursorPrivateRecipeReferencedByASharedPlan() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+
+        val ingredientId = repo.seedIngredient(serverUpdatedAt = 100L)
+        val privateRecipe = sampleRecipe(UUID.randomUUID(), ownerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(privateRecipe, serverUpdatedAtMillis = 100L)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(
+                householdId = householdId.toString(),
+                days = listOf(
+                    SyncMealPlanDayDto(
+                        uuid = UUID.randomUUID().toString(),
+                        dayIndex = 0,
+                        dinnerRecipeId = privateRecipe.uuid,
+                        lunchRecipeId = null
+                    )
+                )
+            ),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        // Cursor is well past the recipe's own old server_updated_at (100ms) — a plain delta
+        // query would never return it. Only the gap clause does.
+        val response = service.pullRecipes(memberId, sinceMillis = 500L, limit = 10)
+
+        assertTrue(response.recipes.any { it.uuid == privateRecipe.uuid })
+        assertTrue(response.ingredients.any { it.uuid == ingredientId.toString() })
+    }
+
+    @Test
+    fun pullExcludesAHouseholdMatesUnreferencedPrivateRecipe() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+
+        val ingredientId = repo.seedIngredient()
+        val unrelatedPrivateRecipe = sampleRecipe(UUID.randomUUID(), ownerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(unrelatedPrivateRecipe, serverUpdatedAtMillis = 100L)
+        // Deliberately not referenced by any meal plan day.
+
+        val response = service.pullRecipes(memberId, sinceMillis = 500L, limit = 10)
+
+        assertTrue(response.recipes.none { it.uuid == unrelatedPrivateRecipe.uuid })
+    }
+
+    @Test
+    fun pullCreatorsIncludesMealPlanOwnersEvenWhenTheyAuthoredNoRecipesOnThePage() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+        repo.seedUser(ownerId)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val response = service.pullRecipes(memberId, sinceMillis = 0L, limit = 10)
+
+        assertTrue(response.creators.any { it.uuid == ownerId.toString() })
+    }
+
+    @Test
+    fun getRecipeDetailReturnsAPrivateRecipeVisibleOnlyThroughHouseholdSharing() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+
+        val ingredientId = repo.seedIngredient()
+        val privateRecipe = sampleRecipe(UUID.randomUUID(), ownerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(privateRecipe, serverUpdatedAtMillis = 100L)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(
+                householdId = householdId.toString(),
+                days = listOf(
+                    SyncMealPlanDayDto(
+                        uuid = UUID.randomUUID().toString(),
+                        dayIndex = 0,
+                        dinnerRecipeId = privateRecipe.uuid,
+                        lunchRecipeId = null
+                    )
+                )
+            ),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val result = service.getRecipeDetail(memberId, UUID.fromString(privateRecipe.uuid))
+
+        assertTrue(result is RecipeDetailResult.Found)
+    }
+
+    @Test
+    fun getRecipeDetailStillHidesAPrivateRecipeNotSharedViaAnyPlan() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+
+        val ingredientId = repo.seedIngredient()
+        val privateRecipe = sampleRecipe(UUID.randomUUID(), ownerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(privateRecipe, serverUpdatedAtMillis = 100L)
+        // Not referenced by any plan — household sharing never applies to it.
+
+        val result = service.getRecipeDetail(memberId, UUID.fromString(privateRecipe.uuid))
+
+        assertEquals(RecipeDetailResult.NotFound, result)
     }
 
     // ── Regression: cross-tenant push (security audit F1/F3) ────────────────────
@@ -660,9 +937,11 @@ class SyncServiceTest {
     private fun buildMealPlan(
         planId: UUID,
         updatedAt: Long,
+        ownerId: UUID = UUID.randomUUID(),
         preferencesJson: String = """{"planLengthDays":3,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}"""
     ) = SyncMealPlanDto(
         uuid = planId.toString(),
+        ownerId = ownerId.toString(),
         name = "Week Plan",
         status = "DRAFT",
         preferencesJson = preferencesJson,

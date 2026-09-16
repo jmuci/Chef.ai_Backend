@@ -31,12 +31,15 @@ class FakeSyncRepository : SyncRepository {
     private val bookmarkServerTs = mutableMapOf<Pair<UUID, UUID>, Long>()
     // accessible recipe ids (by default, all seeded recipes are accessible)
     private val inaccessibleRecipes = mutableSetOf<UUID>()
-    // meal plans: key=planId, value=record with server timestamp
+    // meal plans: key=planId, value=record with server timestamp. Ownership/household come from
+    // the stored plan's own ownerId/householdId fields, same as PostgresSyncRepository reads them
+    // off the row rather than tracking them separately.
     private val mealPlans = mutableMapOf<UUID, SyncMealPlanRecord>()
-    // meal plans: key=planId, value=owning user - PostgresSyncRepository enforces this at the
-    // query level (WHERE user_id = ...); this fake must mirror that or ownership checks in
-    // MealPlanGenerationService/SyncService pass in tests while being broken in production.
-    private val mealPlanOwners = mutableMapOf<UUID, UUID>()
+    // key: userId, value: their current ACTIVE household - mirrors resolveActiveHouseholdId
+    private val activeHousehold = mutableMapOf<UUID, UUID>()
+    // key: userId, value: (householdId, serverRemovedAtMillis) of their most recent removal -
+    // mirrors the household_members query findDeltaMealPlans's tombstone branch runs
+    private val removedHouseholdMembership = mutableMapOf<UUID, Pair<UUID, Long>>()
     // candidate recipe IDs for generation (injectable per-test)
     private val candidateRecipeIds = mutableListOf<UUID>()
     private val rankingMetadataByRecipe = mutableMapOf<UUID, RecipeRankingMetadata>()
@@ -113,11 +116,20 @@ class FakeSyncRepository : SyncRepository {
         inaccessibleRecipes += recipeId
     }
 
-    fun seedMealPlan(plan: SyncMealPlanDto, serverUpdatedAtMillis: Long = 0L, userId: UUID = UUID.randomUUID()): UUID {
+    fun seedMealPlan(plan: SyncMealPlanDto, serverUpdatedAtMillis: Long = 0L): UUID {
         val uuid = UUID.fromString(plan.uuid)
         mealPlans[uuid] = SyncMealPlanRecord(plan = plan, serverUpdatedAtMillis = serverUpdatedAtMillis)
-        mealPlanOwners[uuid] = userId
         return uuid
+    }
+
+    /** Test helper — makes [userId] appear as an ACTIVE member of [householdId]. */
+    fun seedActiveHousehold(userId: UUID, householdId: UUID) {
+        activeHousehold[userId] = householdId
+    }
+
+    /** Test helper — simulates [userId] having been removed from [householdId] at [serverRemovedAtMillis]. */
+    fun seedRemovedFromHousehold(userId: UUID, householdId: UUID, serverRemovedAtMillis: Long) {
+        removedHouseholdMembership[userId] = householdId to serverRemovedAtMillis
     }
 
     fun seedCandidateRecipe(uuid: UUID = UUID.randomUUID()): UUID {
@@ -231,23 +243,65 @@ class FakeSyncRepository : SyncRepository {
 
     // ── Meal Plans ────────────────────────────────────────────────────────────
 
-    override suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord? =
-        mealPlans[uuid]?.takeIf { mealPlanOwners[uuid] == userId }
+    override suspend fun isActiveHouseholdMember(userId: UUID, householdId: UUID): Boolean =
+        activeHousehold[userId] == householdId
 
-    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant) {
+    override suspend fun getMealPlanForMember(uuid: UUID, userId: UUID): SyncMealPlanRecord? =
+        mealPlans[uuid]?.takeIf { hasMemberAccess(it, userId) }
+
+    override suspend fun mealPlanExists(uuid: UUID): Boolean = mealPlans.containsKey(uuid)
+
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant) {
         val uuid = UUID.fromString(plan.uuid)
-        mealPlans[uuid] = SyncMealPlanRecord(
-            plan = plan,
-            serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
-        )
-        mealPlanOwners[uuid] = userId
+        val existing = mealPlans[uuid]
+        // Mirrors PostgresSyncRepository: owner/household are set at insert only, an update never
+        // touches them regardless of what this call's plan.ownerId/householdId say.
+        val persisted = if (existing != null) {
+            plan.copy(ownerId = existing.plan.ownerId, householdId = existing.plan.householdId)
+        } else {
+            plan
+        }
+        mealPlans[uuid] = SyncMealPlanRecord(plan = persisted, serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds())
     }
 
-    override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
-        mealPlans.entries
-            .filter { (uuid, record) -> mealPlanOwners[uuid] == userId && record.serverUpdatedAtMillis > sinceMillis }
-            .map { it.value }
-            .sortedBy { it.serverUpdatedAtMillis }
+    override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> {
+        val normal = mealPlans.values.filter {
+            it.serverUpdatedAtMillis > sinceMillis && hasMemberAccess(it, userId)
+        }
+
+        val removal = removedHouseholdMembership[userId]
+        val tombstones = if (removal != null && removal.second > sinceMillis) {
+            val (removedHouseholdId, serverRemovedAtMillis) = removal
+            mealPlans.values
+                .filter { it.plan.householdId == removedHouseholdId.toString() }
+                .map { it.copy(plan = it.plan.copy(deletedAt = serverRemovedAtMillis)) }
+        } else {
+            emptyList()
+        }
+
+        return (normal + tombstones).distinctBy { it.plan.uuid }.sortedBy { it.serverUpdatedAtMillis }
+    }
+
+    override suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID> {
+        val householdId = activeHousehold[userId] ?: return emptySet()
+        return householdVisibleRecipeIds(householdId)
+    }
+
+    override suspend fun isRecipeHouseholdVisible(userId: UUID, recipeId: UUID): Boolean {
+        val householdId = activeHousehold[userId] ?: return false
+        return recipeId in householdVisibleRecipeIds(householdId)
+    }
+
+    private fun hasMemberAccess(record: SyncMealPlanRecord, userId: UUID): Boolean =
+        record.plan.ownerId == userId.toString() ||
+            (record.plan.householdId != null && record.plan.householdId == activeHousehold[userId]?.toString())
+
+    private fun householdVisibleRecipeIds(householdId: UUID): Set<UUID> =
+        mealPlans.values
+            .filter { it.plan.householdId == householdId.toString() && it.plan.deletedAt == null }
+            .flatMap { record -> record.plan.days.flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) } }
+            .map { UUID.fromString(it) }
+            .toSet()
 
     override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant) {
         val existing = mealPlans[planId] ?: return

@@ -292,8 +292,8 @@ CREATE INDEX IF NOT EXISTS idx_bookmarked_recipes_server_updated_at ON bookmarke
 -- MEAL_PLANS
 -- ===============================
 -- Was missing from this file entirely (only ever created via Exposed's
--- createMissingTablesAndColumns) — backfilled here for fresh-install parity, with household_id
--- included from the start even though it's only populated once the plan-sharing PR lands.
+-- createMissingTablesAndColumns) — backfilled here for fresh-install parity. household_id shares
+-- a household's meal plans with every active member — see docs/household-architecture.md.
 CREATE TABLE IF NOT EXISTS meal_plans (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id           UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,

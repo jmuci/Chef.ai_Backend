@@ -878,6 +878,8 @@ model; this section covers only the sync mechanics.
   "mealPlans": [
     {
       "uuid": "<uuid>",
+      "ownerId": "<uuid>",
+      "householdId": null,
       "name": "This Week",
       "status": "DRAFT",
       "preferencesJson": "{...}",
@@ -892,16 +894,144 @@ model; this section covers only the sync mechanics.
 }
 ```
 
-- Same last-write-wins conflict check as recipes: `existing.serverUpdatedAtMillis > plan.updatedAt`.
+- **`ownerId`** — the plan's real owner, always present. Never inferred from the caller: a
+  household member editing a shared plan they don't own must still echo back the plan's real
+  `ownerId`, or the client that pulled it would silently reassign ownership on-device. The server
+  persists it as-is (see the authorization rules below) and never changes it after the plan is
+  created — not even on transfer of household ownership.
+- **`householdId`** — `null` (or the field simply absent — same thing) for a personal plan,
+  unchanged from pre-households behavior. Non-null shares the plan with every ACTIVE member of
+  that household. Like `ownerId`, immutable via sync — only leaving/removal/dissolution
+  (`HouseholdService`) ever changes it, and always back to `null`.
+- Same last-write-wins conflict check as recipes: `existing.serverUpdatedAtMillis > plan.updatedAt`
+  — but the *existence* check that check builds on now resolves through
+  `SyncRepository.getMealPlanForMember(uuid, callerId)`: true if the caller owns the plan **or**
+  is an ACTIVE member of `householdId`. A push against a `uuid` that already exists but resolves
+  to neither is rejected outright (`MEAL_PLAN_NOT_ACCESSIBLE`), not silently overwritten — this
+  closes a gap that predates households, where any authenticated caller who learned another
+  user's plan UUID could overwrite its content (the analogous fix already shipped for recipes,
+  see "Regression: cross-tenant push" in `SyncServiceTest.kt`).
+- **Brand-new plan validation** (a `uuid` that doesn't exist yet): `ownerId` must name the caller
+  (`OWNER_MISMATCH` otherwise), and a non-null `householdId` must name the caller's own active
+  household (`INVALID_HOUSEHOLD` otherwise). Unvalidated, either would let a push plant content
+  under another identity, or into a household the pusher was never a member of.
+- **Referenced-recipe validation, for a plan that is (or is becoming) shared**: every non-null
+  `dinnerRecipeId`/`lunchRecipeId` across `days` must be accessible to the *pushing caller*
+  (`isRecipeAccessibleBy` — owned by them, or `PUBLIC`), or the whole plan is rejected
+  (`MEAL_PLAN_RECIPE_NOT_ACCESSIBLE`). This is what keeps the recipe gap clause below safe: a
+  member can only ever share their own or already-public recipes into a household, never someone
+  else's unrelated private one by reference. A personal (non-shared) plan's day references are
+  unrestricted, unchanged from pre-households behavior.
 - On accept, the plan's `preferencesJson` is also persisted to `UserPreferencesRepository` — a
   meal-plan push is the only way user preferences get written server-side.
 - **Push response** gains `mealPlans: MealPlanPushResults` — `accepted` (uuid + serverUpdatedAt),
   `conflicts` (a flat list of conflicting plan UUIDs — no `serverVersion` payload, unlike recipe
-  conflicts), and `errors` (same `SyncError` shape as recipes; only `INVALID_UUID` applies).
+  conflicts), and `errors` (`SyncError`, now also `INVALID_OWNER`, `OWNER_MISMATCH`,
+  `MEAL_PLAN_NOT_ACCESSIBLE`, `INVALID_HOUSEHOLD`, `MEAL_PLAN_RECIPE_NOT_ACCESSIBLE` alongside the
+  pre-existing `INVALID_UUID`).
 
-**Pull** — `GET /sync/pull` includes `mealPlans: List<SyncMealPlanDto>`, filtered by
-`server_updated_at > since` for the authenticated user, same delta model as recipes (no gap
-clause — meal plans aren't referenced by FK from anything else).
+**Pull** — `GET /sync/pull` includes `mealPlans: List<SyncMealPlanDto>`. Visible plans are the
+caller's own, **plus** any plan shared with their current active household — widened from the
+pre-households "owned by caller" rule. Not paginated: every call returns its full matching set
+(same as `bookmarkedRecipes`), and plays no part in the pull cursor, which recipes alone drive.
+
+**Removal tombstones**: if the caller was removed from a household after their `since` cursor
+(`household_members.status = 'REMOVED' AND server_removed_at > since`), every plan still under
+that household is returned with `deletedAt` **synthesized** to that removal's `server_removed_at`
+— for that caller only. The underlying row's real `deleted_at` stays `null` for everyone still in
+the household; this is a per-caller signal telling a departed member's client to drop plans it can
+no longer access, reusing the existing `deletedAt` field rather than inventing a new wire shape.
+
+**Household reassignment on leave/removal**: `HouseholdService`'s leave/remove/dissolve paths null
+`household_id` back out for plans owned by the departing member (never touching `user_id` — a
+plan's original creator never changes). Plans owned by *other* members are untouched; the
+departing member simply loses access, surfaced via the tombstone above.
+
+**Join backfill**: when a user joins a household, every meal plan already shared with it has its
+`server_updated_at` bumped to the join instant, so the joiner's next pull receives them regardless
+of how old their own cursor is (see "Cursor Backfill on Join" below).
+
+---
+
+## Household Sharing (Recipe Gap Clause)
+
+A shared meal plan's days reference recipes by id — and those recipes need to actually resolve on
+a household member's device, even if they're `PRIVATE` and owned by someone else in the
+household. This is a genuine **gap**, in the same sense `collectReferenceData`'s ingredient/tag/
+label helpers already use the term: unconditional on `server_updated_at`, driven entirely by what
+a shared plan currently references.
+
+**Where it applies**:
+- **`GET /sync/pull`**: recipes visible only through household sharing are merged into the
+  `recipes` array as a separate step, *after* the normal cursor-paginated delta page — never
+  blended into that page's own query. A plan's day references can point at recipes with
+  arbitrarily old `server_updated_at`; folding an unconditional set into an `ORDER BY
+  server_updated_at` pagination window would risk the cursor computed from that page going
+  *backwards*, breaking the cursor stability guarantee below. The merge step has no such
+  constraint (nothing paginates it, nothing derives the pull cursor from it), so it's simply
+  unioned in, deduplicated against the delta page, with its own ingredients/tags/labels/creator
+  folded into the same reference-data/creators collection calls the delta page already uses.
+- **`GET /api/v1/recipes/{recipeId}`**: the existing `PUBLIC` / `owned-by-caller` visibility check
+  gains a third branch — visible if reachable via the caller's household-shared plans, same
+  underlying query as the pull-side merge.
+
+**Query**: recipes referenced (as a dinner or lunch pick) by a day in a non-deleted meal plan
+under the caller's current active household:
+```sql
+SELECT DISTINCT dinner_recipe_id, lunch_recipe_id
+FROM meal_plan_days d
+JOIN meal_plans p ON d.meal_plan_id = p.id
+WHERE p.household_id = :activeHouseholdId AND p.deleted_at IS NULL
+```
+
+**Why this is safe** (and wasn't, before the write-side check landed): before a household member
+can share *any* recipe into a plan, `/sync/push`'s meal-plan validation (see "Validation & Errors")
+requires every referenced recipe to already be accessible to the pushing member — owned by them,
+or `PUBLIC`. That check is what makes trusting every persisted reference on the read side safe:
+by construction, nothing ever lands in `meal_plan_days` that its pusher couldn't already see. The
+read-side gap query applies no privacy/ownership filter of its own — deliberately, since
+referencing a recipe *is* the sharing action, the same way `collectReferenceData`'s helpers apply
+no filter beyond "was this entity referenced."
+
+**Negative case**: a household-mate's recipe that is `PRIVATE` and **not** referenced by any
+shared plan stays completely invisible — the gap clause only ever surfaces what's actually
+referenced, never a household-mate's full recipe library. See `SyncServiceTest.kt`'s
+`pullExcludesAHouseholdMatesUnreferencedPrivateRecipe`.
+
+**Explicitly unwidened**: `isRecipeAccessibleBy` (the bookmark-push gate), `findCandidateRecipeIds`
+(search/generation candidates), `RecipeSearchService`, `RecipeSearchRoutes`. A recipe reachable
+only through the gap clause cannot be bookmarked, cannot appear in search, and is not a meal-plan
+generation candidate for anyone but its own creator — extending any of those is a separate product
+decision.
+
+### Cursor Backfill on Join
+
+When a user joins a household (`HouseholdService.joinByToken` / `acceptInviteById`),
+`HouseholdRepository.bumpServerUpdatedAtForHouseholdRows` runs inside the same transaction:
+
+```sql
+UPDATE meal_plans SET server_updated_at = :now WHERE household_id = :id;
+UPDATE grocery_list_item_checks SET server_updated_at = :now
+  WHERE meal_plan_id IN (SELECT id FROM meal_plans WHERE household_id = :id);
+```
+
+(The `grocery_list_item_checks` half is a no-op until that table exists — see
+`docs/household-architecture.md`.)
+
+Without this, a plan that was already shared before the joiner's device last synced could sit
+*behind* their cursor forever: `findDeltaMealPlans`'s `server_updated_at > since` filter would
+never admit a row stamped before the joiner even owned a cursor that new. Bumping every
+already-shared row to "now" on join guarantees every plan crosses every possible existing cursor.
+
+**Referenced recipes need no equivalent bump** — they arrive through the gap clause above, which
+is unconditional on `server_updated_at` by construction and was never gated by it in the first
+place.
+
+**Tradeoff, for the record**: this is O(rows under the household) write amplification per join,
+and transiently re-delivers already-synced rows to every *existing* member too (harmless —
+idempotent upserts). The alternative, a per-source cursor floor, is more surgical but requires
+threading a second `since` value through every widened delta query — a far larger blast radius for
+what a household of 2–6 people doesn't need.
 
 ---
 
@@ -967,10 +1097,12 @@ Authorization: Bearer <token>   # optional
 **Access rules** — evaluated against the loaded recipe, not a separate authorization query:
 - Soft-deleted (`deletedAt` non-null) → `404`.
 - `privacy == PUBLIC` → visible to anyone, authenticated or not.
-- `privacy == PRIVATE` → visible only if authenticated and the caller is the creator.
+- `privacy == PRIVATE` → visible if authenticated and the caller is the creator, **or** reachable
+  through household sharing (see "Household Sharing (Recipe Gap Clause)" above) — a household
+  member can open a plan-referenced private recipe by uuid the same way `/sync/pull` surfaces it.
 - Everything else → `404`, never `403` — same posture as the bookmark-push validation table
   above (`RECIPE_NOT_FOUND` "(403 semantics)"): a private recipe's existence isn't leaked to
-  a non-owner caller.
+  a non-owner, non-household-sharing caller.
 
 **Response** (`RecipeDetailResponse`, `200`):
 ```json
@@ -1107,6 +1239,19 @@ The server validates each pushed recipe, in this order — the first failing che
 | Tag/label UUIDs exist in database? | (silently ignored) | Accept; unknown-but-well-formed tags/labels are allowed |
 
 Errors are **per-recipe** and don't fail the entire push request. Client receives all three lists: accepted, conflicts, errors.
+
+Meal plans follow the same per-item, first-failing-check-wins shape:
+
+| Check | Error Reason | Behavior |
+|-------|--------------|----------|
+| UUID format valid? | `INVALID_UUID` | Skip plan, record error |
+| ownerId well-formed UUID? | `INVALID_OWNER` | Skip plan, record error |
+| householdId well-formed UUID (if present)? | `INVALID_HOUSEHOLD` | Skip plan, record error |
+| Plan exists and caller may write it (owner, or active member of its household)? | `MEAL_PLAN_NOT_ACCESSIBLE` | Skip plan, record error |
+| New plan: ownerId names the caller? | `OWNER_MISMATCH` | Skip plan, record error |
+| New plan: householdId (if any) is caller's own active household? | `INVALID_HOUSEHOLD` | Skip plan, record error |
+| Shared plan: every referenced recipe accessible to caller? | `MEAL_PLAN_RECIPE_NOT_ACCESSIBLE` | Skip plan, record error |
+| `existing.serverUpdatedAtMillis > plan.updatedAt`? | — | Conflict (no error; separate `conflicts` list) |
 
 ### HTTP Status Codes
 

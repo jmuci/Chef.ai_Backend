@@ -37,13 +37,17 @@ class MealPlanGenerationService(
     private val log: Logger
 ) {
     /**
-     * Validates that [userId] owns [mealPlanId], transitions the plan to GENERATING status,
-     * launches the async generation pipeline, and returns the 202 payload.
+     * Validates that [userId] may write [mealPlanId] — owns it, or is an active member of the
+     * household it's shared with — transitions the plan to GENERATING status, launches the async
+     * generation pipeline, and returns the 202 payload. Any active member may regenerate a shared
+     * plan, not just its owner; candidates are still scoped to [userId]'s own accessible recipes
+     * (see [generateAsync]), so regenerating never surfaces another member's private recipe they
+     * haven't separately shared.
      *
-     * Returns null if the plan is not found or not owned by [userId].
+     * Returns null if the plan is not found or not accessible to [userId].
      */
     suspend fun startGeneration(mealPlanId: UUID, userId: UUID): GenerateMealPlanResponse? {
-        val record = syncRepository.getMealPlanForUser(mealPlanId, userId) ?: return null
+        val record = syncRepository.getMealPlanForMember(mealPlanId, userId) ?: return null
 
         val now = Clock.System.now()
         syncRepository.updateMealPlanStatus(mealPlanId, STATUS_GENERATING, now)

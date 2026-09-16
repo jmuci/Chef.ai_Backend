@@ -93,6 +93,7 @@ class UserPreferencesIntegrationTest {
                     mealPlans = listOf(
                         SyncMealPlanDto(
                             uuid = planId.toString(),
+                            ownerId = auth.userId,
                             name = "Week Plan",
                             status = "DRAFT",
                             preferencesJson = """{"planLengthDays":5,"mealType":"DINNER_AND_LUNCH","dietaryRestrictions":["VEGAN"],"recipeSource":"COLLECTION_ONLY","maxPrepTimeMinutes":30,"servingsPerMeal":4,"batchCooking":true,"leftoverFriendly":false,"varietyPreference":"MEDIUM"}""",

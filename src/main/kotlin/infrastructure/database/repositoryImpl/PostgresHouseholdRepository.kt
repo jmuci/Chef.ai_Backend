@@ -12,6 +12,7 @@ import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.HouseholdInviteTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
+import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
@@ -206,21 +207,30 @@ class PostgresHouseholdRepository : HouseholdRepository {
         }
 
     /**
-     * No-op today: `meal_plans.household_id` and the `grocery_list_item_checks` table don't exist
-     * until the plan-sharing and grocery-list PRs land. [HouseholdService.joinByToken] /
-     * `acceptInviteById` already call this at the correct point in the join transaction so those
-     * PRs only need to fill in this body — no call-site change required.
+     * Cursor backfill on join (backend prompt §6.5): bumps every meal plan under [householdId] so
+     * a newly-joined member's next pull receives them regardless of how old their own cursor is.
+     * `grocery_list_item_checks` still doesn't exist (lands with the grocery-list PR) — that half
+     * of this method stays a no-op until then; no call-site change will be needed there either.
      */
-    override suspend fun bumpServerUpdatedAtForHouseholdRows(householdId: UUID, at: Instant) {
-        // Intentionally empty — see KDoc.
+    override suspend fun bumpServerUpdatedAtForHouseholdRows(householdId: UUID, at: Instant): Unit = suspendTransaction {
+        MealPlanTable.update({ MealPlanTable.household_id eq EntityID(householdId, HouseholdTable) }) {
+            it[server_updated_at] = at
+        }
     }
 
     /**
-     * No-op today for the same reason as [bumpServerUpdatedAtForHouseholdRows]: nulling
-     * `meal_plans.household_id` requires a column that doesn't exist until the plan-sharing PR.
+     * Nulls `meal_plans.household_id` for every plan [userId] owns under [householdId] — the plan
+     * reverts to personal, still owned by [userId]. Plans owned by *other* members of the
+     * household are untouched; [userId] simply loses access to them going forward (surfaced to
+     * their client as a removal tombstone — see `SyncRepository.findDeltaMealPlans`).
      */
-    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID) {
-        // Intentionally empty — see KDoc.
+    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID): Unit = suspendTransaction {
+        MealPlanTable.update({
+            (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                (MealPlanTable.user_id eq EntityID(userId, UserTable))
+        }) {
+            it[household_id] = null
+        }
     }
 
     /**

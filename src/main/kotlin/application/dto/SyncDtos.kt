@@ -101,7 +101,12 @@ enum class SyncErrors(val message: String) {
     INVALID_INGREDIENT("ingredientId is invalid"),
     INGREDIENT_NOT_FOUND("ingredientId does not exist"),
     INVALID_TAG("tagId is invalid"),
-    INVALID_LABEL("labelId is invalid")
+    INVALID_LABEL("labelId is invalid"),
+    INVALID_OWNER("ownerId is invalid"),
+    OWNER_MISMATCH("ownerId does not match authenticated user for a new meal plan"),
+    MEAL_PLAN_NOT_ACCESSIBLE("meal plan does not exist or caller cannot edit it"),
+    INVALID_HOUSEHOLD("householdId does not correspond to caller's active household"),
+    MEAL_PLAN_RECIPE_NOT_ACCESSIBLE("a referenced recipe does not exist or is not accessible to the caller")
 }
 
 @Serializable
@@ -258,6 +263,17 @@ data class SyncPullResponse(
 @Serializable
 data class SyncMealPlanDto(
     val uuid: String,
+    /**
+     * The plan's real owner — never inferred from the caller. A household member who can edit a
+     * shared plan is frequently not its owner; the client must not stamp `ownerId = <whoever
+     * pulled it>`, or the first shared plan a member pulls silently reassigns ownership on their
+     * device. On push the server persists this as-is after verifying the caller may write the
+     * plan (owner, or an active member of `householdId`) — see docs/household-architecture.md.
+     */
+    val ownerId: String,
+    /** Null = personal, unchanged pre-households behavior. Non-null = visible to every active
+     *  member of that household, not just [ownerId]. */
+    val householdId: String? = null,
     val name: String,
     val status: String,
     val preferencesJson: String,

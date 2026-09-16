@@ -1,8 +1,10 @@
 # Household Architecture
 
-> Status: data model, roles, invite lifecycle, and all 15 HTTP endpoints are implemented and
-> unit/integration-tested. Sync protocol widening (shared meal plans, grocery lists) has not
-> started — see "What's deliberately deferred" below.
+> Status: data model, roles, invite lifecycle, all 15 HTTP endpoints, and shared-meal-plan sync
+> widening (visibility, removal tombstones, the recipe gap clause) are implemented and
+> unit/integration-tested — see [`docs/sync-protocol.md`](sync-protocol.md#household-sharing-recipe-gap-clause)
+> for the sync-side details. Grocery lists have not started — see "What's deliberately deferred"
+> below.
 
 ## What a household is
 
@@ -150,9 +152,9 @@ purposes, so a second column would be redundant.
 core, `departFromHousehold`:
 
 1. Mark the departing membership `REMOVED`, stamping both `removed_at` and `server_removed_at`.
-2. Detach plans the departing member owns from the household (`detachPlansOwnedBy`) — currently a
-   no-op; nulling `meal_plans.household_id` needs a column that doesn't exist until the
-   plan-sharing PR.
+2. Detach plans the departing member owns from the household (`detachPlansOwnedBy`) — nulls
+   `meal_plans.household_id` for plans they own; other members' plans are untouched (they simply
+   lose access, surfaced via the removal tombstone — see `docs/sync-protocol.md`).
 3. If the departing member was `OWNER` and other `ACTIVE` members remain, ownership transfers to
    the earliest-joined remaining member (`transferOwnership`, updating both `households.owner_id`
    and the new owner's `household_members.role` in one call).
@@ -169,22 +171,20 @@ household instead; in practice unreachable under normal invariants, since the ow
 caller when `requireOwner` has already passed, so guarded defensively rather than tested).
 
 **Every plan reverts to personal, still owned by whoever created it — `meal_plans.user_id` is
-never touched at any point in a household's life.** Zero data loss on any path. (This guarantee is
-only fully wired once the plan-sharing PR lands; see the no-ops noted above.)
+never touched at any point in a household's life.** Zero data loss on any path.
 
 ## What's deliberately deferred
 
-Three repository methods are correct-but-inert placeholders today, each because the schema they'd
-touch doesn't exist yet:
+Grocery lists haven't started — the table doesn't exist yet, and two spots stay correct-but-inert
+placeholders until it does:
 
 | Method | Waits on |
 |---|---|
-| `HouseholdRepository.detachPlansOwnedBy` | `meal_plans.household_id` |
-| `HouseholdRepository.bumpServerUpdatedAtForHouseholdRows` | `meal_plans.household_id` + `grocery_list_item_checks` |
-| `SyncRepository` widening (`getMealPlanForMember`, recipe visibility gap clause, `processGroceryListItems`) | Not started |
+| `HouseholdRepository.bumpServerUpdatedAtForHouseholdRows`'s grocery half (the meal-plan half is live) | `grocery_list_item_checks` |
+| `SyncRepository.processGroceryListItems` | `grocery_list_item_checks`, `SyncGroceryListItem` |
 
-They're called from the correct point in `HouseholdService`'s transactions today, so the follow-up
-PRs only need to fill in their bodies — no call-site changes required.
+`bumpServerUpdatedAtForHouseholdRows` already bumps `meal_plans` on join (see
+`docs/sync-protocol.md`'s "Cursor Backfill on Join") — only its grocery-row half is pending.
 
 ## See also
 

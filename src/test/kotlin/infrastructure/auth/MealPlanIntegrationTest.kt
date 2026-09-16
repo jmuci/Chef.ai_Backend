@@ -56,7 +56,7 @@ class MealPlanIntegrationTest {
             setBody(
                 SyncPushRequest(
                     recipes = emptyList(),
-                    mealPlans = listOf(buildDraftPlan(planId, updatedAt = 1000L))
+                    mealPlans = listOf(buildDraftPlan(planId, ownerId = UUID.fromString(auth.userId), updatedAt = 1000L))
                 )
             )
         }
@@ -103,11 +103,11 @@ class MealPlanIntegrationTest {
         val auth = client.registerAndGetAuth()
 
         // Seed an existing plan with a high server timestamp, owned by the same user who is
-        // about to push a stale update - getMealPlanForUser only sees plans owned by the caller.
+        // about to push a stale update - getMealPlanForMember only sees plans owned by the caller
+        // (or shared with their household, N/A here).
         syncRepository.seedMealPlan(
-            buildDraftPlan(planId, updatedAt = 9000L),
-            serverUpdatedAtMillis = 9000L,
-            userId = UUID.fromString(auth.userId)
+            buildDraftPlan(planId, ownerId = UUID.fromString(auth.userId), updatedAt = 9000L),
+            serverUpdatedAtMillis = 9000L
         )
 
         // Push a stale version (client updatedAt < server serverUpdatedAt)
@@ -118,7 +118,7 @@ class MealPlanIntegrationTest {
             setBody(
                 SyncPushRequest(
                     recipes = emptyList(),
-                    mealPlans = listOf(buildDraftPlan(planId, updatedAt = 1000L))
+                    mealPlans = listOf(buildDraftPlan(planId, ownerId = UUID.fromString(auth.userId), updatedAt = 1000L))
                 )
             )
         }
@@ -205,7 +205,7 @@ class MealPlanIntegrationTest {
             bearerAuth(owner.token)
             contentType(ContentType.Application.Json)
             accept(ContentType.Application.Json)
-            setBody(SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildDraftPlan(planId))))
+            setBody(SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildDraftPlan(planId, ownerId = UUID.fromString(owner.userId)))))
         }
 
         val response = client.post("/meal-plans/$planId/generate") {
@@ -246,7 +246,7 @@ class MealPlanIntegrationTest {
             bearerAuth(auth.token)
             contentType(ContentType.Application.Json)
             accept(ContentType.Application.Json)
-            setBody(SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildDraftPlan(planId))))
+            setBody(SyncPushRequest(recipes = emptyList(), mealPlans = listOf(buildDraftPlan(planId, ownerId = UUID.fromString(auth.userId)))))
         }
 
         // Trigger generation
@@ -273,14 +273,14 @@ class MealPlanIntegrationTest {
         val generationService = MealPlanGenerationService(syncRepository, generationScope, log)
 
         // Seed plan directly and trigger generation
-        syncRepository.upsertMealPlan(buildDraftPlan(planId), userId, kotlinx.datetime.Clock.System.now())
+        syncRepository.upsertMealPlan(buildDraftPlan(planId, ownerId = userId), kotlinx.datetime.Clock.System.now())
         generationService.startGeneration(planId, userId)
 
         // Advance coroutines to completion
         advanceUntilIdle()
 
         // Plan should now be READY with days
-        val record = syncRepository.getMealPlanForUser(planId, userId)
+        val record = syncRepository.getMealPlanForMember(planId, userId)
         assertNotNull(record)
         assertEquals("READY", record.plan.status)
         assertEquals(3, record.plan.days.size)
@@ -315,7 +315,7 @@ class MealPlanIntegrationTest {
             setBody(
                 SyncPushRequest(
                     recipes = emptyList(),
-                    mealPlans = listOf(buildDraftPlan(planId, deletedAt = 2000L))
+                    mealPlans = listOf(buildDraftPlan(planId, ownerId = UUID.fromString(auth.userId), deletedAt = 2000L))
                 )
             )
         }
@@ -336,10 +336,12 @@ class MealPlanIntegrationTest {
 
     private fun buildDraftPlan(
         planId: UUID = UUID.randomUUID(),
+        ownerId: UUID,
         updatedAt: Long = 1000L,
         deletedAt: Long? = null
     ) = SyncMealPlanDto(
         uuid = planId.toString(),
+        ownerId = ownerId.toString(),
         name = "Week Plan",
         status = "DRAFT",
         preferencesJson = """{"planLengthDays":3,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC","varietyPreference":"HIGH"}""",

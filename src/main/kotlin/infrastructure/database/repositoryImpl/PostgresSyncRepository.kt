@@ -468,75 +468,176 @@ class PostgresSyncRepository : SyncRepository {
 
     // ── Meal Plans ────────────────────────────────────────────────────────────
 
-    override suspend fun getMealPlanForUser(uuid: UUID, userId: UUID): SyncMealPlanRecord? = suspendTransaction {
+    override suspend fun isActiveHouseholdMember(userId: UUID, householdId: UUID): Boolean = suspendTransaction {
+        resolveActiveHouseholdId(userId) == householdId
+    }
+
+    override suspend fun getMealPlanForMember(uuid: UUID, userId: UUID): SyncMealPlanRecord? = suspendTransaction {
+        val householdId = resolveActiveHouseholdId(userId)
         val planRow = MealPlanTable
             .selectAll()
             .where {
-                (MealPlanTable.id eq uuid) and (MealPlanTable.user_id eq EntityID(userId, UserTable))
+                (MealPlanTable.id eq uuid) and memberAccessClause(userId, householdId)
             }
             .firstOrNull() ?: return@suspendTransaction null
         toSyncMealPlanRecord(planRow)
     }
 
-    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, userId: UUID, serverUpdatedAt: Instant) =
-        suspendTransaction {
-            val planUuid = UUID.fromString(plan.uuid)
-            val planEntityId = EntityID(planUuid, MealPlanTable)
+    override suspend fun mealPlanExists(uuid: UUID): Boolean = suspendTransaction {
+        MealPlanTable.selectAll().where { MealPlanTable.id eq uuid }.limit(1).any()
+    }
 
-            val exists = MealPlanTable
-                .selectAll()
-                .where { MealPlanTable.id eq planUuid }
-                .limit(1)
-                .any()
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant) = suspendTransaction {
+        val planUuid = UUID.fromString(plan.uuid)
+        val planEntityId = EntityID(planUuid, MealPlanTable)
 
-            if (exists) {
-                MealPlanTable.update({ MealPlanTable.id eq planUuid }) {
-                    it[name] = plan.name
-                    it[status] = plan.status
-                    it[preferences] = plan.preferencesJson
-                    it[updated_at] = plan.updatedAt
-                    it[deleted_at] = plan.deletedAt
-                    it[MealPlanTable.server_updated_at] = serverUpdatedAt
-                }
-            } else {
-                MealPlanTable.insert {
-                    it[id] = planEntityId
-                    it[user_id] = EntityID(userId, UserTable)
-                    it[name] = plan.name
-                    it[status] = plan.status
-                    it[preferences] = plan.preferencesJson
-                    it[created_at] = plan.createdAt
-                    it[updated_at] = plan.updatedAt
-                    it[deleted_at] = plan.deletedAt
-                    it[MealPlanTable.server_updated_at] = serverUpdatedAt
-                }
+        val exists = MealPlanTable
+            .selectAll()
+            .where { MealPlanTable.id eq planUuid }
+            .limit(1)
+            .any()
+
+        if (exists) {
+            // Owner and household are immutable via sync — only HouseholdService's lifecycle
+            // methods touch them (see MealPlanTable.household_id's KDoc).
+            MealPlanTable.update({ MealPlanTable.id eq planUuid }) {
+                it[name] = plan.name
+                it[status] = plan.status
+                it[preferences] = plan.preferencesJson
+                it[updated_at] = plan.updatedAt
+                it[deleted_at] = plan.deletedAt
+                it[MealPlanTable.server_updated_at] = serverUpdatedAt
             }
-
-            // Replace days atomically
-            MealPlanDayTable.deleteWhere { MealPlanDayTable.meal_plan_id eq planEntityId }
-            plan.days.forEach { day ->
-                MealPlanDayTable.insert {
-                    it[MealPlanDayTable.id] = EntityID(UUID.fromString(day.uuid), MealPlanDayTable)
-                    it[meal_plan_id] = planEntityId
-                    it[day_index] = day.dayIndex
-                    it[dinner_recipe_id] = day.dinnerRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
-                    it[lunch_recipe_id] = day.lunchRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
-                }
+        } else {
+            MealPlanTable.insert {
+                it[id] = planEntityId
+                it[user_id] = EntityID(UUID.fromString(plan.ownerId), UserTable)
+                it[household_id] = plan.householdId?.let { id -> EntityID(UUID.fromString(id), HouseholdTable) }
+                it[name] = plan.name
+                it[status] = plan.status
+                it[preferences] = plan.preferencesJson
+                it[created_at] = plan.createdAt
+                it[updated_at] = plan.updatedAt
+                it[deleted_at] = plan.deletedAt
+                it[MealPlanTable.server_updated_at] = serverUpdatedAt
             }
         }
+
+        // Replace days atomically
+        MealPlanDayTable.deleteWhere { MealPlanDayTable.meal_plan_id eq planEntityId }
+        plan.days.forEach { day ->
+            MealPlanDayTable.insert {
+                it[MealPlanDayTable.id] = EntityID(UUID.fromString(day.uuid), MealPlanDayTable)
+                it[meal_plan_id] = planEntityId
+                it[day_index] = day.dayIndex
+                it[dinner_recipe_id] = day.dinnerRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+                it[lunch_recipe_id] = day.lunchRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
+            }
+        }
+    }
 
     override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
         suspendTransaction {
             val sinceInstant = Instant.fromEpochMilliseconds(sinceMillis)
-            MealPlanTable
+            val householdId = resolveActiveHouseholdId(userId)
+
+            val normal = MealPlanTable
                 .selectAll()
                 .where {
-                    (MealPlanTable.user_id eq EntityID(userId, UserTable)) and
-                        (MealPlanTable.server_updated_at greater sinceInstant)
+                    (MealPlanTable.server_updated_at greater sinceInstant) and memberAccessClause(userId, householdId)
                 }
-                .orderBy(MealPlanTable.server_updated_at to SortOrder.ASC)
                 .map(::toSyncMealPlanRecord)
+
+            // Removal tombstones: for every household userId was removed from after sinceMillis,
+            // synthesize deletedAt = that removal's server_removed_at on every plan still under
+            // it. Per-caller and synthetic — see findDeltaMealPlans's KDoc.
+            val removals = HouseholdMemberTable
+                .selectAll()
+                .where {
+                    (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
+                        (HouseholdMemberTable.status eq "REMOVED") and
+                        (HouseholdMemberTable.server_removed_at greater sinceInstant)
+                }
+                .mapNotNull { row ->
+                    val removedAt = row[HouseholdMemberTable.server_removed_at] ?: return@mapNotNull null
+                    row[HouseholdMemberTable.household_id].value to removedAt.toEpochMilliseconds()
+                }
+
+            val tombstones = removals.flatMap { (removedHouseholdId, removedAtMillis) ->
+                MealPlanTable
+                    .selectAll()
+                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
+                    .map { toSyncMealPlanRecord(it).withSyntheticDeletedAt(removedAtMillis) }
+            }
+
+            (normal + tombstones)
+                .distinctBy { it.plan.uuid }
+                .sortedBy { it.serverUpdatedAtMillis }
         }
+
+    override suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID> = suspendTransaction {
+        val householdId = resolveActiveHouseholdId(userId) ?: return@suspendTransaction emptySet()
+        householdVisibleRecipeIds(householdId)
+    }
+
+    override suspend fun isRecipeHouseholdVisible(userId: UUID, recipeId: UUID): Boolean = suspendTransaction {
+        val householdId = resolveActiveHouseholdId(userId) ?: return@suspendTransaction false
+        recipeId in householdVisibleRecipeIds(householdId)
+    }
+
+    /** `user_id = :userId OR household_id = :householdId` — [householdId] may be null (no active household). */
+    private fun memberAccessClause(userId: UUID, householdId: UUID?): Op<Boolean> {
+        val ownedByCaller = MealPlanTable.user_id eq EntityID(userId, UserTable)
+        return if (householdId != null) {
+            ownedByCaller or (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable))
+        } else {
+            ownedByCaller
+        }
+    }
+
+    /**
+     * The household-sharing gap clause (backend prompt §6.3): dinner/lunch recipe ids referenced
+     * by a day in a non-deleted plan under [householdId].
+     */
+    private fun householdVisibleRecipeIds(householdId: UUID): Set<UUID> {
+        val planIds = MealPlanTable
+            .selectAll()
+            .where {
+                (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                    MealPlanTable.deleted_at.isNull()
+            }
+            .map { it[MealPlanTable.id] }
+        if (planIds.isEmpty()) return emptySet()
+
+        return MealPlanDayTable
+            .selectAll()
+            .where { MealPlanDayTable.meal_plan_id inList planIds }
+            .flatMap { row ->
+                listOfNotNull(
+                    row[MealPlanDayTable.dinner_recipe_id]?.value,
+                    row[MealPlanDayTable.lunch_recipe_id]?.value
+                )
+            }
+            .toSet()
+    }
+
+    /**
+     * The caller's single active household, or null. Membership is single-valued (see the
+     * partial unique index on `household_members`), so this is always at most one row. Private
+     * and re-resolved per call rather than shared with [com.tenmilelabs.infrastructure.database.
+     * repositoryImpl.PostgresHouseholdRepository] — this class already reaches into other tables
+     * directly (see [findCandidateRecipeIds]), same pattern.
+     */
+    private fun resolveActiveHouseholdId(userId: UUID): UUID? =
+        HouseholdMemberTable
+            .selectAll()
+            .where {
+                (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
+                    (HouseholdMemberTable.status eq "ACTIVE")
+            }
+            .firstOrNull()
+            ?.get(HouseholdMemberTable.household_id)
+            ?.value
 
     override suspend fun updateMealPlanStatus(planId: UUID, status: String, serverUpdatedAt: Instant): Unit =
         suspendTransaction {
@@ -779,6 +880,8 @@ class PostgresSyncRepository : SyncRepository {
         return SyncMealPlanRecord(
             plan = SyncMealPlanDto(
                 uuid = planId.toString(),
+                ownerId = planRow[MealPlanTable.user_id].value.toString(),
+                householdId = planRow[MealPlanTable.household_id]?.value?.toString(),
                 name = planRow[MealPlanTable.name],
                 status = planRow[MealPlanTable.status],
                 preferencesJson = planRow[MealPlanTable.preferences],
@@ -790,6 +893,10 @@ class PostgresSyncRepository : SyncRepository {
             serverUpdatedAtMillis = planRow[MealPlanTable.server_updated_at].toEpochMilliseconds()
         )
     }
+
+    /** Synthesizes a per-caller removal tombstone — the real row's `deleted_at` is untouched. */
+    private fun SyncMealPlanRecord.withSyntheticDeletedAt(deletedAtMillis: Long): SyncMealPlanRecord =
+        copy(plan = plan.copy(deletedAt = deletedAtMillis))
 
     /**
      * Maps one recipe row into a sync aggregate payload plus server cursor value.
