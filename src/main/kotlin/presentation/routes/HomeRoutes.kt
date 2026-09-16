@@ -17,7 +17,12 @@ fun Route.homeRoutes(homeLayoutService: HomeLayoutService) {
                 ?: false
 
             if (shouldReturnNotModified) {
-                call.response.status(HttpStatusCode.NotModified)
+                // call.respond(...), not call.response.status(...) - the latter never marks the
+                // call handled, so it relied on however the engine happened to treat an
+                // unhandled call with a status already set. StatusPages' unhandled { } hook (see
+                // Routing.kt) now runs whenever isHandled is still false at the end of the
+                // pipeline, and would otherwise clobber this with its own 404.
+                call.respond(HttpStatusCode.NotModified)
                 return@get
             }
 
