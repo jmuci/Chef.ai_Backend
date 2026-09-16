@@ -5,7 +5,9 @@ import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
 import com.tenmilelabs.application.dto.ConflictReasons
+import com.tenmilelabs.application.dto.GroceryItemErrors
 import com.tenmilelabs.application.dto.SyncErrors
+import com.tenmilelabs.application.dto.SyncGroceryListItem
 import com.tenmilelabs.application.dto.SyncMealPlanDayDto
 import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.domain.service.RecipeDetailResult
@@ -782,6 +784,209 @@ class SyncServiceTest {
 
         assertEquals(RecipeDetailResult.NotFound, result)
     }
+
+    // ── Households: grocery list (backend prompt §6.4) ──────────────────────────
+
+    @Test
+    fun groceryItemPushByAHouseholdMemberIsAccepted() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val response = service.pushRecipes(
+            memberId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                groceryListItems = listOf(groceryItem(planId, "eggs", checked = true, updatedAt = 1000L))
+            )
+        )
+
+        assertEquals(1, response.groceryListItems.accepted.size)
+    }
+
+    @Test
+    fun groceryLwwWithTwoMembersTogglingTheSameItem() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        // Owner already checked it — seeded directly (not via a real push) so the server-side
+        // timestamp is a fixed, small logical value rather than real wall-clock time, which a
+        // second real push's own small updatedAt could never legitimately beat.
+        repo.seedGroceryItem(
+            groceryItem(planId, "eggs", checked = true, updatedAt = 9000L).copy(checkedBy = ownerId.toString()),
+            serverUpdatedAtMillis = 9000L
+        )
+
+        // Member unchecks with a STALE clock (5000 < 9000) - must conflict, never overwrite.
+        val stale = service.pushRecipes(
+            memberId,
+            SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(groceryItem(planId, "eggs", checked = false, updatedAt = 5000L)))
+        )
+        assertEquals(1, stale.groceryListItems.conflicts.size)
+        assertTrue(stale.groceryListItems.accepted.isEmpty())
+
+        // Member unchecks with a NEWER clock (10000 > 9000) - must win.
+        val newer = service.pushRecipes(
+            memberId,
+            SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(groceryItem(planId, "eggs", checked = false, updatedAt = 10000L)))
+        )
+        assertEquals(1, newer.groceryListItems.accepted.size)
+
+        val pulled = service.pullRecipes(ownerId, sinceMillis = 0L, limit = 10)
+        val item = pulled.groceryListItems.single { it.itemKey == "eggs" }
+        assertEquals(false, item.checked)
+        assertEquals(null, item.checkedBy, "unchecking clears checkedBy")
+    }
+
+    @Test
+    fun groceryItemCheckedByReflectsThePushingCallerNeverThePayload() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val impersonated = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId), serverUpdatedAtMillis = 1000L)
+
+        val item = SyncGroceryListItem(
+            mealPlanId = planId.toString(),
+            itemKey = "eggs",
+            checked = true,
+            checkedBy = impersonated.toString(),
+            updatedAt = 1000L,
+            deletedAt = null
+        )
+        service.pushRecipes(ownerId, SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(item)))
+
+        val pulled = service.pullRecipes(ownerId, sinceMillis = 0L, limit = 10)
+        assertEquals(ownerId.toString(), pulled.groceryListItems.single().checkedBy)
+    }
+
+    @Test
+    fun groceryItemPushAgainstAnInaccessiblePlanIsRejected() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val strangerId = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId), serverUpdatedAtMillis = 1000L)
+
+        val response = service.pushRecipes(
+            strangerId,
+            SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(groceryItem(planId, "eggs", checked = true, updatedAt = 1000L)))
+        )
+
+        assertEquals(1, response.groceryListItems.errors.size)
+        assertEquals(GroceryItemErrors.MEAL_PLAN_NOT_ACCESSIBLE, response.groceryListItems.errors.single().reason)
+    }
+
+    @Test
+    fun groceryItemPushWithAnInvalidMealPlanIdIsRejected() = withService { service, _ ->
+        val userId = UUID.randomUUID()
+
+        val response = service.pushRecipes(
+            userId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                groceryListItems = listOf(
+                    SyncGroceryListItem(
+                        mealPlanId = "not-a-uuid",
+                        itemKey = "eggs",
+                        checked = true,
+                        checkedBy = null,
+                        updatedAt = 1000L,
+                        deletedAt = null
+                    )
+                )
+            )
+        )
+
+        assertEquals(1, response.groceryListItems.errors.size)
+        assertEquals(GroceryItemErrors.INVALID_MEAL_PLAN_ID, response.groceryListItems.errors.single().reason)
+    }
+
+    @Test
+    fun groceryItemPushWithABlankItemKeyIsRejected() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId), serverUpdatedAtMillis = 1000L)
+
+        val response = service.pushRecipes(
+            ownerId,
+            SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(groceryItem(planId, "   ", checked = true, updatedAt = 1000L)))
+        )
+
+        assertEquals(1, response.groceryListItems.errors.size)
+        assertEquals(GroceryItemErrors.INVALID_ITEM_KEY, response.groceryListItems.errors.single().reason)
+    }
+
+    @Test
+    fun groceryItemPushWithATooLongItemKeyIsRejected() = withService { service, repo ->
+        val ownerId = UUID.randomUUID()
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId), serverUpdatedAtMillis = 1000L)
+
+        val response = service.pushRecipes(
+            ownerId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                groceryListItems = listOf(groceryItem(planId, "x".repeat(257), checked = true, updatedAt = 1000L))
+            )
+        )
+
+        assertEquals(1, response.groceryListItems.errors.size)
+        assertEquals(GroceryItemErrors.INVALID_ITEM_KEY, response.groceryListItems.errors.single().reason)
+    }
+
+    @Test
+    fun groceryItemPullTombstonesARemovedMembersItemsButNotAnActiveMembersItems() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val removedMemberId = UUID.randomUUID()
+        val activeMemberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(activeMemberId, householdId)
+        repo.seedRemovedFromHousehold(removedMemberId, householdId, serverRemovedAtMillis = 5000L)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId).copy(householdId = householdId.toString()),
+            serverUpdatedAtMillis = 1000L
+        )
+        service.pushRecipes(
+            ownerId,
+            SyncPushRequest(recipes = emptyList(), groceryListItems = listOf(groceryItem(planId, "eggs", checked = true, updatedAt = 1000L)))
+        )
+
+        val removedPull = service.pullRecipes(removedMemberId, sinceMillis = 0L, limit = 10)
+        val tombstoned = removedPull.groceryListItems.firstOrNull { it.itemKey == "eggs" }
+        assertNotNull(tombstoned)
+        assertEquals(5000L, tombstoned.deletedAt)
+
+        val activePull = service.pullRecipes(activeMemberId, sinceMillis = 0L, limit = 10)
+        val stillThere = activePull.groceryListItems.firstOrNull { it.itemKey == "eggs" }
+        assertNotNull(stillThere)
+        assertEquals(null, stillThere.deletedAt)
+    }
+
+    private fun groceryItem(planId: UUID, itemKey: String, checked: Boolean, updatedAt: Long) = SyncGroceryListItem(
+        mealPlanId = planId.toString(),
+        itemKey = itemKey,
+        checked = checked,
+        checkedBy = null,
+        updatedAt = updatedAt,
+        deletedAt = null
+    )
 
     // ── Regression: cross-tenant push (security audit F1/F3) ────────────────────
     //

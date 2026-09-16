@@ -9,6 +9,7 @@ import com.tenmilelabs.domain.model.HouseholdRole
 import com.tenmilelabs.domain.model.NewHouseholdInvite
 import com.tenmilelabs.domain.repository.HouseholdRepository
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
+import com.tenmilelabs.infrastructure.database.tables.GroceryListItemCheckTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdInviteTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
@@ -207,14 +208,25 @@ class PostgresHouseholdRepository : HouseholdRepository {
         }
 
     /**
-     * Cursor backfill on join (backend prompt §6.5): bumps every meal plan under [householdId] so
-     * a newly-joined member's next pull receives them regardless of how old their own cursor is.
-     * `grocery_list_item_checks` still doesn't exist (lands with the grocery-list PR) — that half
-     * of this method stays a no-op until then; no call-site change will be needed there either.
+     * Cursor backfill on join (backend prompt §6.5): bumps every meal plan under [householdId],
+     * and every grocery item on those plans, so a newly-joined member's next pull receives them
+     * regardless of how old their own cursor is. Referenced *recipes* need no equivalent bump —
+     * they arrive via the gap clause, which ignores the cursor by construction.
      */
     override suspend fun bumpServerUpdatedAtForHouseholdRows(householdId: UUID, at: Instant): Unit = suspendTransaction {
+        val planIds = MealPlanTable
+            .selectAll()
+            .where { MealPlanTable.household_id eq EntityID(householdId, HouseholdTable) }
+            .map { it[MealPlanTable.id] }
+
         MealPlanTable.update({ MealPlanTable.household_id eq EntityID(householdId, HouseholdTable) }) {
             it[server_updated_at] = at
+        }
+
+        if (planIds.isNotEmpty()) {
+            GroceryListItemCheckTable.update({ GroceryListItemCheckTable.meal_plan_id inList planIds }) {
+                it[server_updated_at] = at
+            }
         }
     }
 

@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS bookmarked_recipes CASCADE;
 DROP TABLE IF EXISTS refresh_tokens CASCADE;
 DROP TABLE IF EXISTS household_invites CASCADE;
 DROP TABLE IF EXISTS household_members CASCADE;
+DROP TABLE IF EXISTS grocery_list_item_checks CASCADE;
 DROP TABLE IF EXISTS meal_plan_days CASCADE;
 DROP TABLE IF EXISTS meal_plans CASCADE;
 DROP TABLE IF EXISTS user_preferences CASCADE;

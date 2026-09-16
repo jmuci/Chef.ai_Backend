@@ -333,3 +333,22 @@ CREATE TABLE IF NOT EXISTS user_preferences (
     preferences TEXT NOT NULL,
     updated_at  TIMESTAMPTZ NOT NULL
 );
+
+-- ===============================
+-- GROCERY_LIST_ITEM_CHECKS
+-- ===============================
+-- Keyed by (meal_plan_id, item_key) rather than a surrogate id: the item itself only exists as a
+-- client-derived opaque string, there's nothing else to key it by. checked is an explicit boolean,
+-- not a tombstone-on-uncheck — see docs/sync-protocol.md's Grocery List section.
+CREATE TABLE IF NOT EXISTS grocery_list_item_checks (
+    meal_plan_id      UUID NOT NULL REFERENCES meal_plans(id) ON DELETE CASCADE,
+    item_key          TEXT NOT NULL,
+    checked           BOOLEAN NOT NULL,
+    checked_by        UUID NULL REFERENCES users(uuid) ON DELETE SET NULL,
+    updated_at        BIGINT NOT NULL,
+    deleted_at        BIGINT NULL,
+    server_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (meal_plan_id, item_key)
+);
+CREATE INDEX IF NOT EXISTS idx_grocery_list_item_checks_server_updated_at
+    ON grocery_list_item_checks(server_updated_at);

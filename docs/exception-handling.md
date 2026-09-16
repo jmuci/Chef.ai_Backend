@@ -159,6 +159,21 @@ Returned in `SyncPushResponse.bookmarkErrors[]`:
 
 Bookmark errors are **per-item** — other bookmarks and all recipes in the same push batch are unaffected.
 
+### Grocery item sync errors (`GroceryItemErrors`)
+
+Returned in `SyncPushResponse.groceryListItems.errors[]` — a separate enum from `SyncErrors`
+(unlike meal plans, which reuse it), since grocery items are their own new sync-participating
+entity type rather than an existing one gaining fields. See
+[`docs/sync-protocol.md`](sync-protocol.md#grocery-list) for the full validation order.
+
+| Code | Meaning | Client action |
+|------|---------|---------------|
+| `INVALID_MEAL_PLAN_ID` | `mealPlanId` is not a valid UUID | Fix client-side ID |
+| `MEAL_PLAN_NOT_ACCESSIBLE` | Plan doesn't exist, or the caller isn't its owner or an active member of its household | Drop the local item; caller lost or never had access to its plan |
+| `INVALID_ITEM_KEY` | `itemKey` is blank or longer than 256 characters | Fix client-side item-key derivation |
+
+Grocery errors are **per-item**, same as bookmarks and meal plans.
+
 ---
 
 ## Sync Push/Pull Transport Errors

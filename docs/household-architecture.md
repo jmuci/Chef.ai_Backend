@@ -1,10 +1,10 @@
 # Household Architecture
 
-> Status: data model, roles, invite lifecycle, all 15 HTTP endpoints, and shared-meal-plan sync
-> widening (visibility, removal tombstones, the recipe gap clause) are implemented and
-> unit/integration-tested — see [`docs/sync-protocol.md`](sync-protocol.md#household-sharing-recipe-gap-clause)
-> for the sync-side details. Grocery lists have not started — see "What's deliberately deferred"
-> below.
+> Status: data model, roles, invite lifecycle, all 15 HTTP endpoints, shared-meal-plan sync
+> widening (visibility, removal tombstones, the recipe gap clause), and the shared grocery list
+> are implemented and unit/integration-tested. See
+> [`docs/sync-protocol.md`](sync-protocol.md#household-sharing-recipe-gap-clause) and its
+> [Grocery List](sync-protocol.md#grocery-list) section for the sync-side details.
 
 ## What a household is
 
@@ -171,20 +171,11 @@ household instead; in practice unreachable under normal invariants, since the ow
 caller when `requireOwner` has already passed, so guarded defensively rather than tested).
 
 **Every plan reverts to personal, still owned by whoever created it — `meal_plans.user_id` is
-never touched at any point in a household's life.** Zero data loss on any path.
-
-## What's deliberately deferred
-
-Grocery lists haven't started — the table doesn't exist yet, and two spots stay correct-but-inert
-placeholders until it does:
-
-| Method | Waits on |
-|---|---|
-| `HouseholdRepository.bumpServerUpdatedAtForHouseholdRows`'s grocery half (the meal-plan half is live) | `grocery_list_item_checks` |
-| `SyncRepository.processGroceryListItems` | `grocery_list_item_checks`, `SyncGroceryListItem` |
-
-`bumpServerUpdatedAtForHouseholdRows` already bumps `meal_plans` on join (see
-`docs/sync-protocol.md`'s "Cursor Backfill on Join") — only its grocery-row half is pending.
+never touched at any point in a household's life.** Zero data loss on any path. The same applies
+to grocery items: they live and die with the meal plan they belong to, and a plan's
+`household_id` reverting to personal is what stops a departed member's client from being served
+its grocery items on their next pull (surfaced as a removal tombstone — see
+`docs/sync-protocol.md`).
 
 ## See also
 

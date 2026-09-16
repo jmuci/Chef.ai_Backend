@@ -6,6 +6,7 @@ import com.tenmilelabs.domain.model.HouseholdRole
 import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
+import com.tenmilelabs.infrastructure.database.tables.GroceryListItemCheckTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
 import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
@@ -136,7 +137,7 @@ class PostgresHouseholdRepositoryIntegrationTest {
     }
 
     @Test
-    fun bumpServerUpdatedAtForHouseholdRowsOnlyTouchesPlansUnderThatHousehold() = runBlocking {
+    fun bumpServerUpdatedAtForHouseholdRowsOnlyTouchesRowsUnderThatHousehold() = runBlocking {
         val repo = PostgresHouseholdRepository()
         val ownerId = seedUser()
         val household = repo.createHousehold("Household", ownerId)
@@ -145,11 +146,19 @@ class PostgresHouseholdRepositoryIntegrationTest {
 
         val sharedPlanId = seedMealPlan(ownerId, household.id, serverUpdatedAtMillis = 1_000L)
         val otherHouseholdPlanId = seedMealPlan(otherOwnerId, otherHousehold.id, serverUpdatedAtMillis = 1_000L)
+        seedGroceryItem(sharedPlanId, "eggs", serverUpdatedAtMillis = 1_000L)
+        seedGroceryItem(otherHouseholdPlanId, "milk", serverUpdatedAtMillis = 1_000L)
 
         repo.bumpServerUpdatedAtForHouseholdRows(household.id, millisecondPrecisionNow())
 
         assertTrue(mealPlanServerUpdatedAtMillis(sharedPlanId) > 1_000L, "the bumped household's plan must advance")
         assertEquals(1_000L, mealPlanServerUpdatedAtMillis(otherHouseholdPlanId), "an unrelated household's plan must be untouched")
+        assertTrue(groceryItemServerUpdatedAtMillis(sharedPlanId, "eggs") > 1_000L, "the bumped household's grocery item must advance")
+        assertEquals(
+            1_000L,
+            groceryItemServerUpdatedAtMillis(otherHouseholdPlanId, "milk"),
+            "an unrelated household's grocery item must be untouched"
+        )
     }
 
     private fun seedMealPlan(ownerId: UUID, householdId: UUID, serverUpdatedAtMillis: Long = 0L): UUID {
@@ -178,6 +187,25 @@ class PostgresHouseholdRepositoryIntegrationTest {
     private fun mealPlanServerUpdatedAtMillis(planId: UUID): Long = transaction {
         MealPlanTable.selectAll().where { MealPlanTable.id eq planId }
             .first()[MealPlanTable.server_updated_at].toEpochMilliseconds()
+    }
+
+    private fun seedGroceryItem(planId: UUID, itemKey: String, serverUpdatedAtMillis: Long) = transaction {
+        GroceryListItemCheckTable.insert {
+            it[meal_plan_id] = EntityID(planId, MealPlanTable)
+            it[item_key] = itemKey
+            it[checked] = false
+            it[checked_by] = null
+            it[updated_at] = 0L
+            it[deleted_at] = null
+            it[server_updated_at] = Instant.fromEpochMilliseconds(serverUpdatedAtMillis)
+        }
+        Unit
+    }
+
+    private fun groceryItemServerUpdatedAtMillis(planId: UUID, itemKey: String): Long = transaction {
+        GroceryListItemCheckTable.selectAll()
+            .where { (GroceryListItemCheckTable.meal_plan_id eq EntityID(planId, MealPlanTable)) and (GroceryListItemCheckTable.item_key eq itemKey) }
+            .first()[GroceryListItemCheckTable.server_updated_at].toEpochMilliseconds()
     }
 
     /** `households.owner_id` must always equal exactly one ACTIVE, OWNER-role `household_members` row. */
