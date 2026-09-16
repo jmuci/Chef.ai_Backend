@@ -7,6 +7,9 @@ import org.jetbrains.exposed.sql.Database
 // Import all table objects
 import com.tenmilelabs.infrastructure.database.tables.AllergenTable
 import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
+import com.tenmilelabs.infrastructure.database.tables.HouseholdInviteTable
+import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
+import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
 import com.tenmilelabs.infrastructure.database.tables.ImageBlobTable
 import com.tenmilelabs.infrastructure.database.tables.IngredientTable
 import com.tenmilelabs.infrastructure.database.tables.LabelTable
@@ -50,10 +53,14 @@ fun initDatabaseAndSchema() {
             MealPlanTable,
             MealPlanDayTable,
             ImageBlobTable,
-            UserPreferencesTable
+            UserPreferencesTable,
+            HouseholdTable,
+            HouseholdMemberTable,
+            HouseholdInviteTable
         )
 
         createRecipeSearchIndexIfMissing()
+        createHouseholdConstraintsIfMissing()
     }
 }
 
@@ -86,6 +93,24 @@ private fun Transaction.createRecipeSearchIndexIfMissing() {
     )
     exec(
         "CREATE INDEX IF NOT EXISTS idx_recipes_search_vector ON recipes USING GIN (search_vector)"
+    )
+}
+
+/**
+ * Enforces "at most one ACTIVE household per user" at the database level. Must be a *partial*
+ * unique index (`WHERE status = 'ACTIVE'`) rather than a plain one on `user_id`: a plain unique
+ * index would permanently block a user from ever rejoining a household after leaving one, since
+ * their REMOVED row (kept as the tombstone source — see `HouseholdMemberTable`) would still
+ * collide with a new ACTIVE row. Exposed's `Table.uniqueIndex()` cannot express a filtered index,
+ * so — same category as [createRecipeSearchIndexIfMissing] — this is hand-written, idempotent DDL.
+ * Mirrored by hand in `sql/create_tables.sql`.
+ */
+private fun Transaction.createHouseholdConstraintsIfMissing() {
+    exec(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_household_members_one_active_per_user
+          ON household_members(user_id) WHERE status = 'ACTIVE'
+        """.trimIndent()
     )
 }
 
