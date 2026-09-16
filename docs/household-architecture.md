@@ -2,8 +2,7 @@
 
 > Status: data model, roles, and invite lifecycle are implemented and unit/integration-tested.
 > **There is no HTTP surface yet** — `HouseholdRoutes` and the endpoint table land in a follow-up
-> PR. This doc will gain an "Endpoints" section then; see `docs/prompts/households-backend-prompt.md`
-> for the full design (client contract requirements, sync protocol widening, PR sequence).
+> PR, which will also add an "Endpoints" section here.
 
 ## What a household is
 
@@ -159,8 +158,5 @@ PRs only need to fill in their bodies — no call-site changes required.
 
 ## See also
 
-- [`docs/prompts/households-backend-prompt.md`](prompts/households-backend-prompt.md) — the full
-  design doc this feature is built from, including the client (Android) contract requirements and
-  the PR sequence.
 - [`docs/exception-handling.md`](exception-handling.md#household-errors) — `HouseholdException`
   hierarchy and its planned HTTP status mapping.
