@@ -1392,6 +1392,8 @@ While the server ensures referential integrity, the client must:
 | **Errors** | Per-recipe; don't fail batch |
 | **Client Pre-Population** | **Proposed, not implemented** — see the disposition note in that section |
 | **Bookmarks** | Piggybacked on push/pull; tombstones for removals; privacy-gated |
-| **Meal Plans** | Piggybacked on push/pull; same LWW conflict model as recipes; push also writes `UserPreferencesRepository` |
-| **Recipe Detail** | `GET /api/v1/recipes/{recipeId}`, anonymous-capable, PUBLIC (+ owner's own PRIVATE); reuses `SyncRecipe`/reference-data shapes; not-found and not-accessible both 404 |
+| **Meal Plans** | Piggybacked on push/pull; same LWW conflict model as recipes; push also writes `UserPreferencesRepository`; visible to owner or active household member; removal tombstones on leave/remove |
+| **Household Sharing** | Shared plans' referenced recipes gap-merged into pull (own step, not blended into the cursor-paginated page); `GET /api/v1/recipes/{id}` widened the same way; write-time checks close the "leak an unrelated private recipe via reference" and "spoof a household you're not in" holes |
+| **Grocery List** | Piggybacked on push/pull; keyed on `(mealPlanId, itemKey)`; explicit `checked` boolean, not tombstone-on-uncheck; `checkedBy` always server-derived, never trusted from the payload; same visibility/tombstone rules as meal plans |
+| **Recipe Detail** | `GET /api/v1/recipes/{recipeId}`, anonymous-capable, PUBLIC (+ owner's own PRIVATE + household-shared); reuses `SyncRecipe`/reference-data shapes; not-found and not-accessible both 404 |
 | **Meal Plan Generation (Stateless)** | `POST /api/v1/meal-plans/generate`, anonymous-capable, nothing persisted; response bundles `days` + `recipes` + `referenceData` + `creators` in one round trip |

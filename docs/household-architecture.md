@@ -19,7 +19,9 @@ in service code.
 
 ## Data model
 
-Three tables, defined in `infrastructure/database/tables/`:
+Three household tables, defined in `infrastructure/database/tables/` (a fourth,
+`grocery_list_item_checks`, hangs off `meal_plans` rather than off a household directly — see
+[`docs/sync-protocol.md`](sync-protocol.md#grocery-list)):
 
 - **`households`** (`HouseholdTable`) — `id`, `name`, `owner_id`, `created_at`, `updated_at`,
   `deleted_at`. `owner_id` is a **denormalized mirror** of whichever `household_members` row
@@ -32,8 +34,9 @@ Three tables, defined in `infrastructure/database/tables/`:
 - **`household_members`** (`HouseholdMemberTable`) — `id`, `household_id`, `user_id`, `role`
   (`OWNER` | `MEMBER`), `status` (`ACTIVE` | `REMOVED`), `joined_at`, `removed_at`,
   `server_removed_at`. Rows are **never deleted**, only marked `REMOVED` — they double as the audit
-  trail and, once the sync-widening PR lands, as the tombstone source that tells a removed member's
-  client which household-scoped rows to drop locally (driven by `server_removed_at`).
+  trail and as the tombstone source that tells a removed member's client which household-scoped
+  rows (meal plans, grocery items) to drop locally, driven by `server_removed_at` — see
+  [`docs/sync-protocol.md`](sync-protocol.md#meal-plans).
 
   At most one **ACTIVE** row per `user_id`, enforced by a partial unique index —
   `idx_household_members_one_active_per_user ON household_members(user_id) WHERE status = 'ACTIVE'`.
@@ -62,8 +65,10 @@ private suspend fun requireOwner(householdId: UUID, callerId: UUID): HouseholdMe
 
 ## Endpoints
 
-All under `/api/v1/households` except `/sync/*` (not yet widened — see "What's deliberately
-deferred"). Error body is the project's flat `ErrorResponse(message: String)`; see
+All under `/api/v1/households`. `/sync/*` isn't a household endpoint itself — meal-plan and
+grocery-list sharing widen the existing sync endpoints instead; see
+[`docs/sync-protocol.md`](sync-protocol.md#meal-plans). Error body is the project's flat
+`ErrorResponse(message: String)`; see
 [`docs/exception-handling.md`](exception-handling.md#household-errors) for the exception → status
 mapping `HouseholdRoutes.kt` applies. `HouseholdRoutes.kt` itself contains no business logic —
 every check below happens in `HouseholdService`.
@@ -136,10 +141,9 @@ invites inbox) shares one core implementation, in this order:
    consumes a reusable invite's budget, so no separate exhaustion bookkeeping is needed for that
    race.
 4. Increment `use_count`; for single-use invites, stamp `accepted_by`/`accepted_at`.
-5. Bump `server_updated_at` on every row the newly joined member should immediately see (the
-   "cursor backfill" — see `docs/sync-protocol.md` once the sync-widening PR lands). Currently a
-   no-op: it bumps `meal_plans` and `grocery_list_item_checks`, neither of which has household
-   linkage yet.
+5. Bump `server_updated_at` on every meal plan and grocery item already shared with the household
+   (the "cursor backfill" — see [`docs/sync-protocol.md`](sync-protocol.md#cursor-backfill-on-join))
+   so the newly joined member's next pull receives them regardless of how old their own cursor is.
 
 **Decline vs. revoke**: both share the `revoked_at` column rather than a separate `declined_at`.
 They're distinguished by who initiated them — the invitee (`declineInvite`) vs. the household

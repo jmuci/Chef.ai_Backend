@@ -5,9 +5,10 @@ import java.security.SecureRandom
 import java.util.Base64
 
 /**
- * Shared primitives for opaque, high-entropy tokens (household invites today; refresh tokens
- * follow the identical hand-rolled pattern in [com.tenmilelabs.domain.service.JwtService] and
- * [com.tenmilelabs.domain.service.AuthService] — see PR B6 for folding those onto this object).
+ * Shared primitives for opaque, high-entropy tokens — household invites and, since both turned
+ * out to be the identical hand-rolled algorithm, refresh tokens too
+ * ([com.tenmilelabs.domain.service.JwtService.generateRefreshToken] and
+ * [com.tenmilelabs.domain.service.AuthService.hashRefreshToken] both delegate here).
  *
  * The token itself is returned to the caller exactly once and never persisted; only its hash is
  * stored, so a database read can never recover a usable token.
