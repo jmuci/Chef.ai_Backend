@@ -21,7 +21,7 @@ Core architecture and protocol documentation:
 | [Auth Architecture](docs/auth-architecture.md) | Authentication flow, JWT tokens, refresh mechanism |
 | [Auth Quick Start](docs/auth-quick-start.md) | Quick reference for auth endpoints |
 | [Exception Handling](docs/exception-handling.md) | Error codes and exception patterns |
-| [Household Architecture](docs/household-architecture.md) | Shared meal plans & grocery lists — data model, roles, invite lifecycle, security posture (no HTTP surface yet) |
+| [Household Architecture](docs/household-architecture.md) | Shared meal plans & grocery lists — data model, roles, invite lifecycle, security posture, full endpoint table |
 | [Home Layout SDUI](docs/home-layout-sdui.md) | Server-driven home layout endpoint, component schema, sidecar data, caching and ETag behavior |
 | [Recipe Image Architecture](docs/recipe-image-architecture.md) | Recipe hero image blob upload/serving/reclamation — class diagram, upload/serve sequence diagrams, error states, app startup changes |
 | [Recipe Search](docs/recipe-search.md) | Postgres full-text recipe search, anonymous access, browse-card taxonomy, ranking, rate limiting |

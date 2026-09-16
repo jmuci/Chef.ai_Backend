@@ -1,6 +1,7 @@
 package com.tenmilelabs.application.service
 
 import com.tenmilelabs.domain.repository.BlobStore
+import com.tenmilelabs.domain.repository.HouseholdRepository
 import com.tenmilelabs.domain.repository.ImageBlobRepository
 import com.tenmilelabs.domain.repository.RecipeSearchRepository
 import com.tenmilelabs.domain.repository.RecipesRepository
@@ -8,6 +9,7 @@ import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import com.tenmilelabs.domain.service.AuthService
 import com.tenmilelabs.domain.service.HomeLayoutService
+import com.tenmilelabs.domain.service.HouseholdService
 import com.tenmilelabs.domain.service.ImageBlobConfig
 import com.tenmilelabs.domain.service.ImageBlobReclamationConfig
 import com.tenmilelabs.domain.service.ImageBlobReclamationService
@@ -21,6 +23,7 @@ import com.tenmilelabs.domain.service.SoftDeletePurgeService
 import com.tenmilelabs.domain.service.SyncService
 import com.tenmilelabs.infrastructure.auth.configureJwtAuth
 import com.tenmilelabs.infrastructure.database.*
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresImageBlobRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipeSearchRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresRecipesRepository
@@ -50,6 +53,7 @@ fun Application.module(
     userPreferencesRepository: UserPreferencesRepository = PostgresUserPreferencesRepository(),
     imageBlobRepository: ImageBlobRepository = PostgresImageBlobRepository(),
     recipeSearchRepository: RecipeSearchRepository = PostgresRecipeSearchRepository(),
+    householdRepository: HouseholdRepository = PostgresHouseholdRepository(),
     blobStore: BlobStore = LocalDiskBlobStore(
         Path.of(System.getenv("IMAGE_BLOB_STORAGE_ROOT") ?: "data/image-blobs")
     ),
@@ -84,6 +88,9 @@ fun Application.module(
     val syncService = SyncService(syncRepository, log, userPreferencesRepository)
 
     val recipeSearchService = RecipeSearchService(recipeSearchRepository)
+    val householdService = HouseholdService(householdRepository, userRepository, log)
+    val householdInviteBaseUrl = environment.config.propertyOrNull("household.inviteBaseUrl")?.getString()
+        ?: "https://chefai.app/invite"
 
     val imageBlobConfig = imageBlobConfig()
     val recipeImageService = RecipeImageService(imageBlobRepository, blobStore, imageBlobConfig, log)
@@ -111,6 +118,8 @@ fun Application.module(
         imageBlobConfig = imageBlobConfig,
         userPreferencesRepository = userPreferencesRepository,
         recipeSearchService = recipeSearchService,
+        householdService = householdService,
+        householdInviteBaseUrl = householdInviteBaseUrl,
     )
 
     val purgeConfig = softDeletePurgeConfig()

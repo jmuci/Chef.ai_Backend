@@ -240,9 +240,9 @@ returns `404`, never `403`, so the endpoint can't be used to probe whether a rec
 
 ## Household Errors
 
-`domain/exception/HouseholdExceptions.kt` — no HTTP surface yet (`HouseholdRoutes` lands in a
-follow-up PR); documented now so the exception-to-status mapping is settled before routes need it.
-See [`docs/household-architecture.md`](household-architecture.md) for the full feature.
+`domain/exception/HouseholdExceptions.kt`, mapped to HTTP statuses in `HouseholdRoutes.kt`'s
+`respondHouseholdException`. See [`docs/household-architecture.md`](household-architecture.md#endpoints)
+for the full endpoint table.
 
 ```kotlin
 sealed class HouseholdException(message: String) : Exception(message)

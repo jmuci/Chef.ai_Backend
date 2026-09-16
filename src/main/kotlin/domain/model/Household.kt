@@ -52,6 +52,11 @@ data class HouseholdInvite(
     }
 }
 
+data class HouseholdInvitePreview(
+    val householdName: String,
+    val inviterDisplayName: String,
+)
+
 data class NewHouseholdInvite(
     val householdId: UUID,
     val createdBy: UUID,

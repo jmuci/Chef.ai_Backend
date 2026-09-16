@@ -1,8 +1,8 @@
 # Household Architecture
 
-> Status: data model, roles, and invite lifecycle are implemented and unit/integration-tested.
-> **There is no HTTP surface yet** — `HouseholdRoutes` and the endpoint table land in a follow-up
-> PR, which will also add an "Endpoints" section here.
+> Status: data model, roles, invite lifecycle, and all 15 HTTP endpoints are implemented and
+> unit/integration-tested. Sync protocol widening (shared meal plans, grocery lists) has not
+> started — see "What's deliberately deferred" below.
 
 ## What a household is
 
@@ -58,6 +58,32 @@ private suspend fun requireActiveMember(householdId: UUID, callerId: UUID): Hous
 private suspend fun requireOwner(householdId: UUID, callerId: UUID): HouseholdMembership
 ```
 
+## Endpoints
+
+All under `/api/v1/households` except `/sync/*` (not yet widened — see "What's deliberately
+deferred"). Error body is the project's flat `ErrorResponse(message: String)`; see
+[`docs/exception-handling.md`](exception-handling.md#household-errors) for the exception → status
+mapping `HouseholdRoutes.kt` applies. `HouseholdRoutes.kt` itself contains no business logic —
+every check below happens in `HouseholdService`.
+
+| Verb & Path | Auth | Success | Notes |
+|---|---|---|---|
+| `POST /households` | required | `201 HouseholdResponse` | |
+| `GET /households/me` | required | `200 HouseholdResponse` | `404` if the caller has no household |
+| `PATCH /households/{id}` | OWNER | `200 HouseholdResponse` | |
+| `DELETE /households/{id}` | OWNER | `204` | Dissolves immediately, regardless of member count |
+| `GET /households/{id}/members` | member | `200 List<MemberResponse>` | ACTIVE members only |
+| `DELETE /households/{id}/members/{userId}` | OWNER | `204` | `400` removing yourself or the owner |
+| `POST /households/{id}/members/me/leave` | member | `204` | |
+| `POST /households/{id}/invites` | OWNER | `201 CreateInviteResponse` | Rate-limited: 20/hour per caller |
+| `GET /households/{id}/invites` | OWNER | `200 List<InviteSummaryResponse>` | Never includes the raw token |
+| `DELETE /households/{id}/invites/{inviteId}` | OWNER | `204` | |
+| `GET /households/invites/preview?token=` | optional | `200 InvitePreviewResponse` | Rate-limited: 30/10s per caller-or-IP |
+| `POST /households/join` | required | `200 HouseholdResponse` | Rate-limited: 10/min per caller |
+| `GET /households/invites/pending` | required | `200 List<InviteSummaryResponse>` | Invites addressed to the caller |
+| `POST /households/invites/{inviteId}/accept` | required | `200 HouseholdResponse` | In-app accept, no token needed |
+| `POST /households/invites/{inviteId}/decline` | required | `204` | Shares `revoked_at` with owner-revoke |
+
 ## One-household-per-user enforcement
 
 Two layers, deliberately redundant:
@@ -85,6 +111,10 @@ An invite is created by an `OWNER` (`HouseholdService.createInvite`):
   anywhere, so a database read can never recover a usable token.
 - `expiresInHours` is optional (defaults to 7 days) and server-clamped to a maximum of 30 days
   regardless of what the caller requests.
+- The route layer builds the shareable `url` returned alongside the raw token as
+  `"$inviteBaseUrl?token=$rawToken"`, where `inviteBaseUrl` comes from the `household.inviteBaseUrl`
+  config key (`application.yaml`), defaulting to a placeholder if unset. **Override it in
+  production** — this is not a real deployed domain.
 - An email-addressed invite (`inviteeEmail` set) resolves to a concrete `users` row **at creation
   time** and stores `invitee_user_id` — not a bare email to match later. Authorization at accept
   time is always an id comparison (`InviteNotForCallerException`), never a string comparison,
