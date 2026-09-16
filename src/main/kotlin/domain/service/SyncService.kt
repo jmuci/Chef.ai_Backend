@@ -224,7 +224,74 @@ class SyncService(
                 errors += SyncError(plan.uuid, SyncErrors.INVALID_UUID, SyncErrors.INVALID_UUID.message)
             } ?: return@forEach
 
-            val existing = syncRepository.getMealPlanForUser(planUuid, userId)
+            val ownerId = parseUuid(plan.ownerId) {
+                errors += SyncError(plan.uuid, SyncErrors.INVALID_OWNER, SyncErrors.INVALID_OWNER.message)
+            } ?: return@forEach
+
+            var householdParseFailed = false
+            val claimedHouseholdId = plan.householdId?.let {
+                parseUuid(it) {
+                    householdParseFailed = true
+                    errors += SyncError(plan.uuid, SyncErrors.INVALID_HOUSEHOLD, SyncErrors.INVALID_HOUSEHOLD.message)
+                }
+            }
+            if (householdParseFailed) return@forEach
+
+            val existing = syncRepository.getMealPlanForMember(planUuid, userId)
+
+            // getMealPlanForMember found nothing two different reasons: brand new, or it exists
+            // but userId isn't the owner and isn't an active member of its household. Only the
+            // first is a legitimate insert — the second must reject, or upsertMealPlan would
+            // silently let an unrelated caller overwrite someone else's plan by guessing its uuid.
+            if (existing == null && syncRepository.mealPlanExists(planUuid)) {
+                errors += SyncError(
+                    plan.uuid,
+                    SyncErrors.MEAL_PLAN_NOT_ACCESSIBLE,
+                    SyncErrors.MEAL_PLAN_NOT_ACCESSIBLE.message
+                )
+                return@forEach
+            }
+
+            // A brand-new plan's ownerId must name the caller, and a claimed householdId must be
+            // the caller's own active household — both unvalidated would let a push plant content
+            // (and, via the recipe gap clause below, leak a referenced private recipe) into
+            // another user's identity or a household the pusher doesn't belong to.
+            if (existing == null) {
+                if (ownerId != userId) {
+                    errors += SyncError(plan.uuid, SyncErrors.OWNER_MISMATCH, SyncErrors.OWNER_MISMATCH.message)
+                    return@forEach
+                }
+                if (claimedHouseholdId != null && !syncRepository.isActiveHouseholdMember(userId, claimedHouseholdId)) {
+                    errors += SyncError(plan.uuid, SyncErrors.INVALID_HOUSEHOLD, SyncErrors.INVALID_HOUSEHOLD.message)
+                    return@forEach
+                }
+            }
+
+            // Effective household after this push: unchanged on update (upsertMealPlan never
+            // touches it), the validated claim on insert. Gates the recipe-reference check below —
+            // a personal plan's day references are unrestricted, same as before households existed.
+            val effectiveHouseholdId = existing?.plan?.householdId?.let { UUID.fromString(it) } ?: claimedHouseholdId
+            if (effectiveHouseholdId != null) {
+                val allReferencesAccessible = plan.days
+                    .flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) }
+                    .all { recipeIdString ->
+                        val recipeId = try {
+                            UUID.fromString(recipeIdString)
+                        } catch (_: IllegalArgumentException) {
+                            null
+                        }
+                        recipeId != null && syncRepository.isRecipeAccessibleBy(userId, recipeId)
+                    }
+                if (!allReferencesAccessible) {
+                    errors += SyncError(
+                        plan.uuid,
+                        SyncErrors.MEAL_PLAN_RECIPE_NOT_ACCESSIBLE,
+                        SyncErrors.MEAL_PLAN_RECIPE_NOT_ACCESSIBLE.message
+                    )
+                    return@forEach
+                }
+            }
+
             if (existing != null && existing.serverUpdatedAtMillis > plan.updatedAt) {
                 conflicts += plan.uuid
                 log.info("Meal plan push conflict for user $userId, planId=${plan.uuid}: server is newer")
@@ -232,7 +299,7 @@ class SyncService(
             }
 
             val now = millisecondPrecisionNow()
-            syncRepository.upsertMealPlan(plan, userId, now)
+            syncRepository.upsertMealPlan(plan, now)
             userPreferencesRepository.upsertUserPreferences(userId, plan.preferencesJson, now)
             accepted += MealPlanPushResult(uuid = plan.uuid, serverUpdatedAt = now.toEpochMilliseconds())
             log.info("Meal plan push accepted for user $userId, planId=${plan.uuid}")
@@ -320,17 +387,28 @@ class SyncService(
 
         val effectiveLimit = limit.coerceAtMost(MAX_PULL_LIMIT)
         val (page, hasMore) = fetchStablePage(userId, sinceMillis, effectiveLimit)
+        // The cursor is derived from the delta page alone, before the household gap merge below —
+        // see findDeltaRecipes's KDoc for why blending an unconditional-on-timestamp gap set into
+        // this computation would risk dragging the cursor backwards.
         val cursor = page.lastOrNull()?.serverUpdatedAtMillis ?: sinceMillis
 
-        val ingredientIds = page
+        // Household gap clause (§6.3): recipes visible only because a shared plan's day
+        // references them, regardless of the recipe's own privacy/creator. Excludes anything
+        // already in `page` and never affects `hasMore`/`cursor` above.
+        val pageRecipeIds = page.map { UUID.fromString(it.recipe.uuid) }.toSet()
+        val gapRecipes = (syncRepository.findHouseholdVisibleRecipeIds(userId) - pageRecipeIds)
+            .mapNotNull { syncRepository.getRecipe(it) }
+        val allRecipes = page + gapRecipes
+
+        val ingredientIds = allRecipes
             .flatMap { it.recipe.ingredients }
             .map { UUID.fromString(it.ingredientId) }
             .toSet()
-        val tagIds = page
+        val tagIds = allRecipes
             .flatMap { it.recipe.tagIds }
             .map { UUID.fromString(it) }
             .toSet()
-        val labelIds = page
+        val labelIds = allRecipes
             .flatMap { it.recipe.labelIds }
             .map { UUID.fromString(it) }
             .toSet()
@@ -340,19 +418,23 @@ class SyncService(
             tagIds = tagIds,
             labelIds = labelIds
         )
-        val creatorIds = page
-            .map { UUID.fromString(it.recipe.creatorId) }
-            .toSet()
+
+        val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
+        val mealPlans = syncRepository.findDeltaMealPlans(userId, sinceMillis)
+
+        // Union of recipe creators and meal-plan owners (backend prompt §0.2): the client upserts
+        // `creators` before meal plans to satisfy a local FK on the owner id, so a household
+        // member's shared plan whose owner authored none of this page's recipes would otherwise be
+        // missing a row it needs.
+        val creatorIds = allRecipes.map { UUID.fromString(it.recipe.creatorId) }.toSet() +
+            mealPlans.map { UUID.fromString(it.plan.ownerId) }.toSet()
         val creators = syncRepository.collectCreators(
             creatorIds = creatorIds,
             sinceMillis = sinceMillis
         )
 
-        val bookmarks = syncRepository.findDeltaBookmarks(userId, sinceMillis)
-        val mealPlans = syncRepository.findDeltaMealPlans(userId, sinceMillis)
-
         log.info(
-            "Sync pull for user $userId: recipes=${page.size}, hasMore=$hasMore, " +
+            "Sync pull for user $userId: recipes=${page.size}, gapRecipes=${gapRecipes.size}, hasMore=$hasMore, " +
                 "ingredients=${refData.ingredients.size}, allergens=${refData.allergens.size}, " +
                 "sourceClassifications=${refData.sourceClassifications.size}, " +
                 "tags=${refData.tags.size}, labels=${refData.labels.size}, " +
@@ -360,7 +442,7 @@ class SyncService(
         )
 
         return SyncPullResponse(
-            recipes = page.map { it.recipe },
+            recipes = allRecipes.map { it.recipe },
             creators = creators,
             ingredients = refData.ingredients,
             allergens = refData.allergens,
@@ -380,9 +462,11 @@ class SyncService(
      * client hasn't synced yet (ChefAI#186). [userId] is nullable for the same reason
      * [RecipeSearchService.search]'s is: a null caller is anonymous, not an error.
      *
-     * A recipe is visible if it's `PUBLIC`, or `PRIVATE` and owned by [userId]. Everything
-     * else — nonexistent, soft-deleted, or `PRIVATE` and not owned — is [RecipeDetailResult.NotFound].
-     * Deliberately never a 403-shaped outcome: this mirrors the bookmark-push rule (see
+     * A recipe is visible if it's `PUBLIC`, `PRIVATE` and owned by [userId], or `PRIVATE` and
+     * reachable through [SyncRepository.isRecipeHouseholdVisible] — the same household-sharing
+     * gap the pull-side `/sync/pull` uses (§6.3). Everything else — nonexistent, soft-deleted, or
+     * `PRIVATE` and neither owned nor shared — is [RecipeDetailResult.NotFound]. Deliberately
+     * never a 403-shaped outcome: this mirrors the bookmark-push rule (see
      * docs/sync-protocol.md's validation table) of not distinguishing "doesn't exist" from
      * "exists but you can't see it," so a private recipe's existence isn't leaked to a caller
      * who isn't its owner.
@@ -400,7 +484,8 @@ class SyncService(
         if (recipe.deletedAt != null) return RecipeDetailResult.NotFound
 
         val isOwner = userId != null && recipe.creatorId == userId.toString()
-        if (recipe.privacy != "PUBLIC" && !isOwner) return RecipeDetailResult.NotFound
+        val isHouseholdVisible = userId != null && syncRepository.isRecipeHouseholdVisible(userId, recipeId)
+        if (recipe.privacy != "PUBLIC" && !isOwner && !isHouseholdVisible) return RecipeDetailResult.NotFound
 
         val referenceData = syncRepository.collectReferenceData(
             ingredientIds = recipe.ingredients.map { UUID.fromString(it.ingredientId) }.toSet(),

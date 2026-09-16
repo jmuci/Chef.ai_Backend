@@ -399,8 +399,7 @@ class MealPlanGenerationServiceTest {
         repo.seedUser(uuid = userId)
         repo.seedMealPlan(
             plan = buildDraftPlan(planId, userId),
-            serverUpdatedAtMillis = 1000L,
-            userId = userId
+            serverUpdatedAtMillis = 1000L
         )
 
         val service = makeService(repo)
@@ -435,6 +434,7 @@ class MealPlanGenerationServiceTest {
     private fun buildDraftPlan(planId: UUID, userId: UUID) =
         com.tenmilelabs.application.dto.SyncMealPlanDto(
             uuid = planId.toString(),
+            ownerId = userId.toString(),
             name = "Test Plan",
             status = "DRAFT",
             preferencesJson = """{"planLengthDays":3,"mealType":"DINNER","recipeSource":"INCLUDE_PUBLIC"}""",

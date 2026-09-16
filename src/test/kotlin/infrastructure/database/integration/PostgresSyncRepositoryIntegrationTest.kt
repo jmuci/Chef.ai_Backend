@@ -3,12 +3,17 @@ package com.tenmilelabs.infrastructure.database.integration
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
+import com.tenmilelabs.domain.model.HouseholdRole
+import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
+import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresSyncRepository
 import com.tenmilelabs.infrastructure.database.tables.AllergenTable
 import com.tenmilelabs.infrastructure.database.tables.BookmarkedRecipeTable
+import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
 import com.tenmilelabs.infrastructure.database.tables.IngredientTable
 import com.tenmilelabs.infrastructure.database.tables.LabelTable
+import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
 import com.tenmilelabs.infrastructure.database.tables.SourceClassificationTable
 import com.tenmilelabs.infrastructure.database.tables.TagTable
@@ -113,6 +118,68 @@ class PostgresSyncRepositoryIntegrationTest {
         assertNotNull(loaded)
         assertEquals(ownerId.toString(), loaded.recipe.creatorId, "creator_id must be immutable after insert")
         assertEquals("Retitled", loaded.recipe.title, "other columns still update normally")
+    }
+
+    /**
+     * The join backfill regression (backend prompt §6.5): a plan shared with a household before
+     * [joinerId] joins has an old `server_updated_at` — older than the cursor the joiner's device
+     * already carries from unrelated prior syncing. Without
+     * [PostgresHouseholdRepository.bumpServerUpdatedAtForHouseholdRows] running inside the accept
+     * transaction, that plan would never cross the joiner's cursor and they'd never receive it.
+     */
+    @Test
+    fun joiningAHouseholdBackfillsAnAlreadyExistingSharedPlanPastTheJoinersCursor() = runBlocking {
+        val syncRepo = PostgresSyncRepository()
+        val householdRepo = PostgresHouseholdRepository()
+
+        val ownerId = UUID.randomUUID()
+        val joinerId = UUID.randomUUID()
+        transaction {
+            listOf(ownerId to "owner", joinerId to "joiner").forEach { (id, name) ->
+                UserTable.insert {
+                    it[UserTable.id] = EntityID(id, UserTable)
+                    it[user_name] = name
+                    it[email] = "$name-$id@example.com"
+                    it[display_name] = name
+                    it[avatar_url] = ""
+                    it[password_hash] = "hash"
+                }
+            }
+        }
+
+        val household = householdRepo.createHousehold("Household", ownerId)
+
+        val planId = UUID.randomUUID()
+        transaction {
+            MealPlanTable.insert {
+                it[id] = EntityID(planId, MealPlanTable)
+                it[user_id] = EntityID(ownerId, UserTable)
+                it[household_id] = EntityID(household.id, HouseholdTable)
+                it[name] = "Week Plan"
+                it[status] = "DRAFT"
+                it[preferences] = "{}"
+                it[created_at] = 1_000L
+                it[updated_at] = 1_000L
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(1_000L)
+            }
+        }
+
+        householdRepo.addMember(household.id, joinerId, HouseholdRole.MEMBER, millisecondPrecisionNow())
+
+        val joinerCursorMillis = 5_000L
+        // Regression pin: membership alone isn't enough - the plan's stamp (1_000L) predates the
+        // joiner's cursor, so without the backfill bump it's invisible even though they can now
+        // access it.
+        assertTrue(
+            syncRepo.findDeltaMealPlans(joinerId, joinerCursorMillis).none { it.plan.uuid == planId.toString() },
+            "sanity check: an unbumped plan must not already be visible past a newer cursor"
+        )
+
+        householdRepo.bumpServerUpdatedAtForHouseholdRows(household.id, millisecondPrecisionNow())
+
+        val received = syncRepo.findDeltaMealPlans(joinerId, joinerCursorMillis)
+        assertTrue(received.any { it.plan.uuid == planId.toString() }, "joiner must receive the pre-existing shared plan")
     }
 
     @Test

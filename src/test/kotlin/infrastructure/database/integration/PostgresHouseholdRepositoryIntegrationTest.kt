@@ -8,8 +8,10 @@ import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
 import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
+import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
 import kotlinx.coroutines.runBlocking
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.and
@@ -114,6 +116,68 @@ class PostgresHouseholdRepositoryIntegrationTest {
 
         assertOwnerInvariant(household.id)
         assertNull(repo.getActiveMembership(household.id, memberId))
+    }
+
+    @Test
+    fun detachPlansOwnedByNullsOnlyTheDepartingMembersOwnPlans() = runBlocking {
+        val repo = PostgresHouseholdRepository()
+        val ownerId = seedUser()
+        val memberId = seedUser()
+        val household = repo.createHousehold("Household", ownerId)
+        repo.addMember(household.id, memberId, HouseholdRole.MEMBER, millisecondPrecisionNow())
+
+        val ownersPlanId = seedMealPlan(ownerId, household.id)
+        val membersPlanId = seedMealPlan(memberId, household.id)
+
+        repo.detachPlansOwnedBy(household.id, memberId)
+
+        assertNull(mealPlanHouseholdId(membersPlanId), "the departing member's own plan must revert to personal")
+        assertEquals(household.id, mealPlanHouseholdId(ownersPlanId), "other members' plans must stay shared")
+    }
+
+    @Test
+    fun bumpServerUpdatedAtForHouseholdRowsOnlyTouchesPlansUnderThatHousehold() = runBlocking {
+        val repo = PostgresHouseholdRepository()
+        val ownerId = seedUser()
+        val household = repo.createHousehold("Household", ownerId)
+        val otherOwnerId = seedUser()
+        val otherHousehold = repo.createHousehold("Other Household", otherOwnerId)
+
+        val sharedPlanId = seedMealPlan(ownerId, household.id, serverUpdatedAtMillis = 1_000L)
+        val otherHouseholdPlanId = seedMealPlan(otherOwnerId, otherHousehold.id, serverUpdatedAtMillis = 1_000L)
+
+        repo.bumpServerUpdatedAtForHouseholdRows(household.id, millisecondPrecisionNow())
+
+        assertTrue(mealPlanServerUpdatedAtMillis(sharedPlanId) > 1_000L, "the bumped household's plan must advance")
+        assertEquals(1_000L, mealPlanServerUpdatedAtMillis(otherHouseholdPlanId), "an unrelated household's plan must be untouched")
+    }
+
+    private fun seedMealPlan(ownerId: UUID, householdId: UUID, serverUpdatedAtMillis: Long = 0L): UUID {
+        val planId = UUID.randomUUID()
+        transaction {
+            MealPlanTable.insert {
+                it[id] = EntityID(planId, MealPlanTable)
+                it[user_id] = EntityID(ownerId, UserTable)
+                it[household_id] = EntityID(householdId, HouseholdTable)
+                it[name] = "Week Plan"
+                it[status] = "DRAFT"
+                it[preferences] = "{}"
+                it[created_at] = 0L
+                it[updated_at] = 0L
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(serverUpdatedAtMillis)
+            }
+        }
+        return planId
+    }
+
+    private fun mealPlanHouseholdId(planId: UUID): UUID? = transaction {
+        MealPlanTable.selectAll().where { MealPlanTable.id eq planId }.first()[MealPlanTable.household_id]?.value
+    }
+
+    private fun mealPlanServerUpdatedAtMillis(planId: UUID): Long = transaction {
+        MealPlanTable.selectAll().where { MealPlanTable.id eq planId }
+            .first()[MealPlanTable.server_updated_at].toEpochMilliseconds()
     }
 
     /** `households.owner_id` must always equal exactly one ACTIVE, OWNER-role `household_members` row. */

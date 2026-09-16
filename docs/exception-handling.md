@@ -131,6 +131,22 @@ Returned in `SyncPushResponse.errors[]`:
 | `INVALID_TAG` | A `tagId` is not a valid UUID | Fix client-side data |
 | `INVALID_LABEL` | A `labelId` is not a valid UUID | Fix client-side data |
 
+### Meal plan sync errors (also `SyncErrors`)
+
+Returned in `SyncPushResponse.mealPlans.errors[]` — same enum type as the recipe errors above
+(reused rather than a parallel type, since `MealPlanPushResults.errors` already shared `SyncError`
+before households existed), but a **different list** on the response. See
+[`docs/sync-protocol.md`](sync-protocol.md#meal-plans) for the full validation order.
+
+| Code | Meaning | Client action |
+|------|---------|---------------|
+| `INVALID_UUID` | Plan UUID is not a valid UUID | Fix client-side ID generation |
+| `INVALID_OWNER` | `ownerId` is not a valid UUID | Fix client-side ID |
+| `OWNER_MISMATCH` | A brand-new plan's `ownerId` doesn't name the caller | Stamp `ownerId` from the plan's real creator, never the pushing device's own id |
+| `MEAL_PLAN_NOT_ACCESSIBLE` | Plan exists but the caller isn't its owner or an active member of its household | Drop the local copy; caller lost or never had access |
+| `INVALID_HOUSEHOLD` | `householdId` isn't a valid UUID, or (new plan) doesn't name the caller's own active household | Fix client-side data, or don't claim a household you're not in |
+| `MEAL_PLAN_RECIPE_NOT_ACCESSIBLE` | A shared plan references a recipe the caller can't see (not owned by them, not `PUBLIC`) | Only reference your own or already-public recipes in a shared plan |
+
 ### Bookmark sync errors (`BookmarkErrors`)
 
 Returned in `SyncPushResponse.bookmarkErrors[]`:
