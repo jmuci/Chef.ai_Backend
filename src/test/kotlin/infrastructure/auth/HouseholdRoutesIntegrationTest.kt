@@ -388,10 +388,25 @@ class HouseholdRoutesIntegrationTest {
     }
 
     @Test
-    fun `preview with an unknown token is a 404`() = testSetup {
+    fun `preview with an unknown token is a 404 with the handler's JSON body`() = testSetup {
         val response = client.get("/api/v1/households/invites/preview?token=not-a-real-token")
 
+        // Asserting the status alone isn't enough here: StatusPages' generic 404 fallback and
+        // respondHouseholdException's own JSON 404 are indistinguishable by status code, and a
+        // regression that makes the global fallback swallow this route's JSON body (as
+        // `status(HttpStatusCode.NotFound) { }` used to, since it applies to any outgoing 404
+        // rather than only a genuinely-unmatched route) would still pass a status-only check.
         assertEquals(HttpStatusCode.NotFound, response.status)
+        assertEquals(ContentType.Application.Json, response.contentType()?.withoutParameters())
+        assertTrue(response.bodyAsText().contains("No invite found for the given token"))
+    }
+
+    @Test
+    fun `a genuinely unmatched route is a 404 with the generic fallback body`() = testSetup {
+        val response = client.get("/api/v1/this-route-does-not-exist")
+
+        assertEquals(HttpStatusCode.NotFound, response.status)
+        assertEquals("404: Resource Not Found", response.bodyAsText())
     }
 
     @Test

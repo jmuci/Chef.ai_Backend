@@ -73,8 +73,14 @@ fun Application.configureRouting(
                 status = HttpStatusCode.InternalServerError
             )
         }
-        status(HttpStatusCode.NotFound) { call, status ->
-            call.respondText(text = "404: Resource Not Found", status = status)
+        // `status(HttpStatusCode.NotFound) { }` would fire on *any* outgoing 404, including ones
+        // a route handler builds intentionally (e.g. respondHouseholdException's JSON body for
+        // InviteNotFoundException) - StatusPages applies it via the ResponseBodyReadyForSend hook
+        // with no check for whether content was already set, clobbering that JSON with this plain
+        // text. `unhandled` instead hooks BeforeFallback, which only runs while call.isHandled is
+        // still false - i.e. only when routing genuinely found no matching route.
+        unhandled { call ->
+            call.respondText(text = "404: Resource Not Found", status = HttpStatusCode.NotFound)
         }
     }
     install(Thymeleaf) {
