@@ -6,9 +6,9 @@ import com.tenmilelabs.domain.exception.*
 import com.tenmilelabs.domain.model.User
 import com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository
 import com.tenmilelabs.domain.repository.UserRepository
+import com.tenmilelabs.domain.util.TokenHasher
 import io.ktor.util.logging.*
 import kotlinx.datetime.Clock
-import java.security.MessageDigest
 import java.util.*
 import kotlin.time.DurationUnit
 import kotlin.time.toDuration
@@ -227,18 +227,11 @@ class AuthService(
     }
 
     /**
-     * Hash refresh token using SHA-256
-     * We use SHA-256 instead of BCrypt because:
-     * 1. Refresh tokens are 64+ bytes (BCrypt limit is 72 bytes)
-     * 2. Refresh tokens are cryptographically random (high entropy)
-     * 3. We don't need BCrypt's slow hashing for already-secure random tokens
-     * 4. SHA-256 is fast and one-way, which is sufficient for token verification
+     * Hash refresh token using SHA-256 (see [TokenHasher.sha256Base64] for why SHA-256 over
+     * BCrypt: refresh tokens are already 64+ bytes of cryptographically random data, so BCrypt's
+     * slow hashing — and its 72-byte input cap — buys nothing here).
      */
-    private fun hashRefreshToken(token: String): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        val hashBytes = digest.digest(token.toByteArray())
-        return Base64.getEncoder().encodeToString(hashBytes)
-    }
+    private fun hashRefreshToken(token: String): String = TokenHasher.sha256Base64(token)
 
     /**
      * Simulate password check to prevent timing attacks

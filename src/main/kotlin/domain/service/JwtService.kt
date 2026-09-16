@@ -3,7 +3,7 @@ package com.tenmilelabs.domain.service
 import com.auth0.jwt.JWT
 import com.auth0.jwt.JWTVerifier
 import com.auth0.jwt.algorithms.Algorithm
-import java.security.SecureRandom
+import com.tenmilelabs.domain.util.TokenHasher
 import java.util.*
 
 class JwtService(
@@ -17,8 +17,6 @@ class JwtService(
         .withAudience(audience)
         .withIssuer(issuer)
         .build()
-
-    private val secureRandom = SecureRandom()
 
     fun generateToken(userId: String, email: String): String {
         return JWT.create()
@@ -37,11 +35,7 @@ class JwtService(
      * Generate a cryptographically secure random refresh token
      * This is NOT a JWT - it's an opaque token stored hashed in the database
      */
-    fun generateRefreshToken(): String {
-        val bytes = ByteArray(64) // 512 bits
-        secureRandom.nextBytes(bytes)
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
-    }
+    fun generateRefreshToken(): String = TokenHasher.generateSecureToken(byteLength = 64) // 512 bits
 
     /**
      * Get expiration time in seconds for access tokens
