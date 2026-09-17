@@ -18,9 +18,11 @@ import java.util.UUID
 
 /**
  * In-memory fake mirroring [com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository]'s
- * observable behavior — including its no-op [bumpServerUpdatedAtForHouseholdRows] /
- * [detachPlansOwnedBy] (meal_plans.household_id and grocery_list_item_checks don't exist yet) and
- * its translation of the one-active-household-per-user race into [AlreadyInHouseholdException].
+ * observable behavior — including its translation of the one-active-household-per-user race into
+ * [AlreadyInHouseholdException]. [bumpServerUpdatedAtForHouseholdRows] and [detachPlansOwnedBy]
+ * stay no-ops here: this fake has no notion of meal plans at all, so their real effect on
+ * `meal_plans`/`grocery_list_item_checks` is exercised via `Postgres*IntegrationTest` instead —
+ * for `SyncService` unit tests, see `FakeSyncRepository.seedPlanDetachedFromHousehold`.
  */
 class FakeHouseholdRepository : HouseholdRepository {
 
@@ -166,8 +168,11 @@ class FakeHouseholdRepository : HouseholdRepository {
     /** No-op — matches [com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository]. */
     override suspend fun bumpServerUpdatedAtForHouseholdRows(householdId: UUID, at: Instant) = Unit
 
-    /** No-op — matches [com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository]. */
-    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID) = Unit
+    /** No-op — this fake has no notion of meal plans; the real effect (including the
+     *  former_household_id/household_detached_at tombstone bookkeeping) is exercised via
+     *  Postgres*IntegrationTest and, for SyncService unit tests, FakeSyncRepository's own
+     *  seedPlanDetachedFromHousehold. */
+    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID, at: Instant) = Unit
 
     override suspend fun departFromHousehold(householdId: UUID, departingUserId: UUID, at: Instant): DepartureOutcome {
         val departing = getActiveMembership(householdId, departingUserId)
@@ -175,7 +180,7 @@ class FakeHouseholdRepository : HouseholdRepository {
                 "User $departingUserId is not an active member of household $householdId"
             )
         removeMember(householdId, departingUserId, at)
-        detachPlansOwnedBy(householdId, departingUserId)
+        detachPlansOwnedBy(householdId, departingUserId, at)
 
         val remaining = listActiveMembers(householdId)
         return when {

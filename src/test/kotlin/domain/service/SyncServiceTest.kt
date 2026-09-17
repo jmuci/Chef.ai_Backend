@@ -704,6 +704,32 @@ class SyncServiceTest {
     }
 
     @Test
+    fun pullTombstonesAPlanDetachedByAnotherMembersDepartureForAStillActiveMember() = withService { service, repo ->
+        // The departing member's own removal-tombstone (above) only fires for their own next pull.
+        // A plan they owned and shared is detached (household_id nulled) on the SAME departure, and
+        // a still-ACTIVE member who'd already cached that plan needs their own signal to drop it —
+        // this is the gap former_household_id/household_detached_at close.
+        val householdId = UUID.randomUUID()
+        val departedOwnerId = UUID.randomUUID()
+        val stayingMemberId = UUID.randomUUID()
+        repo.seedActiveHousehold(stayingMemberId, householdId)
+        // departedOwnerId intentionally has no active household seeded - they've left.
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = departedOwnerId),
+            serverUpdatedAtMillis = 1000L
+        )
+        repo.seedPlanDetachedFromHousehold(planId, householdId, detachedAtMillis = 5000L)
+
+        val pull = service.pullRecipes(stayingMemberId, sinceMillis = 0L, limit = 10)
+
+        val tombstoned = pull.mealPlans.firstOrNull { it.uuid == planId.toString() }
+        assertNotNull(tombstoned)
+        assertEquals(5000L, tombstoned.deletedAt)
+    }
+
+    @Test
     fun pullIncludesAHouseholdMatesOldPreCursorPrivateRecipeReferencedByASharedPlan() = withService { service, repo ->
         val householdId = UUID.randomUUID()
         val ownerId = UUID.randomUUID()
@@ -1020,6 +1046,25 @@ class SyncServiceTest {
         val stillThere = activePull.groceryListItems.firstOrNull { it.itemKey == "eggs" }
         assertNotNull(stillThere)
         assertEquals(null, stillThere.deletedAt)
+    }
+
+    @Test
+    fun groceryItemPullTombstonesItemsOnAPlanDetachedByAnotherMembersDepartureForAStillActiveMember() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val departedOwnerId = UUID.randomUUID()
+        val stayingMemberId = UUID.randomUUID()
+        repo.seedActiveHousehold(stayingMemberId, householdId)
+
+        val planId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(planId, updatedAt = 1000L, ownerId = departedOwnerId), serverUpdatedAtMillis = 1000L)
+        repo.seedGroceryItem(groceryItem(planId, "eggs", checked = true, updatedAt = 1000L), serverUpdatedAtMillis = 1000L)
+        repo.seedPlanDetachedFromHousehold(planId, householdId, detachedAtMillis = 5000L)
+
+        val pull = service.pullRecipes(stayingMemberId, sinceMillis = 0L, limit = 10)
+
+        val tombstoned = pull.groceryListItems.firstOrNull { it.itemKey == "eggs" }
+        assertNotNull(tombstoned)
+        assertEquals(5000L, tombstoned.deletedAt)
     }
 
     private fun groceryItem(planId: UUID, itemKey: String, checked: Boolean, updatedAt: Long) = SyncGroceryListItem(

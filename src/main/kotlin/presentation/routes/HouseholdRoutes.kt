@@ -55,10 +55,8 @@ fun Route.householdPreviewRoutes(householdService: HouseholdService) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("token query parameter is required"))
                 return@get
             }
-            try {
-                call.respond(HttpStatusCode.OK, householdService.previewInvite(token).toResponse())
-            } catch (ex: HouseholdException) {
-                call.respondHouseholdException(ex)
+            call.handleHousehold {
+                respond(HttpStatusCode.OK, householdService.previewInvite(token).toResponse())
             }
         }
     }
@@ -75,19 +73,15 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
         post {
             val callerId = call.requireUserId() ?: return@post
             val request = call.receiveOrRespondBadRequest<CreateHouseholdRequest>("name is required") ?: return@post
-            try {
-                call.respond(HttpStatusCode.Created, householdService.createHousehold(request.name, callerId).toResponse())
-            } catch (ex: HouseholdException) {
-                call.respondHouseholdException(ex)
+            call.handleHousehold {
+                respond(HttpStatusCode.Created, householdService.createHousehold(request.name, callerId).toResponse())
             }
         }
 
         get("/me") {
             val callerId = call.requireUserId() ?: return@get
-            try {
-                call.respond(HttpStatusCode.OK, householdService.getHouseholdForCaller(callerId).toResponse())
-            } catch (ex: HouseholdException) {
-                call.respondHouseholdException(ex)
+            call.handleHousehold {
+                respond(HttpStatusCode.OK, householdService.getHouseholdForCaller(callerId).toResponse())
             }
         }
 
@@ -99,10 +93,8 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse("token must not be blank"))
                     return@post
                 }
-                try {
-                    call.respond(HttpStatusCode.OK, householdService.joinByToken(request.token, callerId).toResponse())
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                call.handleHousehold {
+                    respond(HttpStatusCode.OK, householdService.joinByToken(request.token, callerId).toResponse())
                 }
             }
         }
@@ -118,21 +110,17 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                 post("/accept") {
                     val callerId = call.requireUserId() ?: return@post
                     val inviteId = call.requireUuidParam("inviteId") ?: return@post
-                    try {
-                        call.respond(HttpStatusCode.OK, householdService.acceptInviteById(inviteId, callerId).toResponse())
-                    } catch (ex: HouseholdException) {
-                        call.respondHouseholdException(ex)
+                    call.handleHousehold {
+                        respond(HttpStatusCode.OK, householdService.acceptInviteById(inviteId, callerId).toResponse())
                     }
                 }
 
                 post("/decline") {
                     val callerId = call.requireUserId() ?: return@post
                     val inviteId = call.requireUuidParam("inviteId") ?: return@post
-                    try {
+                    call.handleHousehold {
                         householdService.declineInvite(inviteId, callerId)
-                        call.respond(HttpStatusCode.NoContent)
-                    } catch (ex: HouseholdException) {
-                        call.respondHouseholdException(ex)
+                        respond(HttpStatusCode.NoContent)
                     }
                 }
             }
@@ -144,33 +132,27 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                 val householdId = call.requireUuidParam("id") ?: return@patch
                 val request = call.receiveOrRespondBadRequest<RenameHouseholdRequest>("name is required")
                     ?: return@patch
-                try {
+                call.handleHousehold {
                     val household = householdService.renameHousehold(householdId, callerId, request.name)
-                    call.respond(HttpStatusCode.OK, household.toResponse())
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.OK, household.toResponse())
                 }
             }
 
             delete {
                 val callerId = call.requireUserId() ?: return@delete
                 val householdId = call.requireUuidParam("id") ?: return@delete
-                try {
+                call.handleHousehold {
                     householdService.deleteHousehold(householdId, callerId)
-                    call.respond(HttpStatusCode.NoContent)
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.NoContent)
                 }
             }
 
             get("/members") {
                 val callerId = call.requireUserId() ?: return@get
                 val householdId = call.requireUuidParam("id") ?: return@get
-                try {
+                call.handleHousehold {
                     val members = householdService.listMembers(householdId, callerId)
-                    call.respond(HttpStatusCode.OK, members.map { it.toResponse() })
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.OK, members.map { it.toResponse() })
                 }
             }
 
@@ -178,22 +160,18 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                 val callerId = call.requireUserId() ?: return@delete
                 val householdId = call.requireUuidParam("id") ?: return@delete
                 val targetUserId = call.requireUuidParam("userId") ?: return@delete
-                try {
+                call.handleHousehold {
                     householdService.removeMember(householdId, callerId, targetUserId)
-                    call.respond(HttpStatusCode.NoContent)
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.NoContent)
                 }
             }
 
             post("/members/me/leave") {
                 val callerId = call.requireUserId() ?: return@post
                 val householdId = call.requireUuidParam("id") ?: return@post
-                try {
+                call.handleHousehold {
                     householdService.leaveHousehold(householdId, callerId)
-                    call.respond(HttpStatusCode.NoContent)
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.NoContent)
                 }
             }
 
@@ -209,7 +187,7 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                     } catch (_: Exception) {
                         CreateInviteRequest()
                     }
-                    try {
+                    call.handleHousehold {
                         val (invite, rawToken) = householdService.createInvite(
                             householdId = householdId,
                             callerId = callerId,
@@ -218,7 +196,7 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                             maxUses = request.maxUses,
                             expiresInHours = request.expiresInHours,
                         )
-                        call.respond(
+                        respond(
                             HttpStatusCode.Created,
                             CreateInviteResponse(
                                 token = rawToken,
@@ -228,8 +206,6 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                                 maxUses = invite.maxUses,
                             )
                         )
-                    } catch (ex: HouseholdException) {
-                        call.respondHouseholdException(ex)
                     }
                 }
             }
@@ -237,11 +213,9 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
             get("/invites") {
                 val callerId = call.requireUserId() ?: return@get
                 val householdId = call.requireUuidParam("id") ?: return@get
-                try {
+                call.handleHousehold {
                     val invites = householdService.listOutstandingInvites(householdId, callerId)
-                    call.respond(HttpStatusCode.OK, invites.map { it.toSummaryResponse() })
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.OK, invites.map { it.toSummaryResponse() })
                 }
             }
 
@@ -249,11 +223,9 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                 val callerId = call.requireUserId() ?: return@delete
                 val householdId = call.requireUuidParam("id") ?: return@delete
                 val inviteId = call.requireUuidParam("inviteId") ?: return@delete
-                try {
+                call.handleHousehold {
                     householdService.revokeInvite(householdId, callerId, inviteId)
-                    call.respond(HttpStatusCode.NoContent)
-                } catch (ex: HouseholdException) {
-                    call.respondHouseholdException(ex)
+                    respond(HttpStatusCode.NoContent)
                 }
             }
         }
@@ -293,6 +265,20 @@ private suspend inline fun <reified T : Any> RoutingCall.receiveOrRespondBadRequ
         respond(HttpStatusCode.BadRequest, ErrorResponse(message))
         null
     }
+
+/**
+ * Runs [block] and translates any thrown [HouseholdException] via [respondHouseholdException] —
+ * every handler below does exactly this, so the try/catch lives here once instead of at all 15
+ * call sites (where a handler forgetting it wouldn't be caught by the compiler, unlike the
+ * exhaustive `when` in [respondHouseholdException]).
+ */
+private suspend fun RoutingCall.handleHousehold(block: suspend RoutingCall.() -> Unit) {
+    try {
+        block()
+    } catch (ex: HouseholdException) {
+        respondHouseholdException(ex)
+    }
+}
 
 /**
  * Central [HouseholdException] → HTTP status mapping. A `when` over a sealed class rather than one

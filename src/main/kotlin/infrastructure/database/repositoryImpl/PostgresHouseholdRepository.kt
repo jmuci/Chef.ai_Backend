@@ -24,8 +24,10 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.exceptions.ExposedSQLException
+import org.jetbrains.exposed.sql.Op
 import org.jetbrains.exposed.sql.ResultRow
 import org.jetbrains.exposed.sql.SortOrder
+import org.jetbrains.exposed.sql.SqlExpressionBuilder
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.selectAll
@@ -104,14 +106,10 @@ class PostgresHouseholdRepository : HouseholdRepository {
     }
 
     override suspend fun removeMember(householdId: UUID, userId: UUID, at: Instant): Unit = suspendTransaction {
-        HouseholdMemberTable.update({
+        markMembersRemoved(at) {
             (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
                 (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
                 (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
-        }) {
-            it[status] = HouseholdMemberStatus.REMOVED.name
-            it[removed_at] = at
-            it[server_removed_at] = at
         }
     }
 
@@ -135,13 +133,9 @@ class PostgresHouseholdRepository : HouseholdRepository {
             it[deleted_at] = at
             it[updated_at] = at
         }
-        HouseholdMemberTable.update({
+        markMembersRemoved(at) {
             (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
                 (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
-        }) {
-            it[status] = HouseholdMemberStatus.REMOVED.name
-            it[removed_at] = at
-            it[server_removed_at] = at
         }
     }
 
@@ -258,12 +252,30 @@ class PostgresHouseholdRepository : HouseholdRepository {
      * household are untouched; [userId] simply loses access to them going forward (surfaced to
      * their client as a removal tombstone — see `SyncRepository.findDeltaMealPlans`).
      */
-    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID): Unit = suspendTransaction {
+    override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID, at: Instant): Unit = suspendTransaction {
+        detachPlans(householdId, userId, at)
+    }
+
+    /** Shared "mark REMOVED" update — [removeMember], [dissolveHousehold], and [departFromHousehold]
+     *  all stamp the same three columns, differing only in which rows [where] selects. */
+    private fun markMembersRemoved(at: Instant, where: SqlExpressionBuilder.() -> Op<Boolean>) {
+        HouseholdMemberTable.update({ where() }) {
+            it[status] = HouseholdMemberStatus.REMOVED.name
+            it[removed_at] = at
+            it[server_removed_at] = at
+        }
+    }
+
+    /** Non-transactional body of [detachPlansOwnedBy], reused by [departFromHousehold] so it runs
+     *  inside that method's own single transaction rather than opening a nested one. */
+    private fun detachPlans(householdId: UUID, userId: UUID, at: Instant) {
         MealPlanTable.update({
             (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable)) and
                 (MealPlanTable.user_id eq EntityID(userId, UserTable))
         }) {
             it[household_id] = null
+            it[former_household_id] = EntityID(householdId, HouseholdTable)
+            it[household_detached_at] = at
         }
     }
 
@@ -291,22 +303,13 @@ class PostgresHouseholdRepository : HouseholdRepository {
             )
         val wasOwner = departingRow[HouseholdMemberTable.role] == HouseholdRole.OWNER.name
 
-        HouseholdMemberTable.update({
+        markMembersRemoved(at) {
             (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
                 (HouseholdMemberTable.user_id eq EntityID(departingUserId, UserTable)) and
                 (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
-        }) {
-            it[status] = HouseholdMemberStatus.REMOVED.name
-            it[removed_at] = at
-            it[server_removed_at] = at
         }
 
-        MealPlanTable.update({
-            (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable)) and
-                (MealPlanTable.user_id eq EntityID(departingUserId, UserTable))
-        }) {
-            it[household_id] = null
-        }
+        detachPlans(householdId, departingUserId, at)
 
         val remaining = HouseholdMemberTable
             .selectAll()

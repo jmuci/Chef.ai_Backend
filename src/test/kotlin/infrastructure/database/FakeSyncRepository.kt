@@ -42,6 +42,9 @@ class FakeSyncRepository : SyncRepository {
     // key: userId, value: (householdId, serverRemovedAtMillis) of their most recent removal -
     // mirrors the household_members query findDeltaMealPlans's tombstone branch runs
     private val removedHouseholdMembership = mutableMapOf<UUID, Pair<UUID, Long>>()
+    // key: planId, value: (formerHouseholdId, detachedAtMillis) - mirrors meal_plans.former_household_id
+    // / household_detached_at, set when a plan's owner leaves the household it was shared with
+    private val planDetachedFromHousehold = mutableMapOf<UUID, Pair<UUID, Long>>()
     // key: (mealPlanId, itemKey), value: record with server timestamp
     private val groceryItems = mutableMapOf<Pair<UUID, String>, SyncGroceryItemRecord>()
     // candidate recipe IDs for generation (injectable per-test)
@@ -141,6 +144,16 @@ class FakeSyncRepository : SyncRepository {
         removedHouseholdMembership[userId] = householdId to serverRemovedAtMillis
     }
 
+    /**
+     * Test helper — simulates [planId] having been detached from [householdId] (its owner left) at
+     * [detachedAtMillis], mirroring `PostgresHouseholdRepository.detachPlansOwnedBy` stamping
+     * `former_household_id`/`household_detached_at`. Used to exercise the tombstone a still-ACTIVE
+     * member of [householdId] (not the one who left) should receive on their next pull.
+     */
+    fun seedPlanDetachedFromHousehold(planId: UUID, householdId: UUID, detachedAtMillis: Long) {
+        planDetachedFromHousehold[planId] = householdId to detachedAtMillis
+    }
+
     fun seedCandidateRecipe(uuid: UUID = UUID.randomUUID()): UUID {
         candidateRecipeIds += uuid
         return uuid
@@ -159,6 +172,8 @@ class FakeSyncRepository : SyncRepository {
     }
 
     override suspend fun getRecipe(uuid: UUID): SyncRecipeRecord? = recipes[uuid]
+
+    override suspend fun getRecipes(uuids: Set<UUID>): List<SyncRecipeRecord> = uuids.mapNotNull { recipes[it] }
 
     override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
         // Mirrors PostgresSyncRepository: imageBlobId is set exclusively by the image-upload
@@ -293,17 +308,33 @@ class FakeSyncRepository : SyncRepository {
             it.serverUpdatedAtMillis > sinceMillis && hasMemberAccess(it, userId)
         }
 
-        val removal = removedHouseholdMembership[userId]
-        val tombstones = if (removal != null && removal.second > sinceMillis) {
-            val (removedHouseholdId, serverRemovedAtMillis) = removal
-            mealPlans.values
-                .filter { it.plan.householdId == removedHouseholdId.toString() }
-                .map { it.copy(plan = it.plan.copy(deletedAt = serverRemovedAtMillis)) }
-        } else {
-            emptyList()
+        val tombstoneTimestamps = tombstoneTimestampsByPlanId(userId, sinceMillis)
+        val tombstones = mealPlans.values.mapNotNull { record ->
+            val timestamp = tombstoneTimestamps[UUID.fromString(record.plan.uuid)] ?: return@mapNotNull null
+            record.copy(plan = record.plan.copy(deletedAt = timestamp))
         }
 
         return (normal + tombstones).distinctBy { it.plan.uuid }.sortedBy { it.serverUpdatedAtMillis }
+    }
+
+    /** Mirrors PostgresSyncRepository.tombstoneTimestampsByPlanId's two tombstone sources. */
+    private fun tombstoneTimestampsByPlanId(userId: UUID, sinceMillis: Long): Map<UUID, Long> {
+        val removal = removedHouseholdMembership[userId]
+        val fromRemoval = if (removal != null && removal.second > sinceMillis) {
+            val (removedHouseholdId, serverRemovedAtMillis) = removal
+            mealPlans.values
+                .filter { it.plan.householdId == removedHouseholdId.toString() }
+                .associate { UUID.fromString(it.plan.uuid) to serverRemovedAtMillis }
+        } else {
+            emptyMap()
+        }
+
+        val myHouseholdId = activeHousehold[userId]
+        val fromDetachment = planDetachedFromHousehold
+            .filter { (_, detachment) -> detachment.first == myHouseholdId && detachment.second > sinceMillis }
+            .mapValues { (_, detachment) -> detachment.second }
+
+        return fromRemoval + fromDetachment
     }
 
     override suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID> {
@@ -343,16 +374,10 @@ class FakeSyncRepository : SyncRepository {
                 mealPlans[UUID.fromString(record.item.mealPlanId)]?.let { hasMemberAccess(it, userId) } == true
         }
 
-        val removal = removedHouseholdMembership[userId]
-        val tombstones = if (removal != null && removal.second > sinceMillis) {
-            val (removedHouseholdId, serverRemovedAtMillis) = removal
-            groceryItems.values
-                .filter { record ->
-                    mealPlans[UUID.fromString(record.item.mealPlanId)]?.plan?.householdId == removedHouseholdId.toString()
-                }
-                .map { it.copy(item = it.item.copy(deletedAt = serverRemovedAtMillis)) }
-        } else {
-            emptyList()
+        val tombstoneTimestamps = tombstoneTimestampsByPlanId(userId, sinceMillis)
+        val tombstones = groceryItems.values.mapNotNull { record ->
+            val timestamp = tombstoneTimestamps[UUID.fromString(record.item.mealPlanId)] ?: return@mapNotNull null
+            record.copy(item = record.item.copy(deletedAt = timestamp))
         }
 
         return (normal + tombstones)

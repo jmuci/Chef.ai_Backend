@@ -130,10 +130,18 @@ class PostgresHouseholdRepositoryIntegrationTest {
         val ownersPlanId = seedMealPlan(ownerId, household.id)
         val membersPlanId = seedMealPlan(memberId, household.id)
 
-        repo.detachPlansOwnedBy(household.id, memberId)
+        val detachedAt = millisecondPrecisionNow()
+        repo.detachPlansOwnedBy(household.id, memberId, detachedAt)
 
         assertNull(mealPlanHouseholdId(membersPlanId), "the departing member's own plan must revert to personal")
         assertEquals(household.id, mealPlanHouseholdId(ownersPlanId), "other members' plans must stay shared")
+        assertEquals(
+            household.id,
+            mealPlanFormerHouseholdId(membersPlanId),
+            "the detached plan must record which household it was shared with"
+        )
+        assertEquals(detachedAt, mealPlanHouseholdDetachedAt(membersPlanId))
+        assertNull(mealPlanFormerHouseholdId(ownersPlanId), "an untouched plan must not gain a former_household_id")
     }
 
     @Test
@@ -182,6 +190,14 @@ class PostgresHouseholdRepositoryIntegrationTest {
 
     private fun mealPlanHouseholdId(planId: UUID): UUID? = transaction {
         MealPlanTable.selectAll().where { MealPlanTable.id eq planId }.first()[MealPlanTable.household_id]?.value
+    }
+
+    private fun mealPlanFormerHouseholdId(planId: UUID): UUID? = transaction {
+        MealPlanTable.selectAll().where { MealPlanTable.id eq planId }.first()[MealPlanTable.former_household_id]?.value
+    }
+
+    private fun mealPlanHouseholdDetachedAt(planId: UUID): Instant? = transaction {
+        MealPlanTable.selectAll().where { MealPlanTable.id eq planId }.first()[MealPlanTable.household_detached_at]
     }
 
     private fun mealPlanServerUpdatedAtMillis(planId: UUID): Long = transaction {

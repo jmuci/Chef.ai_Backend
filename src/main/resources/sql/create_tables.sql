@@ -295,19 +295,26 @@ CREATE INDEX IF NOT EXISTS idx_bookmarked_recipes_server_updated_at ON bookmarke
 -- createMissingTablesAndColumns) — backfilled here for fresh-install parity. household_id shares
 -- a household's meal plans with every active member — see docs/household-architecture.md.
 CREATE TABLE IF NOT EXISTS meal_plans (
-    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id           UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
-    household_id      UUID NULL REFERENCES households(id) ON DELETE SET NULL,
-    name              TEXT NOT NULL,
-    status            TEXT NOT NULL,
-    preferences       TEXT NOT NULL,
-    created_at        BIGINT NOT NULL,
-    updated_at        BIGINT NOT NULL,
-    deleted_at        BIGINT,
-    server_updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                UUID NOT NULL REFERENCES users(uuid) ON DELETE CASCADE,
+    household_id           UUID NULL REFERENCES households(id) ON DELETE SET NULL,
+    -- Household this plan was shared with just before it was detached (owner left), plus when —
+    -- lets a still-ACTIVE member of that household be sent a synthetic removal tombstone for it on
+    -- their next pull, even though household_id going null makes the row silently stop matching
+    -- their own memberAccessClause. See docs/household-architecture.md.
+    former_household_id   UUID NULL REFERENCES households(id) ON DELETE SET NULL,
+    household_detached_at TIMESTAMPTZ NULL,
+    name                   TEXT NOT NULL,
+    status                 TEXT NOT NULL,
+    preferences            TEXT NOT NULL,
+    created_at             BIGINT NOT NULL,
+    updated_at             BIGINT NOT NULL,
+    deleted_at             BIGINT,
+    server_updated_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_meal_plans_user_id ON meal_plans(user_id);
 CREATE INDEX IF NOT EXISTS idx_meal_plans_household_id ON meal_plans(household_id) WHERE household_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_meal_plans_former_household_id ON meal_plans(former_household_id) WHERE former_household_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_meal_plans_server_updated_at ON meal_plans(server_updated_at);
 
 -- ===============================
