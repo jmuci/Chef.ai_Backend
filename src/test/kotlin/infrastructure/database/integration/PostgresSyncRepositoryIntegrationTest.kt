@@ -183,6 +183,63 @@ class PostgresSyncRepositoryIntegrationTest {
         assertTrue(received.any { it.plan.uuid == planId.toString() }, "joiner must receive the pre-existing shared plan")
     }
 
+    /**
+     * The mirror image of [joiningAHouseholdBackfillsAnAlreadyExistingSharedPlanPastTheJoinersCursor]:
+     * when a member leaves and their own shared plan gets detached, a still-ACTIVE household-mate
+     * who already cached that plan must be tombstoned for it on their next pull too — not just the
+     * departing member's own removal-tombstone, which only fires for their own next pull. Exercises
+     * `meal_plans.former_household_id`/`household_detached_at` end to end against real Postgres.
+     */
+    @Test
+    fun aMemberLeavingTombstonesTheirDetachedPlanForStillActiveHouseholdMates() = runBlocking {
+        val syncRepo = PostgresSyncRepository()
+        val householdRepo = PostgresHouseholdRepository()
+
+        val departingOwnerId = UUID.randomUUID()
+        val stayingMemberId = UUID.randomUUID()
+        transaction {
+            listOf(departingOwnerId to "owner", stayingMemberId to "staying").forEach { (id, name) ->
+                UserTable.insert {
+                    it[UserTable.id] = EntityID(id, UserTable)
+                    it[user_name] = name
+                    it[email] = "$name-$id@example.com"
+                    it[display_name] = name
+                    it[avatar_url] = ""
+                    it[password_hash] = "hash"
+                }
+            }
+        }
+
+        val household = householdRepo.createHousehold("Household", departingOwnerId)
+        householdRepo.addMember(household.id, stayingMemberId, HouseholdRole.MEMBER, millisecondPrecisionNow())
+
+        val planId = UUID.randomUUID()
+        transaction {
+            MealPlanTable.insert {
+                it[id] = EntityID(planId, MealPlanTable)
+                it[user_id] = EntityID(departingOwnerId, UserTable)
+                it[household_id] = EntityID(household.id, HouseholdTable)
+                it[name] = "Week Plan"
+                it[status] = "DRAFT"
+                it[preferences] = "{}"
+                it[created_at] = 1_000L
+                it[updated_at] = 1_000L
+                it[deleted_at] = null
+                it[server_updated_at] = Instant.fromEpochMilliseconds(1_000L)
+            }
+        }
+
+        // stayingMemberId already pulled this plan a while ago; their cursor is past its original stamp.
+        val stayingMembersCursorMillis = 1_500L
+
+        householdRepo.departFromHousehold(household.id, departingOwnerId, millisecondPrecisionNow())
+
+        val received = syncRepo.findDeltaMealPlans(stayingMemberId, stayingMembersCursorMillis)
+        val tombstoned = received.singleOrNull { it.plan.uuid == planId.toString() }
+        assertNotNull(tombstoned, "a still-active member must be told their co-member's detached plan is gone")
+        assertTrue(tombstoned.plan.deletedAt != null, "the tombstone must carry a synthetic deletedAt")
+    }
+
     /** Round-trips a grocery item through Postgres and confirms LWW + household-member visibility. */
     @Test
     fun groceryListItemUpsertAndDeltaAgainstPostgres() = runBlocking {

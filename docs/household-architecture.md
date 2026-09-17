@@ -175,9 +175,11 @@ core, `HouseholdRepository.departFromHousehold`, which runs the whole sequence *
 transaction, holding a row lock on the household for its duration:
 
 1. Mark the departing membership `REMOVED`, stamping both `removed_at` and `server_removed_at`.
-2. Detach plans the departing member owns from the household (nulls `meal_plans.household_id` for
-   plans they own; other members' plans are untouched — they simply lose access, surfaced via the
-   removal tombstone — see `docs/sync-protocol.md`).
+2. Detach plans the departing member owns from the household: nulls `meal_plans.household_id` for
+   plans they own (other members' plans are untouched) and stamps `former_household_id`/
+   `household_detached_at` on the detached rows — what lets a still-ACTIVE household member (not
+   just the departing member) be sent a synthetic removal tombstone for a plan they'd already
+   cached — see `docs/sync-protocol.md`'s "Removal tombstones".
 3. If the departing member was `OWNER` and other `ACTIVE` members remain, ownership transfers to
    the earliest-joined remaining member (updating both `households.owner_id` and the new owner's
    `household_members.role` in the same transaction).
@@ -200,9 +202,10 @@ caller when `requireOwner` has already passed, so guarded defensively rather tha
 **Every plan reverts to personal, still owned by whoever created it — `meal_plans.user_id` is
 never touched at any point in a household's life.** Zero data loss on any path. The same applies
 to grocery items: they live and die with the meal plan they belong to, and a plan's
-`household_id` reverting to personal is what stops a departed member's client from being served
-its grocery items on their next pull (surfaced as a removal tombstone — see
-`docs/sync-protocol.md`).
+`household_id` reverting to personal is what stops both the departing member and any still-active
+household member who'd cached that plan from being served its grocery items on their next pull
+(surfaced as a removal tombstone for each, via two different mechanisms — see
+`docs/sync-protocol.md`'s "Removal tombstones").
 
 ## See also
 

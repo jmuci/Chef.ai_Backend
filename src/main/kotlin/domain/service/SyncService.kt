@@ -23,6 +23,7 @@ import com.tenmilelabs.application.dto.SyncPushResponse
 import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncUser
+import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
@@ -286,13 +287,7 @@ class SyncService(
                 // would reject any push that still touches such a day, even by a member who can
                 // already see that recipe on every pull.
                 val referencedRecipeIdStrings = plan.days.flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) }
-                val referencedRecipeIds = referencedRecipeIdStrings.mapNotNull { recipeIdString ->
-                    try {
-                        UUID.fromString(recipeIdString)
-                    } catch (_: IllegalArgumentException) {
-                        null
-                    }
-                }
+                val referencedRecipeIds = referencedRecipeIdStrings.mapNotNull { recipeIdString -> parseUuid(recipeIdString) {} }
                 val allReferencesAccessible = referencedRecipeIds.size == referencedRecipeIdStrings.size &&
                     syncRepository.accessibleRecipeIds(userId, referencedRecipeIds.toSet()).containsAll(referencedRecipeIds)
                 if (!allReferencesAccessible) {
@@ -345,19 +340,19 @@ class SyncService(
         val accepted = mutableListOf<GroceryItemPushResult>()
         val conflicts = mutableListOf<GroceryItemIdentifier>()
         val errors = mutableListOf<GroceryItemPushError>()
+        // A batch commonly has several items on the same list — memoize per plan id instead of
+        // re-running the same authorization query once per item.
+        val mealPlanAccessCache = mutableMapOf<UUID, SyncMealPlanRecord?>()
 
         items.forEach { item ->
-            val mealPlanId = try {
-                UUID.fromString(item.mealPlanId)
-            } catch (_: IllegalArgumentException) {
+            val mealPlanId = parseUuid(item.mealPlanId) {
                 errors += GroceryItemPushError(
                     item.mealPlanId,
                     item.itemKey,
                     GroceryItemErrors.INVALID_MEAL_PLAN_ID,
                     GroceryItemErrors.INVALID_MEAL_PLAN_ID.message
                 )
-                return@forEach
-            }
+            } ?: return@forEach
 
             if (item.itemKey.isBlank() || item.itemKey.length > 256) {
                 errors += GroceryItemPushError(
@@ -369,7 +364,10 @@ class SyncService(
                 return@forEach
             }
 
-            if (syncRepository.getMealPlanForMember(mealPlanId, userId) == null) {
+            val accessiblePlan = mealPlanAccessCache.getOrPut(mealPlanId) {
+                syncRepository.getMealPlanForMember(mealPlanId, userId)
+            }
+            if (accessiblePlan == null) {
                 errors += GroceryItemPushError(
                     item.mealPlanId,
                     item.itemKey,
@@ -488,8 +486,7 @@ class SyncService(
         // references them, regardless of the recipe's own privacy/creator. Excludes anything
         // already in `page` and never affects `hasMore`/`cursor` above.
         val pageRecipeIds = page.map { UUID.fromString(it.recipe.uuid) }.toSet()
-        val gapRecipes = (syncRepository.findHouseholdVisibleRecipeIds(userId) - pageRecipeIds)
-            .mapNotNull { syncRepository.getRecipe(it) }
+        val gapRecipes = syncRepository.getRecipes(syncRepository.findHouseholdVisibleRecipeIds(userId) - pageRecipeIds)
         val allRecipes = page + gapRecipes
 
         val ingredientIds = allRecipes

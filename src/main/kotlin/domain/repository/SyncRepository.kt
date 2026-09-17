@@ -33,6 +33,15 @@ interface SyncRepository {
     suspend fun getRecipe(uuid: UUID): SyncRecipeRecord?
 
     /**
+     * Batched counterpart to [getRecipe] — loads every recipe in [uuids] (each including its
+     * active steps, ingredients, tags, and labels) in one round trip instead of one call per id.
+     * Used to hydrate [findHouseholdVisibleRecipeIds]'s gap-clause recipes in
+     * [com.tenmilelabs.domain.service.SyncService.pullRecipes]. An id with no matching recipe is
+     * silently omitted, same as [getRecipe] returning null for it would be.
+     */
+    suspend fun getRecipes(uuids: Set<UUID>): List<SyncRecipeRecord>
+
+    /**
      * Persists a full recipe aggregate using replace semantics for all child
      * collections (steps, ingredients, tags, labels). Existing children are
      * deleted and re-inserted from the incoming [recipe] so the server snapshot

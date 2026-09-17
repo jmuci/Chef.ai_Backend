@@ -946,17 +946,34 @@ caller's own, **plus** any plan shared with their current active household — w
 pre-households "owned by caller" rule. Not paginated: every call returns its full matching set
 (same as `bookmarkedRecipes`), and plays no part in the pull cursor, which recipes alone drive.
 
-**Removal tombstones**: if the caller was removed from a household after their `since` cursor
-(`household_members.status = 'REMOVED' AND server_removed_at > since`), every plan still under
-that household is returned with `deletedAt` **synthesized** to that removal's `server_removed_at`
-— for that caller only. The underlying row's real `deleted_at` stays `null` for everyone still in
-the household; this is a per-caller signal telling a departed member's client to drop plans it can
-no longer access, reusing the existing `deletedAt` field rather than inventing a new wire shape.
+**Removal tombstones**: `deletedAt` is **synthesized** — the underlying row's real `deleted_at`
+stays `null` for everyone who still has access — from two independent sources, computed once as a
+map of plan id → tombstone timestamp and applied to whichever normal-delta plans didn't already
+match (`SyncRepository.findDeltaMealPlans`'s private `tombstoneTimestampsByPlanId`):
+
+1. **The caller themselves was removed** from a household after their `since` cursor
+   (`household_members.status = 'REMOVED' AND server_removed_at > since`): every plan still under
+   that household is tombstoned to that removal's `server_removed_at`, for that caller only. This
+   is what tells a *departed* member's own client to drop plans it can no longer access.
+2. **A plan under the caller's *current* active household was detached** after their `since` cursor
+   (`meal_plans.former_household_id = callersActiveHouseholdId AND household_detached_at >
+   since`): tombstoned to that `household_detached_at`. This is what tells a still-**ACTIVE**
+   household member — who isn't the one who left — that a co-member's plan they'd already cached is
+   no longer shared, something source (1) alone can't do since they were never removed from
+   anything. Without it, `household_id` going `null` on detach just makes the row silently stop
+   matching `memberAccessClause`, with no signal ever reaching a member whose cursor already passed
+   the plan's last real update.
+
+Both sources reuse the existing `deletedAt` field rather than inventing a new wire shape. The same
+two-source lookup backs `findDeltaGroceryListItems`'s tombstones for items on those plans.
 
 **Household reassignment on leave/removal**: `HouseholdService`'s leave/remove/dissolve paths null
 `household_id` back out for plans owned by the departing member (never touching `user_id` — a
-plan's original creator never changes). Plans owned by *other* members are untouched; the
-departing member simply loses access, surfaced via the tombstone above.
+plan's original creator never changes), and stamp `former_household_id`/`household_detached_at` —
+see [`docs/household-architecture.md`](household-architecture.md#leaving-and-removal). Plans owned
+by *other* members are untouched; the departing member simply loses access, surfaced via tombstone
+source (1) above; a still-active member who'd cached the departing member's own plan loses access
+too, surfaced via source (2).
 
 **Join backfill**: when a user joins a household, every meal plan already shared with it has its
 `server_updated_at` bumped to the join instant, so the joiner's next pull receives them regardless

@@ -34,6 +34,64 @@ class PostgresSyncRepository : SyncRepository {
         toSyncRecipeRecord(recipeRow)
     }
 
+    override suspend fun getRecipes(uuids: Set<UUID>): List<SyncRecipeRecord> = suspendTransaction {
+        if (uuids.isEmpty()) return@suspendTransaction emptyList()
+        val entityIds = uuids.map { EntityID(it, RecipeTable) }
+        val recipeRows = RecipeTable.selectAll().where { RecipeTable.id inList entityIds }.toList()
+        if (recipeRows.isEmpty()) return@suspendTransaction emptyList()
+
+        val stepsByRecipe = RecipeStepTable.selectAll()
+            .where { (RecipeStepTable.recipe_id inList entityIds) and RecipeStepTable.deleted_at.isNull() }
+            .orderBy(RecipeStepTable.order_index to SortOrder.ASC)
+            .groupBy({ it[RecipeStepTable.recipe_id].value }) { row ->
+                SyncRecipeStep(
+                    uuid = row[RecipeStepTable.id].value.toString(),
+                    orderIndex = row[RecipeStepTable.order_index],
+                    instruction = row[RecipeStepTable.instruction]
+                )
+            }
+        val ingredientsByRecipe = RecipeIngredientTable.selectAll()
+            .where { (RecipeIngredientTable.recipeId inList entityIds) and RecipeIngredientTable.deletedAt.isNull() }
+            .groupBy({ it[RecipeIngredientTable.recipeId].value }) { row ->
+                SyncRecipeIngredient(
+                    ingredientId = row[RecipeIngredientTable.ingredientId].value.toString(),
+                    quantity = row[RecipeIngredientTable.quantity],
+                    unit = row[RecipeIngredientTable.unit]
+                )
+            }
+        val tagIdsByRecipe = RecipeTagTable.selectAll()
+            .where { (RecipeTagTable.recipeId inList entityIds) and RecipeTagTable.deletedAt.isNull() }
+            .groupBy({ it[RecipeTagTable.recipeId].value }) { it[RecipeTagTable.tagId].value.toString() }
+        val labelIdsByRecipe = RecipeLabelTable.selectAll()
+            .where { (RecipeLabelTable.recipeId inList entityIds) and RecipeLabelTable.deletedAt.isNull() }
+            .groupBy({ it[RecipeLabelTable.recipeId].value }) { it[RecipeLabelTable.labelId].value.toString() }
+
+        recipeRows.map { recipeRow ->
+            val recipeId = recipeRow[RecipeTable.id].value
+            val recipe = SyncRecipe(
+                uuid = recipeId.toString(),
+                title = recipeRow[RecipeTable.title],
+                description = recipeRow[RecipeTable.description],
+                imageUrl = recipeRow[RecipeTable.image_url],
+                imageUrlThumbnail = recipeRow[RecipeTable.image_url_thumbnail],
+                prepTimeMinutes = recipeRow[RecipeTable.prep_time_minutes],
+                cookTimeMinutes = recipeRow[RecipeTable.cook_time_minutes],
+                servings = recipeRow[RecipeTable.servings],
+                creatorId = recipeRow[RecipeTable.creator_id].value.toString(),
+                recipeExternalUrl = recipeRow[RecipeTable.recipe_external_url],
+                privacy = recipeRow[RecipeTable.privacy],
+                updatedAt = recipeRow[RecipeTable.updated_at],
+                deletedAt = recipeRow[RecipeTable.deleted_at],
+                steps = stepsByRecipe[recipeId].orEmpty(),
+                ingredients = ingredientsByRecipe[recipeId].orEmpty(),
+                tagIds = tagIdsByRecipe[recipeId].orEmpty(),
+                labelIds = labelIdsByRecipe[recipeId].orEmpty(),
+                imageBlobId = recipeRow[RecipeTable.image_blob_id]
+            )
+            SyncRecipeRecord(recipe = recipe, serverUpdatedAtMillis = recipeRow[RecipeTable.server_updated_at].toEpochMilliseconds())
+        }
+    }
+
     /**
      * Persists a full recipe aggregate using replace semantics for children.
      *
@@ -583,11 +641,14 @@ class PostgresSyncRepository : SyncRepository {
                 }
                 .map(::toSyncMealPlanRecord)
 
-            val tombstones = removedHouseholdsSince(userId, sinceInstant).flatMap { (removedHouseholdId, removedAtMillis) ->
+            val tombstoneTimestamps = tombstoneTimestampsByPlanId(userId, sinceInstant, householdId)
+            val tombstones = if (tombstoneTimestamps.isEmpty()) {
+                emptyList()
+            } else {
                 MealPlanTable
                     .selectAll()
-                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
-                    .map { toSyncMealPlanRecord(it).withSyntheticDeletedAt(removedAtMillis) }
+                    .where { MealPlanTable.id inList tombstoneTimestamps.keys.map { EntityID(it, MealPlanTable) } }
+                    .map { row -> toSyncMealPlanRecord(row).withSyntheticDeletedAt(tombstoneTimestamps.getValue(row[MealPlanTable.id].value)) }
             }
 
             (normal + tombstones)
@@ -667,19 +728,17 @@ class PostgresSyncRepository : SyncRepository {
                     .map(::toSyncGroceryItemRecord)
             }
 
-            val tombstones = removedHouseholdsSince(userId, sinceInstant).flatMap { (removedHouseholdId, removedAtMillis) ->
-                val planIdsUnderHousehold = MealPlanTable
+            val tombstoneTimestamps = tombstoneTimestampsByPlanId(userId, sinceInstant, householdId)
+            val tombstones = if (tombstoneTimestamps.isEmpty()) {
+                emptyList()
+            } else {
+                GroceryListItemCheckTable
                     .selectAll()
-                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
-                    .map { it[MealPlanTable.id] }
-                if (planIdsUnderHousehold.isEmpty()) {
-                    emptyList()
-                } else {
-                    GroceryListItemCheckTable
-                        .selectAll()
-                        .where { GroceryListItemCheckTable.meal_plan_id inList planIdsUnderHousehold }
-                        .map { toSyncGroceryItemRecord(it).withSyntheticDeletedAt(removedAtMillis) }
-                }
+                    .where { GroceryListItemCheckTable.meal_plan_id inList tombstoneTimestamps.keys.map { EntityID(it, MealPlanTable) } }
+                    .map { row ->
+                        val planId = row[GroceryListItemCheckTable.meal_plan_id].value
+                        toSyncGroceryItemRecord(row).withSyntheticDeletedAt(tombstoneTimestamps.getValue(planId))
+                    }
             }
 
             (normal + tombstones)
@@ -688,12 +747,29 @@ class PostgresSyncRepository : SyncRepository {
         }
 
     /**
-     * Households [userId] was removed from after [sinceInstant], as (householdId,
-     * removedAtEpochMillis) pairs — the shared basis for [findDeltaMealPlans] and
-     * [findDeltaGroceryListItems]'s per-caller removal tombstones (backend prompt §6.2).
+     * Plan ids [findDeltaMealPlans]/[findDeltaGroceryListItems] must send [userId] a synthetic
+     * per-caller removal tombstone for, mapped to the epoch-millis timestamp the tombstone should
+     * carry. Two independent sources, both real access-loss events the plan's own `deleted_at`
+     * never reflects (everyone else with real access still sees it as-is):
+     *
+     * - [userId] was themselves removed from a household after [sinceInstant] — every plan still
+     *   shared with that household (backend prompt §6.2).
+     * - A plan shared with [userId]'s *current* active household ([activeHouseholdId]) was
+     *   detached from it after [sinceInstant] (its owner left) — [userId] wasn't the one who left,
+     *   so nothing else tells their client the plan they'd already cached is no longer shared. See
+     *   [com.tenmilelabs.infrastructure.database.tables.MealPlanTable]'s KDoc on
+     *   `former_household_id`/`household_detached_at`.
+     *
+     * A plan matching both sources keeps whichever timestamp the map-building order lands on —
+     * both are real access-loss events for [userId], so which exact instant the tombstone carries
+     * doesn't change client behavior (the row disappears either way).
      */
-    private fun removedHouseholdsSince(userId: UUID, sinceInstant: Instant): List<Pair<UUID, Long>> =
-        HouseholdMemberTable
+    private fun tombstoneTimestampsByPlanId(
+        userId: UUID,
+        sinceInstant: Instant,
+        activeHouseholdId: UUID?
+    ): Map<UUID, Long> {
+        val fromRemoval = HouseholdMemberTable
             .selectAll()
             .where {
                 (HouseholdMemberTable.user_id eq EntityID(userId, UserTable)) and
@@ -701,9 +777,36 @@ class PostgresSyncRepository : SyncRepository {
                     (HouseholdMemberTable.server_removed_at greater sinceInstant)
             }
             .mapNotNull { row ->
-                val removedAt = row[HouseholdMemberTable.server_removed_at] ?: return@mapNotNull null
-                row[HouseholdMemberTable.household_id].value to removedAt.toEpochMilliseconds()
+                val removedHouseholdId = row[HouseholdMemberTable.household_id].value
+                val removedAtMillis = row[HouseholdMemberTable.server_removed_at]?.toEpochMilliseconds()
+                    ?: return@mapNotNull null
+                removedHouseholdId to removedAtMillis
             }
+            .flatMap { (removedHouseholdId, removedAtMillis) ->
+                MealPlanTable
+                    .selectAll()
+                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
+                    .map { it[MealPlanTable.id].value to removedAtMillis }
+            }
+
+        val fromDetachment = if (activeHouseholdId == null) {
+            emptyList()
+        } else {
+            MealPlanTable
+                .selectAll()
+                .where {
+                    (MealPlanTable.former_household_id eq EntityID(activeHouseholdId, HouseholdTable)) and
+                        (MealPlanTable.household_detached_at greater sinceInstant)
+                }
+                .mapNotNull { row ->
+                    val detachedAtMillis = row[MealPlanTable.household_detached_at]?.toEpochMilliseconds()
+                        ?: return@mapNotNull null
+                    row[MealPlanTable.id].value to detachedAtMillis
+                }
+        }
+
+        return (fromRemoval + fromDetachment).toMap()
+    }
 
     override suspend fun findHouseholdVisibleRecipeIds(userId: UUID): Set<UUID> = suspendTransaction {
         val householdId = resolveActiveHouseholdId(userId) ?: return@suspendTransaction emptySet()

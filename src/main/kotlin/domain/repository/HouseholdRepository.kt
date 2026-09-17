@@ -76,10 +76,13 @@ interface HouseholdRepository {
 
     /**
      * Nulls `meal_plans.household_id` for every plan owned by [userId] under [householdId] —
-     * the plan reverts to personal, still owned by whoever created it. A no-op today for the same
-     * reason as [bumpServerUpdatedAtForHouseholdRows]; wired to a real column in B3.
+     * the plan reverts to personal, still owned by whoever created it. Also stamps
+     * `former_household_id = householdId` and `household_detached_at = at`, which is what lets a
+     * still-ACTIVE member of that household (who isn't the one leaving) be sent a synthetic removal
+     * tombstone for it — see [com.tenmilelabs.infrastructure.database.tables.MealPlanTable]'s KDoc
+     * on those two columns and [com.tenmilelabs.domain.repository.SyncRepository.findDeltaMealPlans].
      */
-    suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID)
+    suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID, at: Instant)
 
     /**
      * Atomically departs [departingUserId] from [householdId]: marks their membership REMOVED,
