@@ -226,6 +226,15 @@ class FakeSyncRepository : SyncRepository {
         return record.recipe.creatorId == userId.toString() || record.recipe.privacy == "PUBLIC"
     }
 
+    override suspend fun accessibleRecipeIds(userId: UUID, recipeIds: Set<UUID>): Set<UUID> {
+        val ownedOrPublic = recipeIds.filterTo(mutableSetOf()) { id ->
+            id !in inaccessibleRecipes &&
+                recipes[id]?.let { it.recipe.creatorId == userId.toString() || it.recipe.privacy == "PUBLIC" } == true
+        }
+        val householdId = activeHousehold[userId] ?: return ownedOrPublic
+        return ownedOrPublic + (householdVisibleRecipeIds(householdId) intersect recipeIds)
+    }
+
     override suspend fun upsertBookmark(
         userId: UUID,
         recipeId: UUID,
@@ -260,9 +269,14 @@ class FakeSyncRepository : SyncRepository {
 
     override suspend fun mealPlanExists(uuid: UUID): Boolean = mealPlans.containsKey(uuid)
 
-    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant) {
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant): Boolean {
         val uuid = UUID.fromString(plan.uuid)
         val existing = mealPlans[uuid]
+        // Mirrors PostgresSyncRepository: re-validates the conflict check against the live record
+        // rather than trusting the caller's earlier read.
+        if (existing != null && existing.serverUpdatedAtMillis > plan.updatedAt) {
+            return false
+        }
         // Mirrors PostgresSyncRepository: owner/household are set at insert only, an update never
         // touches them regardless of what this call's plan.ownerId/householdId say.
         val persisted = if (existing != null) {
@@ -271,6 +285,7 @@ class FakeSyncRepository : SyncRepository {
             plan
         }
         mealPlans[uuid] = SyncMealPlanRecord(plan = persisted, serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds())
+        return true
     }
 
     override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> {

@@ -1,5 +1,6 @@
 package com.tenmilelabs.domain.repository
 
+import com.tenmilelabs.domain.model.DepartureOutcome
 import com.tenmilelabs.domain.model.Household
 import com.tenmilelabs.domain.model.HouseholdInvite
 import com.tenmilelabs.domain.model.HouseholdMembership
@@ -79,4 +80,39 @@ interface HouseholdRepository {
      * reason as [bumpServerUpdatedAtForHouseholdRows]; wired to a real column in B3.
      */
     suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID)
+
+    /**
+     * Atomically departs [departingUserId] from [householdId]: marks their membership REMOVED,
+     * detaches plans they own, and — re-reading who's left in the SAME transaction — either
+     * transfers ownership to the earliest-joined remaining member or dissolves the household if
+     * none remain. Implementations must serialize this against any other concurrent
+     * departure/transfer on the same household (e.g. by locking the household row for the
+     * duration): running [removeMember], [detachPlansOwnedBy] and [transferOwnership]/
+     * [dissolveHousehold] as separate, independently-committing calls left a window where two
+     * members leaving at once could each act on a stale snapshot of "who's left" and "was I the
+     * owner," leaving `households.owner_id` pointing at a member who was just removed. See
+     * [com.tenmilelabs.domain.service.HouseholdService]'s private `departFromHousehold`.
+     *
+     * Throws [com.tenmilelabs.domain.exception.NotHouseholdMemberException] if [departingUserId]
+     * is not currently an ACTIVE member of [householdId].
+     */
+    suspend fun departFromHousehold(householdId: UUID, departingUserId: UUID, at: Instant): DepartureOutcome
+
+    /**
+     * Atomically accepts the invite [inviteId] on behalf of [callerId]: re-validates
+     * [com.tenmilelabs.domain.model.HouseholdInvite.isUsable] against the live, locked invite row,
+     * inserts the membership, records the acceptance, and bumps the household's shared rows — all
+     * in one transaction. Implementations must lock the invite row for the duration so a second,
+     * concurrent acceptor of the same single-use invite blocks until the first commits, then
+     * re-evaluates usability against the now-consumed row rather than a stale snapshot — otherwise
+     * two different callers can both pass an [isUsable][com.tenmilelabs.domain.model.HouseholdInvite.isUsable]
+     * check taken before either commits, and a single-use invite silently admits two members.
+     *
+     * Throws [com.tenmilelabs.domain.exception.InviteNotFoundException] if [inviteId] doesn't
+     * resolve, or no longer passes `isUsable` once re-checked under lock.
+     * Throws [com.tenmilelabs.domain.exception.InviteNotForCallerException] if the invite names a
+     * different invitee. Throws [com.tenmilelabs.domain.exception.AlreadyInHouseholdException] on
+     * the same one-household-per-user race [addMember] recognizes.
+     */
+    suspend fun acceptInvite(inviteId: UUID, callerId: UUID, at: Instant): Household
 }

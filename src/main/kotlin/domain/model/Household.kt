@@ -52,6 +52,18 @@ data class HouseholdInvite(
     }
 }
 
+/** Outcome of [com.tenmilelabs.domain.repository.HouseholdRepository.departFromHousehold]. */
+sealed interface DepartureOutcome {
+    /** Other active members remain and the departing user wasn't the owner — no ownership change. */
+    data object Remained : DepartureOutcome
+
+    /** The departing user was OWNER and ownership passed to the earliest-joined remaining member. */
+    data class OwnershipTransferred(val newOwnerId: UUID) : DepartureOutcome
+
+    /** No active members remained after the departure — the household was dissolved. */
+    data object HouseholdDissolved : DepartureOutcome
+}
+
 data class HouseholdInvitePreview(
     val householdName: String,
     val inviterDisplayName: String,

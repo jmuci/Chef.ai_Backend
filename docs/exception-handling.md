@@ -145,7 +145,7 @@ before households existed), but a **different list** on the response. See
 | `OWNER_MISMATCH` | A brand-new plan's `ownerId` doesn't name the caller | Stamp `ownerId` from the plan's real creator, never the pushing device's own id |
 | `MEAL_PLAN_NOT_ACCESSIBLE` | Plan exists but the caller isn't its owner or an active member of its household | Drop the local copy; caller lost or never had access |
 | `INVALID_HOUSEHOLD` | `householdId` isn't a valid UUID, or (new plan) doesn't name the caller's own active household | Fix client-side data, or don't claim a household you're not in |
-| `MEAL_PLAN_RECIPE_NOT_ACCESSIBLE` | A shared plan references a recipe the caller can't see (not owned by them, not `PUBLIC`) | Only reference your own or already-public recipes in a shared plan |
+| `MEAL_PLAN_RECIPE_NOT_ACCESSIBLE` | A shared plan references a recipe the caller can't see (not owned by them, not `PUBLIC`, and not visible through their household's recipe gap clause) | Only reference your own, already-public, or already-shared-via-household recipes in a shared plan |
 
 ### Bookmark sync errors (`BookmarkErrors`)
 

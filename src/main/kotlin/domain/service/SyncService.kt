@@ -280,16 +280,21 @@ class SyncService(
             // a personal plan's day references are unrestricted, same as before households existed.
             val effectiveHouseholdId = existing?.plan?.householdId?.let { UUID.fromString(it) } ?: claimedHouseholdId
             if (effectiveHouseholdId != null) {
-                val allReferencesAccessible = plan.days
-                    .flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) }
-                    .all { recipeIdString ->
-                        val recipeId = try {
-                            UUID.fromString(recipeIdString)
-                        } catch (_: IllegalArgumentException) {
-                            null
-                        }
-                        recipeId != null && syncRepository.isRecipeAccessibleBy(userId, recipeId)
+                // Batched in one query rather than one isRecipeAccessibleBy call per reference, and
+                // also allows a recipe visible only through the household gap clause (a co-member's
+                // private recipe already referenced by a shared plan) — isRecipeAccessibleBy alone
+                // would reject any push that still touches such a day, even by a member who can
+                // already see that recipe on every pull.
+                val referencedRecipeIdStrings = plan.days.flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) }
+                val referencedRecipeIds = referencedRecipeIdStrings.mapNotNull { recipeIdString ->
+                    try {
+                        UUID.fromString(recipeIdString)
+                    } catch (_: IllegalArgumentException) {
+                        null
                     }
+                }
+                val allReferencesAccessible = referencedRecipeIds.size == referencedRecipeIdStrings.size &&
+                    syncRepository.accessibleRecipeIds(userId, referencedRecipeIds.toSet()).containsAll(referencedRecipeIds)
                 if (!allReferencesAccessible) {
                     errors += SyncError(
                         plan.uuid,
@@ -307,7 +312,17 @@ class SyncService(
             }
 
             val now = millisecondPrecisionNow()
-            syncRepository.upsertMealPlan(plan, now)
+            val applied = syncRepository.upsertMealPlan(plan, now)
+            if (!applied) {
+                // The pre-check above used an earlier, separately-transacted read of `existing` and
+                // can be stale — upsertMealPlan re-validates atomically against the live row right
+                // before writing, so this is the same conflict, just caught at write time instead.
+                conflicts += plan.uuid
+                log.info(
+                    "Meal plan push conflict for user $userId, planId=${plan.uuid}: server is newer (detected at write time)"
+                )
+                return@forEach
+            }
             userPreferencesRepository.upsertUserPreferences(userId, plan.preferencesJson, now)
             accepted += MealPlanPushResult(uuid = plan.uuid, serverUpdatedAt = now.toEpochMilliseconds())
             log.info("Meal plan push accepted for user $userId, planId=${plan.uuid}")

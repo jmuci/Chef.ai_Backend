@@ -1,6 +1,10 @@
 package com.tenmilelabs.infrastructure.database
 
 import com.tenmilelabs.domain.exception.AlreadyInHouseholdException
+import com.tenmilelabs.domain.exception.InviteNotForCallerException
+import com.tenmilelabs.domain.exception.InviteNotFoundException
+import com.tenmilelabs.domain.exception.NotHouseholdMemberException
+import com.tenmilelabs.domain.model.DepartureOutcome
 import com.tenmilelabs.domain.model.Household
 import com.tenmilelabs.domain.model.HouseholdInvite
 import com.tenmilelabs.domain.model.HouseholdMemberStatus
@@ -138,8 +142,10 @@ class FakeHouseholdRepository : HouseholdRepository {
 
     override suspend fun getInvite(inviteId: UUID): HouseholdInvite? = invites[inviteId]
 
-    override suspend fun listOutstandingInvites(householdId: UUID): List<HouseholdInvite> =
-        invites.values.filter { it.householdId == householdId && it.revokedAt == null && it.acceptedAt == null }
+    override suspend fun listOutstandingInvites(householdId: UUID): List<HouseholdInvite> {
+        val now = Clock.System.now()
+        return invites.values.filter { it.householdId == householdId && it.isUsable(now) }
+    }
 
     override suspend fun listPendingInvitesForUser(userId: UUID): List<HouseholdInvite> =
         invites.values.filter { it.inviteeUserId == userId && it.revokedAt == null && it.acceptedAt == null }
@@ -162,6 +168,45 @@ class FakeHouseholdRepository : HouseholdRepository {
 
     /** No-op — matches [com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository]. */
     override suspend fun detachPlansOwnedBy(householdId: UUID, userId: UUID) = Unit
+
+    override suspend fun departFromHousehold(householdId: UUID, departingUserId: UUID, at: Instant): DepartureOutcome {
+        val departing = getActiveMembership(householdId, departingUserId)
+            ?: throw NotHouseholdMemberException(
+                "User $departingUserId is not an active member of household $householdId"
+            )
+        removeMember(householdId, departingUserId, at)
+        detachPlansOwnedBy(householdId, departingUserId)
+
+        val remaining = listActiveMembers(householdId)
+        return when {
+            remaining.isEmpty() -> {
+                dissolveHousehold(householdId, at)
+                DepartureOutcome.HouseholdDissolved
+            }
+            departing.role == HouseholdRole.OWNER -> {
+                val newOwner = remaining.minBy { it.joinedAt }
+                transferOwnership(householdId, newOwner.userId, at)
+                DepartureOutcome.OwnershipTransferred(newOwner.userId)
+            }
+            else -> DepartureOutcome.Remained
+        }
+    }
+
+    override suspend fun acceptInvite(inviteId: UUID, callerId: UUID, at: Instant): Household {
+        val invite = invites[inviteId] ?: throw InviteNotFoundException("No invite found for id $inviteId")
+        if (!invite.isUsable(at)) {
+            throw InviteNotFoundException("Invite ${invite.id} is expired, revoked, or exhausted")
+        }
+        if (invite.inviteeUserId != null && invite.inviteeUserId != callerId) {
+            throw InviteNotForCallerException("Invite ${invite.id} is not addressed to caller $callerId")
+        }
+        insertMembershipOrThrow(invite.householdId, callerId, HouseholdRole.MEMBER, at)
+        recordInviteAcceptance(inviteId, callerId, at)
+        bumpServerUpdatedAtForHouseholdRows(invite.householdId, at)
+        return requireNotNull(getHousehold(invite.householdId)) {
+            "Household ${invite.householdId} not found after join"
+        }
+    }
 
     private fun insertMembershipOrThrow(householdId: UUID, userId: UUID, role: HouseholdRole, at: Instant) {
         val alreadyActive = memberships.any { it.userId == userId && it.status == HouseholdMemberStatus.ACTIVE }

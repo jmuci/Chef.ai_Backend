@@ -8,6 +8,7 @@ import com.tenmilelabs.domain.exception.InviteNotForCallerException
 import com.tenmilelabs.domain.exception.InviteeNotFoundException
 import com.tenmilelabs.domain.exception.NotHouseholdMemberException
 import com.tenmilelabs.domain.exception.NotHouseholdOwnerException
+import com.tenmilelabs.domain.model.DepartureOutcome
 import com.tenmilelabs.domain.model.Household
 import com.tenmilelabs.domain.model.HouseholdInvite
 import com.tenmilelabs.domain.model.HouseholdInvitePreview
@@ -107,7 +108,11 @@ class HouseholdService(
         }
 
         val inviteeUserId = inviteeEmail?.let { email ->
-            userRepository.findUserByEmail(email)?.uuid
+            // Every stored email went through this same sanitization at registration
+            // (AuthService.register) before an equality lookup — an unsanitized lookup here would
+            // miss a real account whenever the owner types a differently-cased email.
+            val sanitizedEmail = InputValidator.sanitizeEmail(email)
+            userRepository.findUserByEmail(sanitizedEmail)?.uuid
                 ?: throw InviteeNotFoundException("No user found for email $email")
         }
 
@@ -188,69 +193,40 @@ class HouseholdService(
     suspend fun joinByToken(token: String, callerId: UUID): Household {
         val invite = householdRepository.findInviteByTokenHash(TokenHasher.sha256Base64(token))
             ?: throw InviteNotFoundException("No invite found for the given token")
-        return acceptInvite(invite, callerId)
+        return acceptInvite(invite.id, callerId)
     }
 
-    suspend fun acceptInviteById(inviteId: UUID, callerId: UUID): Household =
-        acceptInvite(requireInvite(inviteId), callerId)
+    suspend fun acceptInviteById(inviteId: UUID, callerId: UUID): Household = acceptInvite(inviteId, callerId)
 
     /**
      * Shared core for the token path ([joinByToken]) and the in-app path ([acceptInviteById]).
-     * Order matters: validity (not found/expired/revoked/exhausted) is checked uniformly via
-     * [HouseholdInvite.isUsable] before the invitee-mismatch check, so a caller probing invite ids
-     * can't distinguish "doesn't exist" from "exists but isn't yours" from "exists but expired."
-     *
-     * The membership insert happens *before* [HouseholdRepository.recordInviteAcceptance] bumps
-     * `use_count` — a losing racer against the one-household-per-user unique index rolls the whole
-     * transaction back before it ever consumes a reusable invite's budget, so no separate
-     * exhaustion bookkeeping is needed for that race.
+     * Delegates validity (not found/expired/revoked/exhausted), invitee-mismatch, membership
+     * insert, invite-consumption, and cursor backfill entirely to
+     * [HouseholdRepository.acceptInvite], which does all of it atomically under a lock on the
+     * invite row — see its KDoc for why a per-call-transaction sequence here previously left a
+     * race where two different callers could both accept the same single-use invite.
      */
-    private suspend fun acceptInvite(invite: HouseholdInvite, callerId: UUID): Household {
-        val now = millisecondPrecisionNow()
-        if (!invite.isUsable(now)) {
-            throw InviteNotFoundException("Invite ${invite.id} is expired, revoked, or exhausted")
-        }
-        if (invite.inviteeUserId != null && invite.inviteeUserId != callerId) {
-            throw InviteNotForCallerException("Invite ${invite.id} is not addressed to caller $callerId")
-        }
-
-        householdRepository.addMember(invite.householdId, callerId, HouseholdRole.MEMBER, now)
-        householdRepository.recordInviteAcceptance(invite.id, callerId, now)
-        householdRepository.bumpServerUpdatedAtForHouseholdRows(invite.householdId, now)
-
-        log.info("User $callerId joined household ${invite.householdId} via invite ${invite.id}")
-        return householdRepository.getHousehold(invite.householdId)
-            ?: throw HouseholdNotFoundException("Household ${invite.householdId} not found after join")
+    private suspend fun acceptInvite(inviteId: UUID, callerId: UUID): Household {
+        val household = householdRepository.acceptInvite(inviteId, callerId, millisecondPrecisionNow())
+        log.info("User $callerId joined household ${household.id} via invite $inviteId")
+        return household
     }
 
     /**
-     * Shared "leave or remove" core (backend prompt §4): mark the departing membership REMOVED,
-     * detach their own plans, then either promote the earliest-joined remaining member (if the
-     * departing member was OWNER and others remain) or dissolve the household (if none remain).
-     * The two outcomes are mutually exclusive by construction, so checking emptiness first is
-     * only for readability, not correctness.
+     * Shared "leave or remove" core (backend prompt §4): delegates the whole mark-REMOVED /
+     * detach-plans / promote-or-dissolve sequence to [HouseholdRepository.departFromHousehold],
+     * which runs it atomically under a lock on the household row — see its KDoc for why a
+     * per-call-transaction sequence here previously left a race where two members leaving at once
+     * could leave `households.owner_id` pointing at a member who was just removed.
      */
     private suspend fun departFromHousehold(householdId: UUID, departingUserId: UUID) {
-        val departing = householdRepository.getActiveMembership(householdId, departingUserId)
-            ?: throw NotHouseholdMemberException(
-                "User $departingUserId is not an active member of household $householdId"
-            )
         val now = millisecondPrecisionNow()
-
-        householdRepository.removeMember(householdId, departingUserId, now)
-        householdRepository.detachPlansOwnedBy(householdId, departingUserId)
-
-        val remaining = householdRepository.listActiveMembers(householdId)
-        when {
-            remaining.isEmpty() -> {
-                householdRepository.dissolveHousehold(householdId, now)
+        when (val outcome = householdRepository.departFromHousehold(householdId, departingUserId, now)) {
+            DepartureOutcome.HouseholdDissolved ->
                 log.info("Dissolved household $householdId — last member $departingUserId left")
-            }
-            departing.role == HouseholdRole.OWNER -> {
-                val newOwner = remaining.minBy { it.joinedAt }
-                householdRepository.transferOwnership(householdId, newOwner.userId, now)
-                log.info("Transferred ownership of household $householdId to ${newOwner.userId}")
-            }
+            is DepartureOutcome.OwnershipTransferred ->
+                log.info("Transferred ownership of household $householdId to ${outcome.newOwnerId}")
+            DepartureOutcome.Remained -> Unit
         }
     }
 

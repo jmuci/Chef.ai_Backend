@@ -125,25 +125,43 @@ An invite is created by an `OWNER` (`HouseholdService.createInvite`):
 - An email-addressed invite (`inviteeEmail` set) resolves to a concrete `users` row **at creation
   time** and stores `invitee_user_id` — not a bare email to match later. Authorization at accept
   time is always an id comparison (`InviteNotForCallerException`), never a string comparison,
-  which avoids email-change edge cases. No matching user → `InviteeNotFoundException`.
+  which avoids email-change edge cases. No matching user → `InviteeNotFoundException`. The lookup
+  email is sanitized (trimmed, lowercased) the same way `AuthService.register`/`login` sanitize
+  before storage, so inviting `Jane@Example.com` still resolves an account stored as
+  `jane@example.com`.
+- `GET /households/{id}/invites` filters by `HouseholdInvite.isUsable`, not just
+  un-revoked/un-accepted — an invite that has since expired, or a multi-use invite that's hit its
+  `max_uses` budget, no longer appears as "outstanding" even though nothing ever explicitly
+  revoked or fully-consumed it in the narrower sense.
 
 Accepting an invite (`joinByToken`, token path; `acceptInviteById`, in-app path from a pending-
-invites inbox) shares one core implementation, in this order:
+invites inbox) shares one core implementation, `HouseholdRepository.acceptInvite`, which runs
+**atomically** — a single transaction holding a row lock on the invite for its duration, not a
+sequence of independently-committing steps:
 
-1. Look up the invite. Validity — not found, expired, revoked, or exhausted
-   (`HouseholdInvite.isUsable`) — is checked **uniformly** and all four map to the same
-   `InviteNotFoundException`, so a caller probing invite ids or tokens can't distinguish "doesn't
-   exist" from "expired" from "revoked" from "exhausted" (enumeration resistance).
+1. Lock and re-fetch the invite row. Validity — not found, expired, revoked, or exhausted
+   (`HouseholdInvite.isUsable`) — is checked **uniformly** against this freshly-locked read and all
+   four map to the same `InviteNotFoundException`, so a caller probing invite ids or tokens can't
+   distinguish "doesn't exist" from "expired" from "revoked" from "exhausted" (enumeration
+   resistance). The lock also means a second, concurrent acceptor of the same single-use invite
+   blocks here until the first transaction commits, then re-evaluates `isUsable` against the
+   now-consumed row — without it, two different callers could each pass a stale `isUsable` check
+   taken before either committed, and a single-use invite would silently admit two members.
 2. If the invite names a specific `invitee_user_id` that isn't the caller →
    `InviteNotForCallerException`.
 3. Insert the membership row. This happens **before** incrementing `use_count` — a losing racer
-   against the one-household-per-user unique index rolls the whole operation back before it ever
-   consumes a reusable invite's budget, so no separate exhaustion bookkeeping is needed for that
-   race.
+   against the one-household-per-user unique index rolls the whole transaction back, including the
+   invite update below, before it ever consumes a reusable invite's budget, so no separate
+   exhaustion bookkeeping is needed for that race.
 4. Increment `use_count`; for single-use invites, stamp `accepted_by`/`accepted_at`.
 5. Bump `server_updated_at` on every meal plan and grocery item already shared with the household
    (the "cursor backfill" — see [`docs/sync-protocol.md`](sync-protocol.md#cursor-backfill-on-join))
    so the newly joined member's next pull receives them regardless of how old their own cursor is.
+
+Steps 3–5 committing as one transaction (rather than three separately-committing calls) is what
+makes the whole accept atomic: a crash or exception partway through can no longer leave a member
+added without the cursor backfill ever running, or an invite marked consumed without a membership
+to show for it.
 
 **Decline vs. revoke**: both share the `revoked_at` column rather than a separate `declined_at`.
 They're distinguished by who initiated them — the invitee (`declineInvite`) vs. the household
@@ -153,21 +171,26 @@ purposes, so a second column would be redundant.
 ## Leaving and removal
 
 `leaveHousehold` (self-initiated) and `removeMember` (owner-initiated, on someone else) share one
-core, `departFromHousehold`:
+core, `HouseholdRepository.departFromHousehold`, which runs the whole sequence **atomically** — one
+transaction, holding a row lock on the household for its duration:
 
 1. Mark the departing membership `REMOVED`, stamping both `removed_at` and `server_removed_at`.
-2. Detach plans the departing member owns from the household (`detachPlansOwnedBy`) — nulls
-   `meal_plans.household_id` for plans they own; other members' plans are untouched (they simply
-   lose access, surfaced via the removal tombstone — see `docs/sync-protocol.md`).
+2. Detach plans the departing member owns from the household (nulls `meal_plans.household_id` for
+   plans they own; other members' plans are untouched — they simply lose access, surfaced via the
+   removal tombstone — see `docs/sync-protocol.md`).
 3. If the departing member was `OWNER` and other `ACTIVE` members remain, ownership transfers to
-   the earliest-joined remaining member (`transferOwnership`, updating both `households.owner_id`
-   and the new owner's `household_members.role` in one call).
-4. If no `ACTIVE` members remain, the household dissolves (`dissolveHousehold`): soft-deleted, and
-   every remaining membership row marked `REMOVED` with a fresh `server_removed_at` — not just the
-   member who triggered it, so every departed member's client eventually gets a tombstone.
+   the earliest-joined remaining member (updating both `households.owner_id` and the new owner's
+   `household_members.role` in the same transaction).
+4. If no `ACTIVE` members remain, the household dissolves: soft-deleted, with the departing
+   member's own row (marked `REMOVED` in step 1) already covering every remaining membership, since
+   by definition none are left.
 
 Outcomes 3 and 4 are mutually exclusive by construction (4 requires zero remaining active members;
-3 requires at least one).
+3 requires at least one). The household-row lock is what makes this safe against two members
+leaving at once: without it, two concurrent departures could each act on a stale snapshot of "who's
+left" and "was I the owner," potentially leaving `households.owner_id` pointing at a member who was
+just removed by the other departure. Locking serializes the two calls into one after the other,
+so the second always sees the first's completed result before deciding what to do.
 
 `removeMember` additionally rejects: removing yourself (`HouseholdValidationException` — use
 `leaveHousehold` instead) and removing the current owner (transfer ownership or delete the

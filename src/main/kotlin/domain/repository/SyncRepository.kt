@@ -148,6 +148,16 @@ interface SyncRepository {
     suspend fun isRecipeAccessibleBy(userId: UUID, recipeId: UUID): Boolean
 
     /**
+     * Batched counterpart to [isRecipeAccessibleBy] that also allows [findHouseholdVisibleRecipeIds]
+     * — i.e. the subset of [recipeIds] that [userId] may reference in a meal plan: owned by them,
+     * `PUBLIC`, or visible only through their household's recipe gap clause (a co-member's private
+     * recipe already referenced by a shared plan). One query for the whole set instead of one call
+     * per id, and — unlike [isRecipeAccessibleBy] — accounts for household visibility, which a
+     * shared plan's day references must be checked against too.
+     */
+    suspend fun accessibleRecipeIds(userId: UUID, recipeIds: Set<UUID>): Set<UUID>
+
+    /**
      * Upserts a bookmark row for the given (userId, recipeId) pair.
      * [deletedAt] non-null → soft-delete (tombstone); null → active bookmark.
      * [serverUpdatedAt] is the server-authoritative timestamp used as the sync cursor.
@@ -205,8 +215,16 @@ interface SyncRepository {
      * [getMealPlanForMember] that the pushing user may write this plan, and — for a brand-new
      * plan — that [plan.ownerId] names the caller and [plan.householdId] (if any) names their own
      * active household. This method trusts that verification; it performs none itself.
+     *
+     * The last-writer-wins check is re-validated here against the live row, atomically with the
+     * write (implementations lock the row first) — not just trusted from a caller's earlier,
+     * separately-transacted read. Two concurrent pushes for the same plan can otherwise both
+     * observe "no conflict" before either commits, and the second would silently overwrite the
+     * first with no conflict ever reported. Returns `true` if the write was applied, `false` if a
+     * newer row was found (or a concurrent insert for a brand-new plan won the race) and nothing
+     * was written — the caller must report this the same as its own pre-check conflict.
      */
-    suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant)
+    suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant): Boolean
 
     /**
      * Returns meal plans visible to [userId] whose [server_updated_at] is after [sinceMillis]:

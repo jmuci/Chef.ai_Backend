@@ -1,6 +1,11 @@
 package com.tenmilelabs.infrastructure.database.repositoryImpl
 
 import com.tenmilelabs.domain.exception.AlreadyInHouseholdException
+import com.tenmilelabs.domain.exception.HouseholdNotFoundException
+import com.tenmilelabs.domain.exception.InviteNotForCallerException
+import com.tenmilelabs.domain.exception.InviteNotFoundException
+import com.tenmilelabs.domain.exception.NotHouseholdMemberException
+import com.tenmilelabs.domain.model.DepartureOutcome
 import com.tenmilelabs.domain.model.Household
 import com.tenmilelabs.domain.model.HouseholdInvite
 import com.tenmilelabs.domain.model.HouseholdMemberStatus
@@ -15,6 +20,7 @@ import com.tenmilelabs.infrastructure.database.tables.HouseholdMemberTable
 import com.tenmilelabs.infrastructure.database.tables.HouseholdTable
 import com.tenmilelabs.infrastructure.database.tables.MealPlanTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
+import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.exceptions.ExposedSQLException
@@ -164,7 +170,15 @@ class PostgresHouseholdRepository : HouseholdRepository {
 
     override suspend fun getInvite(inviteId: UUID): HouseholdInvite? = suspendTransaction { loadInvite(inviteId) }
 
+    /**
+     * "Outstanding" means still usable, not merely un-revoked/un-accepted — filtering via
+     * [HouseholdInvite.isUsable] (rather than re-deriving its expiry/budget conditions in SQL)
+     * keeps this in lockstep with the same rule [HouseholdService.previewInvite]/`joinByToken`
+     * enforce, so an expired or use-exhausted invite can't linger here as if still shareable while
+     * actually accepting it is rejected.
+     */
     override suspend fun listOutstandingInvites(householdId: UUID): List<HouseholdInvite> = suspendTransaction {
+        val now = Clock.System.now()
         HouseholdInviteTable.selectAll()
             .where {
                 (HouseholdInviteTable.household_id eq EntityID(householdId, HouseholdTable)) and
@@ -173,6 +187,7 @@ class PostgresHouseholdRepository : HouseholdRepository {
             }
             .orderBy(HouseholdInviteTable.created_at, SortOrder.DESC)
             .map { it.toHouseholdInvite() }
+            .filter { it.isUsable(now) }
     }
 
     override suspend fun listPendingInvitesForUser(userId: UUID): List<HouseholdInvite> = suspendTransaction {
@@ -214,6 +229,13 @@ class PostgresHouseholdRepository : HouseholdRepository {
      * they arrive via the gap clause, which ignores the cursor by construction.
      */
     override suspend fun bumpServerUpdatedAtForHouseholdRows(householdId: UUID, at: Instant): Unit = suspendTransaction {
+        bumpHouseholdRows(householdId, at)
+    }
+
+    /** Non-transactional body of [bumpServerUpdatedAtForHouseholdRows], reused by [acceptInvite]
+     *  so the bump runs inside that method's own single transaction rather than opening a nested
+     *  one — see [acceptInvite]'s KDoc for why the whole accept sequence must be atomic. */
+    private fun bumpHouseholdRows(householdId: UUID, at: Instant) {
         val planIds = MealPlanTable
             .selectAll()
             .where { MealPlanTable.household_id eq EntityID(householdId, HouseholdTable) }
@@ -242,6 +264,123 @@ class PostgresHouseholdRepository : HouseholdRepository {
                 (MealPlanTable.user_id eq EntityID(userId, UserTable))
         }) {
             it[household_id] = null
+        }
+    }
+
+    /**
+     * Locks [HouseholdTable]'s row for [householdId] for the whole operation — this is what
+     * serializes concurrent departures/transfers on the same household and closes the race
+     * described on [HouseholdRepository.departFromHousehold]: two members leaving at once now
+     * fully complete one after the other rather than each acting on a stale snapshot of "who's
+     * left."
+     */
+    override suspend fun departFromHousehold(
+        householdId: UUID,
+        departingUserId: UUID,
+        at: Instant
+    ): DepartureOutcome = suspendTransaction {
+        HouseholdTable.selectAll()
+            .where { HouseholdTable.id eq EntityID(householdId, HouseholdTable) }
+            .forUpdate()
+            .firstOrNull()
+            ?: throw HouseholdNotFoundException("Household $householdId not found")
+
+        val departingRow = activeMembershipRow(householdId, departingUserId)
+            ?: throw NotHouseholdMemberException(
+                "User $departingUserId is not an active member of household $householdId"
+            )
+        val wasOwner = departingRow[HouseholdMemberTable.role] == HouseholdRole.OWNER.name
+
+        HouseholdMemberTable.update({
+            (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                (HouseholdMemberTable.user_id eq EntityID(departingUserId, UserTable)) and
+                (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
+        }) {
+            it[status] = HouseholdMemberStatus.REMOVED.name
+            it[removed_at] = at
+            it[server_removed_at] = at
+        }
+
+        MealPlanTable.update({
+            (MealPlanTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                (MealPlanTable.user_id eq EntityID(departingUserId, UserTable))
+        }) {
+            it[household_id] = null
+        }
+
+        val remaining = HouseholdMemberTable
+            .selectAll()
+            .where {
+                (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                    (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
+            }
+            .orderBy(HouseholdMemberTable.joined_at, SortOrder.ASC)
+            .toList()
+
+        when {
+            remaining.isEmpty() -> {
+                HouseholdTable.update({ HouseholdTable.id eq EntityID(householdId, HouseholdTable) }) {
+                    it[deleted_at] = at
+                    it[updated_at] = at
+                }
+                DepartureOutcome.HouseholdDissolved
+            }
+            wasOwner -> {
+                val newOwnerId = remaining.first()[HouseholdMemberTable.user_id].value
+                HouseholdTable.update({ HouseholdTable.id eq EntityID(householdId, HouseholdTable) }) {
+                    it[owner_id] = EntityID(newOwnerId, UserTable)
+                    it[updated_at] = at
+                }
+                HouseholdMemberTable.update({
+                    (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
+                        (HouseholdMemberTable.user_id eq EntityID(newOwnerId, UserTable)) and
+                        (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
+                }) {
+                    it[role] = HouseholdRole.OWNER.name
+                }
+                DepartureOutcome.OwnershipTransferred(newOwnerId)
+            }
+            else -> DepartureOutcome.Remained
+        }
+    }
+
+    /**
+     * Locks the invite row for the whole operation so a second, concurrent acceptor of the same
+     * single-use invite blocks here rather than racing the usability check — see
+     * [HouseholdRepository.acceptInvite]'s KDoc.
+     */
+    override suspend fun acceptInvite(inviteId: UUID, callerId: UUID, at: Instant): Household = suspendTransaction {
+        val inviteRow = HouseholdInviteTable.selectAll()
+            .where { HouseholdInviteTable.id eq EntityID(inviteId, HouseholdInviteTable) }
+            .forUpdate()
+            .firstOrNull()
+            ?: throw InviteNotFoundException("No invite found for id $inviteId")
+
+        val invite = inviteRow.toHouseholdInvite()
+        if (!invite.isUsable(at)) {
+            throw InviteNotFoundException("Invite ${invite.id} is expired, revoked, or exhausted")
+        }
+        if (invite.inviteeUserId != null && invite.inviteeUserId != callerId) {
+            throw InviteNotForCallerException("Invite ${invite.id} is not addressed to caller $callerId")
+        }
+
+        // Membership insert happens before the invite is marked consumed: a losing racer against
+        // the one-household-per-user unique index rolls this whole transaction back, including the
+        // invite update below, before the invite's budget is ever touched.
+        insertMembershipOrThrow(invite.householdId, callerId, HouseholdRole.MEMBER, at)
+
+        HouseholdInviteTable.update({ HouseholdInviteTable.id eq EntityID(inviteId, HouseholdInviteTable) }) {
+            it[use_count] = invite.useCount + 1
+            if (invite.singleUse) {
+                it[accepted_by] = EntityID(callerId, UserTable)
+                it[accepted_at] = at
+            }
+        }
+
+        bumpHouseholdRows(invite.householdId, at)
+
+        requireNotNull(loadHousehold(invite.householdId)) {
+            "Household ${invite.householdId} not found after join"
         }
     }
 

@@ -545,6 +545,49 @@ class SyncServiceTest {
     }
 
     @Test
+    fun sharedPlanPushByAMemberStillReferencingACoMembersPrivateRecipeIsAccepted() = withService { service, repo ->
+        // Regression: isRecipeAccessibleBy alone (owner-or-PUBLIC) would reject this, even though
+        // the household gap clause already makes ownerId's private recipe visible to memberId on
+        // every pull. A client resends the full plan on every edit, so a member renaming/reordering
+        // a shared plan must still be able to push a day that references a co-member's recipe.
+        val householdId = UUID.randomUUID()
+        val ownerId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(ownerId, householdId)
+        repo.seedActiveHousehold(memberId, householdId)
+        val ingredientId = repo.seedIngredient()
+        val ownersPrivateRecipe = sampleRecipe(UUID.randomUUID(), ownerId, updatedAt = 100L, ingredientId = ingredientId)
+        repo.seedRecipe(ownersPrivateRecipe, serverUpdatedAtMillis = 100L)
+
+        val planId = UUID.randomUUID()
+        val day = SyncMealPlanDayDto(
+            uuid = UUID.randomUUID().toString(),
+            dayIndex = 0,
+            dinnerRecipeId = ownersPrivateRecipe.uuid,
+            lunchRecipeId = null
+        )
+        repo.seedMealPlan(
+            buildMealPlan(planId, updatedAt = 1000L, ownerId = ownerId)
+                .copy(householdId = householdId.toString(), days = listOf(day)),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val response = service.pushRecipes(
+            memberId,
+            SyncPushRequest(
+                recipes = emptyList(),
+                mealPlans = listOf(
+                    buildMealPlan(planId, updatedAt = 2000L, ownerId = ownerId)
+                        .copy(householdId = householdId.toString(), name = "Renamed by member", days = listOf(day))
+                )
+            )
+        )
+
+        assertTrue(response.mealPlans.errors.isEmpty())
+        assertEquals(1, response.mealPlans.accepted.size)
+    }
+
+    @Test
     fun pushOfANewPlanClaimingAHouseholdTheCallerIsNotAMemberOfIsRejected() = withService { service, repo ->
         val userId = UUID.randomUUID()
         val foreignHouseholdId = UUID.randomUUID()
