@@ -903,8 +903,13 @@ model; this section covers only the sync mechanics.
   unchanged from pre-households behavior. Non-null shares the plan with every ACTIVE member of
   that household. Like `ownerId`, immutable via sync — only leaving/removal/dissolution
   (`HouseholdService`) ever changes it, and always back to `null`.
-- Same last-write-wins conflict check as recipes: `existing.serverUpdatedAtMillis > plan.updatedAt`
-  — but the *existence* check that check builds on now resolves through
+- Same last-write-wins conflict check as recipes: `existing.serverUpdatedAtMillis > plan.updatedAt`.
+  Checked twice: once as a fast-path against `SyncService`'s own earlier read, and again — the
+  authoritative check — inside `upsertMealPlan` itself, which locks the row before re-comparing and
+  writing in the same transaction. Two concurrent pushes for the same plan can otherwise both pass
+  the first check before either commits; the row lock serializes them so the second push sees the
+  first's write and is correctly reported as a conflict instead of silently overwriting it. The
+  *existence* check the first pass builds on now resolves through
   `SyncRepository.getMealPlanForMember(uuid, callerId)`: true if the caller owns the plan **or**
   is an ACTIVE member of `householdId`. A push against a `uuid` that already exists but resolves
   to neither is rejected outright (`MEAL_PLAN_NOT_ACCESSIBLE`), not silently overwritten — this
@@ -916,12 +921,18 @@ model; this section covers only the sync mechanics.
   household (`INVALID_HOUSEHOLD` otherwise). Unvalidated, either would let a push plant content
   under another identity, or into a household the pusher was never a member of.
 - **Referenced-recipe validation, for a plan that is (or is becoming) shared**: every non-null
-  `dinnerRecipeId`/`lunchRecipeId` across `days` must be accessible to the *pushing caller*
-  (`isRecipeAccessibleBy` — owned by them, or `PUBLIC`), or the whole plan is rejected
-  (`MEAL_PLAN_RECIPE_NOT_ACCESSIBLE`). This is what keeps the recipe gap clause below safe: a
-  member can only ever share their own or already-public recipes into a household, never someone
-  else's unrelated private one by reference. A personal (non-shared) plan's day references are
-  unrestricted, unchanged from pre-households behavior.
+  `dinnerRecipeId`/`lunchRecipeId` across `days` must be accessible to the *pushing caller* —
+  owned by them, `PUBLIC`, **or** already visible to them through their household's recipe gap
+  clause (`SyncRepository.accessibleRecipeIds`, checked in one batched call rather than one query
+  per reference) — or the whole plan is rejected (`MEAL_PLAN_RECIPE_NOT_ACCESSIBLE`). The
+  household-visibility fallback is what lets a member push an edit to a shared plan that still
+  references a co-member's private recipe on some day (clients resend full plan state on every
+  edit, so this comes up on almost any re-save of a plan that mixes recipes from more than one
+  member) — without it, only the original referencer could ever push updates to such a plan. This
+  is still what keeps the gap clause safe: a member can only ever *introduce* their own or
+  already-public recipes into a household by reference; someone else's unrelated private recipe
+  they haven't already been exposed to some other way is still rejected. A personal (non-shared)
+  plan's day references are unrestricted, unchanged from pre-households behavior.
 - On accept, the plan's `preferencesJson` is also persisted to `UserPreferencesRepository` — a
   meal-plan push is the only way user preferences get written server-side.
 - **Push response** gains `mealPlans: MealPlanPushResults` — `accepted` (uuid + serverUpdatedAt),

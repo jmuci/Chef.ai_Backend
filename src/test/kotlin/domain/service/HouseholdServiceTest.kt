@@ -294,6 +294,21 @@ class HouseholdServiceTest {
     }
 
     @Test
+    fun `createInvite matches an existing user by email regardless of case`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+        // Mirrors how AuthService.register actually stores emails: trimmed and lowercased.
+        val invitee = userRepository.createUser("jane@example.com", "jane", "hash")
+        assertNotNull(invitee)
+
+        val (invite, _) = householdService.createInvite(
+            household.id, ownerId, inviteeEmail = "Jane@Example.com", maxUses = null, expiresInHours = null
+        )
+
+        assertEquals(invitee.uuid, invite.inviteeUserId)
+    }
+
+    @Test
     fun `createInvite for an email with no matching account fails`() = runTest {
         val ownerId = UUID.randomUUID()
         val household = householdService.createHousehold("Household", ownerId)
@@ -361,6 +376,19 @@ class HouseholdServiceTest {
         assertFailsWith<InviteNotFoundException> {
             householdService.previewInvite(rawToken)
         }
+    }
+
+    @Test
+    fun `listOutstandingInvites excludes an invite that has since expired`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+        seedRawInvite(
+            householdId = household.id,
+            createdBy = ownerId,
+            expiresAt = Clock.System.now().minus(1.hours),
+        )
+
+        assertTrue(householdService.listOutstandingInvites(household.id, ownerId).isEmpty())
     }
 
     // ── Decline / revoke ──────────────────────────────────────────────────────

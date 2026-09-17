@@ -11,6 +11,7 @@ import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
 import com.tenmilelabs.infrastructure.database.tables.*
 import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
+import org.jetbrains.exposed.exceptions.ExposedSQLException
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.neq
@@ -416,6 +417,21 @@ class PostgresSyncRepository : SyncRepository {
             .any()
     }
 
+    override suspend fun accessibleRecipeIds(userId: UUID, recipeIds: Set<UUID>): Set<UUID> = suspendTransaction {
+        if (recipeIds.isEmpty()) return@suspendTransaction emptySet()
+        val entityIds = recipeIds.map { EntityID(it, RecipeTable) }
+        val ownedOrPublic = RecipeTable.selectAll()
+            .where {
+                (RecipeTable.id inList entityIds) and
+                    ((RecipeTable.creator_id eq EntityID(userId, UserTable)) or (RecipeTable.privacy eq "PUBLIC"))
+            }
+            .map { it[RecipeTable.id].value }
+            .toSet()
+        val householdId = resolveActiveHouseholdId(userId)
+        val householdVisible = if (householdId != null) householdVisibleRecipeIds(householdId) else emptySet()
+        ownedOrPublic + (householdVisible intersect recipeIds)
+    }
+
     override suspend fun upsertBookmark(
         userId: UUID,
         recipeId: UUID,
@@ -488,17 +504,25 @@ class PostgresSyncRepository : SyncRepository {
         MealPlanTable.selectAll().where { MealPlanTable.id eq uuid }.limit(1).any()
     }
 
-    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant) = suspendTransaction {
+    override suspend fun upsertMealPlan(plan: SyncMealPlanDto, serverUpdatedAt: Instant): Boolean = suspendTransaction {
         val planUuid = UUID.fromString(plan.uuid)
         val planEntityId = EntityID(planUuid, MealPlanTable)
 
-        val exists = MealPlanTable
+        // Locks the row (if it already exists) so a concurrent push for the same plan blocks here
+        // instead of racing this staleness check — the caller's own `existing` read happened in a
+        // separate, already-committed transaction and can be stale by the time this runs. Without
+        // this lock two concurrent pushes could both see "no conflict" and the second would
+        // silently overwrite the first with no conflict ever reported.
+        val existingRow = MealPlanTable
             .selectAll()
             .where { MealPlanTable.id eq planUuid }
-            .limit(1)
-            .any()
+            .forUpdate()
+            .firstOrNull()
 
-        if (exists) {
+        if (existingRow != null) {
+            if (existingRow[MealPlanTable.server_updated_at].toEpochMilliseconds() > plan.updatedAt) {
+                return@suspendTransaction false
+            }
             // Owner and household are immutable via sync — only HouseholdService's lifecycle
             // methods touch them (see MealPlanTable.household_id's KDoc).
             MealPlanTable.update({ MealPlanTable.id eq planUuid }) {
@@ -510,17 +534,26 @@ class PostgresSyncRepository : SyncRepository {
                 it[MealPlanTable.server_updated_at] = serverUpdatedAt
             }
         } else {
-            MealPlanTable.insert {
-                it[id] = planEntityId
-                it[user_id] = EntityID(UUID.fromString(plan.ownerId), UserTable)
-                it[household_id] = plan.householdId?.let { id -> EntityID(UUID.fromString(id), HouseholdTable) }
-                it[name] = plan.name
-                it[status] = plan.status
-                it[preferences] = plan.preferencesJson
-                it[created_at] = plan.createdAt
-                it[updated_at] = plan.updatedAt
-                it[deleted_at] = plan.deletedAt
-                it[MealPlanTable.server_updated_at] = serverUpdatedAt
+            try {
+                MealPlanTable.insert {
+                    it[id] = planEntityId
+                    it[user_id] = EntityID(UUID.fromString(plan.ownerId), UserTable)
+                    it[household_id] = plan.householdId?.let { id -> EntityID(UUID.fromString(id), HouseholdTable) }
+                    it[name] = plan.name
+                    it[status] = plan.status
+                    it[preferences] = plan.preferencesJson
+                    it[created_at] = plan.createdAt
+                    it[updated_at] = plan.updatedAt
+                    it[deleted_at] = plan.deletedAt
+                    it[MealPlanTable.server_updated_at] = serverUpdatedAt
+                }
+            } catch (ex: ExposedSQLException) {
+                // A concurrent push for the same brand-new plan id committed its INSERT first —
+                // report this one as a conflict instead of letting the constraint violation escape.
+                if (ex.message?.contains("meal_plans_pkey", ignoreCase = true) == true) {
+                    return@suspendTransaction false
+                }
+                throw ex
             }
         }
 
@@ -535,6 +568,7 @@ class PostgresSyncRepository : SyncRepository {
                 it[lunch_recipe_id] = day.lunchRecipeId?.let { id -> EntityID(UUID.fromString(id), RecipeTable) }
             }
         }
+        true
     }
 
     override suspend fun findDeltaMealPlans(userId: UUID, sinceMillis: Long): List<SyncMealPlanRecord> =
