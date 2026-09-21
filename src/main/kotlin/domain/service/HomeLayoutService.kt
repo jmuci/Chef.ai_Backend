@@ -66,6 +66,8 @@ class HomeLayoutService(
             is LargeCardComponent -> component
             is SquaredCardComponent -> component
             is ListCardComponent -> component
+            is WeekPlanDaysComponent -> component
+            is GroceryTeaserComponent -> component
         }
 
     private fun sanitizeCarouselItems(items: List<HomeComponent>): List<HomeComponent> =
