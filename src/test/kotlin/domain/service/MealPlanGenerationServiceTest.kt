@@ -56,6 +56,22 @@ class MealPlanGenerationServiceTest {
         assertEquals(VarietyPreference.HIGH, prefs.varietyPreference)
     }
 
+    /** The blob is stored verbatim from pushes; a wrong-typed field used to throw on every later read. */
+    @Test
+    fun `parsePreferences falls back to defaults for wrong-typed fields`() {
+        val service = makeService(FakeSyncRepository())
+
+        val prefs = service.parsePreferences(
+            """{"planLengthDays":{},"mealType":[1],"dietaryRestrictions":5,"servingsPerMeal":"x","batchCooking":[]}"""
+        )
+
+        assertEquals(7, prefs.planLengthDays)
+        assertEquals(MealType.DINNER, prefs.mealType)
+        assertEquals(emptyList(), prefs.dietaryRestrictions)
+        assertEquals(2, prefs.servingsPerMeal)
+        assertEquals(false, prefs.batchCooking)
+    }
+
     // Regression: security audit F6. planLengthDays was coerceAtLeast(1) - a floor with no
     // ceiling - and assignRecipesToDays loops over it once per day, ranking the whole candidate
     // set each time. POST /api/v1/meal-plans/generate is anonymous-capable, so an unauthenticated

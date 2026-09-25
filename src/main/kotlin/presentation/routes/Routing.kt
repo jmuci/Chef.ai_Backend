@@ -245,6 +245,12 @@ private suspend fun handleDeleteRecipe(
         call.respond(HttpStatusCode.BadRequest, ErrorResponse("Recipe ID is required"))
         return
     }
+    // The repository parses it with UUID.fromString, whose IllegalArgumentException StatusPages
+    // doesn't map — a malformed id used to answer 500.
+    if (runCatching { UUID.fromString(id) }.isFailure) {
+        call.respond(HttpStatusCode.BadRequest, ErrorResponse("Recipe ID must be a valid UUID"))
+        return
+    }
 
     val userId = call.authenticatedUserId()
     if (userId == null) {

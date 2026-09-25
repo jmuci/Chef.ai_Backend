@@ -4,6 +4,7 @@ import com.tenmilelabs.application.dto.*
 import io.ktor.util.logging.*
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -103,20 +104,24 @@ class HomeLayoutServiceTest {
     }
 
     @Test
-    fun `checksum covers only components, not the sidecar`() {
+    fun `checksum covers schemaVersion, components and the sidecar`() {
         val service = HomeLayoutService(log = log)
         val layout = service.getHomeLayout()
 
-        // Recompute checksum using only components — must match the returned checksum
         val serviceJson = kotlinx.serialization.json.Json {
             ignoreUnknownKeys = true
             explicitNulls = true
             encodeDefaults = false
         }
         val componentsJson = serviceJson.encodeToString(layout.components)
-        val expectedChecksum = HomeLayoutService.computeLayoutChecksum(componentsJson)
-        assertEquals(expectedChecksum, layout.layoutChecksum,
-            "layoutChecksum must be derived from components only, not the sidecar")
+        val sidecarJson = serviceJson.encodeToString(requireNotNull(layout.sidecar))
+        val expectedChecksum = HomeLayoutService.computeLayoutChecksum(
+            "${layout.schemaVersion}\n$componentsJson\n$sidecarJson"
+        )
+        assertEquals(expectedChecksum, layout.layoutChecksum)
+        // A sidecar-only change (e.g. a fixed image URL) must change the ETag, or clients holding
+        // the old copy keep getting 304 for it forever.
+        assertNotEquals(HomeLayoutService.computeLayoutChecksum(componentsJson), layout.layoutChecksum)
     }
 
     private fun collectRecipeIds(components: List<HomeComponent>): Set<String> {

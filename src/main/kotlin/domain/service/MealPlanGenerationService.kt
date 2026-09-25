@@ -287,19 +287,25 @@ class MealPlanGenerationService(
     internal fun parsePreferences(json: String): MealPlanPreferences {
         val obj: JsonObject = lenientJson.parseToJsonElement(json).jsonObject
 
-        val planLengthDays = obj["planLengthDays"]?.jsonPrimitive?.intOrNull ?: 7
-        val mealType = obj["mealType"]?.jsonPrimitive?.content
+        // Every field read goes through a safe cast: `.jsonPrimitive`/`.jsonArray` throw on a
+        // wrong-typed value (e.g. `"dietaryRestrictions": 5`), and this blob is stored verbatim from
+        // client pushes, so one such push used to make every later GET /user/preferences a 500.
+        // A wrong-typed field falls back to its default, same as a missing one.
+        fun primitive(key: String): JsonPrimitive? = obj[key] as? JsonPrimitive
+
+        val planLengthDays = primitive("planLengthDays")?.intOrNull ?: 7
+        val mealType = primitive("mealType")?.content
             ?.let { runCatching { MealType.valueOf(it) }.getOrNull() }
             ?: MealType.DINNER
-        val dietaryRestrictions = obj["dietaryRestrictions"]?.jsonArray
-            ?.map { it.jsonPrimitive.content }
+        val dietaryRestrictions = (obj["dietaryRestrictions"] as? JsonArray)
+            ?.mapNotNull { (it as? JsonPrimitive)?.content }
             ?: emptyList()
-        val recipeSource = obj["recipeSource"]?.jsonPrimitive?.content ?: "INCLUDE_PUBLIC"
-        val maxPrepTimeMinutes = obj["maxPrepTimeMinutes"]?.jsonPrimitive?.intOrNull
-        val servingsPerMeal = obj["servingsPerMeal"]?.jsonPrimitive?.intOrNull ?: 2
-        val batchCooking = obj["batchCooking"]?.jsonPrimitive?.booleanOrNull ?: false
-        val leftoverFriendly = obj["leftoverFriendly"]?.jsonPrimitive?.booleanOrNull ?: false
-        val varietyPreference = obj["varietyPreference"]?.jsonPrimitive?.content
+        val recipeSource = primitive("recipeSource")?.content ?: "INCLUDE_PUBLIC"
+        val maxPrepTimeMinutes = primitive("maxPrepTimeMinutes")?.intOrNull
+        val servingsPerMeal = primitive("servingsPerMeal")?.intOrNull ?: 2
+        val batchCooking = primitive("batchCooking")?.booleanOrNull ?: false
+        val leftoverFriendly = primitive("leftoverFriendly")?.booleanOrNull ?: false
+        val varietyPreference = primitive("varietyPreference")?.content
             ?.let { runCatching { VarietyPreference.valueOf(it) }.getOrNull() }
             ?: VarietyPreference.HIGH
 

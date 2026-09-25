@@ -7,14 +7,20 @@ import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.dao.RecipeDAO
 import com.tenmilelabs.infrastructure.database.mappers.daoToModel
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
+import com.tenmilelabs.infrastructure.database.tables.RecipeIngredientTable
+import com.tenmilelabs.infrastructure.database.tables.RecipeLabelTable
+import com.tenmilelabs.infrastructure.database.tables.RecipeStepTable
 import com.tenmilelabs.infrastructure.database.tables.RecipeTable
+import com.tenmilelabs.infrastructure.database.tables.RecipeTagTable
 import com.tenmilelabs.infrastructure.database.tables.UserTable
 import io.ktor.util.logging.*
+import kotlinx.datetime.Instant
 import org.jetbrains.exposed.dao.id.EntityID
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.update
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
 import java.util.*
 
 class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
@@ -98,23 +104,37 @@ class PostgresRecipesRepository(private val log: Logger) : RecipesRepository {
         rowsUpdated == 1
     }
 
+    /**
+     * Retention is measured from `server_updated_at` — when the server itself recorded the
+     * tombstone — not from `deleted_at`. `deleted_at` is client-supplied on the `/sync/push` path, so
+     * a device with a skewed clock (or one pushing a deletion it made offline months ago) could
+     * otherwise have its tombstone hard-deleted on the next sweep, before the user's other devices
+     * ever pulled it.
+     *
+     * Child rows are deleted explicitly rather than relying on `ON DELETE CASCADE`: the Exposed
+     * table objects (which provision the schema on a database not built from `create_tables.sql`)
+     * declare those FKs without a cascade, and a sync-pushed tombstone keeps its children.
+     */
     override suspend fun purgeSoftDeletedRecipes(olderThanMillis: Long, limit: Int): Int = suspendTransaction {
         if (limit <= 0) return@suspendTransaction 0
 
+        val cutoff = Instant.fromEpochMilliseconds(olderThanMillis)
         val recipeIds = RecipeTable
             .selectAll()
             .where {
                 (RecipeTable.deleted_at.isNotNull()) and
-                    (RecipeTable.deleted_at lessEq olderThanMillis)
+                    (RecipeTable.server_updated_at lessEq cutoff)
             }
-            .orderBy(RecipeTable.deleted_at to SortOrder.ASC)
+            .orderBy(RecipeTable.server_updated_at to SortOrder.ASC)
             .limit(limit)
             .map { it[RecipeTable.id] }
 
         if (recipeIds.isEmpty()) return@suspendTransaction 0
 
-        recipeIds.sumOf { recipeId ->
-            RecipeTable.deleteWhere { RecipeTable.id eq recipeId }
-        }
+        RecipeStepTable.deleteWhere { RecipeStepTable.recipe_id inList recipeIds }
+        RecipeIngredientTable.deleteWhere { RecipeIngredientTable.recipeId inList recipeIds }
+        RecipeTagTable.deleteWhere { RecipeTagTable.recipeId inList recipeIds }
+        RecipeLabelTable.deleteWhere { RecipeLabelTable.recipeId inList recipeIds }
+        RecipeTable.deleteWhere { RecipeTable.id inList recipeIds }
     }
 }

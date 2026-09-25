@@ -26,7 +26,7 @@ class HomeLayoutService(
      * - Loads a static JSON layout from the bundled resource file (`home_layout.json`).
      * - Decodes that JSON into typed `HomeComponent` models.
      * - Sanitizes unknown/invalid components so malformed config does not crash the endpoint.
-     * - Serializes sanitized components into canonical JSON and computes MD5 checksum.
+     * - Serializes schemaVersion + sanitized components + sidecar into canonical JSON and computes an MD5 checksum.
      * - Returns `HomeLayoutResponse` with that checksum for ETag/If-None-Match revalidation.
      *
      * Future personalization flow:
@@ -40,11 +40,13 @@ class HomeLayoutService(
         val resource = json.decodeFromString<HomeLayoutResource>(rawJson)
         // Unknown/unexpected components are dropped so a bad resource entry cannot break the endpoint.
         val cleanedComponents = sanitizeComponents(resource.components)
-        // Checksum is computed from the canonical serialized components payload used for ETag revalidation.
-        val canonicalComponentsJson = json.encodeToString(cleanedComponents)
-        val checksum = computeLayoutChecksum(canonicalComponentsJson)
-
         val sidecar = json.decodeFromString<HomeSidecar>(loadSidecarJson())
+
+        // The checksum drives If-None-Match revalidation, so it must cover everything a client
+        // caches from this response. Covering components alone meant a deploy that only changed
+        // the sidecar (recipe text, image URLs) or schemaVersion kept answering 304 to every client
+        // holding the old copy.
+        val checksum = computeLayoutChecksum(canonicalPayload(resource.schemaVersion, cleanedComponents, sidecar))
 
         log.info("HomeLayoutService: Serving home layout with checksum $checksum, v ${resource.schemaVersion} and ${cleanedComponents.size} components, ${sidecar.recipes.size} sidecar recipes.")
         return HomeLayoutResponse(
@@ -54,6 +56,9 @@ class HomeLayoutService(
             sidecar = sidecar,
         )
     }
+
+    private fun canonicalPayload(schemaVersion: String, components: List<HomeComponent>, sidecar: HomeSidecar): String =
+        "$schemaVersion\n${json.encodeToString(components)}\n${json.encodeToString(sidecar)}"
 
     private fun sanitizeComponents(components: List<HomeComponent>): List<HomeComponent> =
         components.mapNotNull(::sanitizeComponent)

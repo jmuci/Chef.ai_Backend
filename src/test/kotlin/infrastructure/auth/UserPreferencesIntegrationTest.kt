@@ -15,6 +15,7 @@ import com.tenmilelabs.infrastructure.database.FakeSyncRepository
 import com.tenmilelabs.infrastructure.database.FakeUserPreferencesRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository
 import org.junit.jupiter.api.Test
+import kotlinx.datetime.Clock
 import java.util.*
 import kotlin.test.assertEquals
 
@@ -54,6 +55,32 @@ class UserPreferencesIntegrationTest {
 
         val client = createClient { install(ContentNegotiation) { json() } }
         val auth = client.registerAndGetAuth()
+
+        val response = client.get("/user/preferences") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.NoContent, response.status)
+    }
+
+    @Test
+    fun `GET user preferences answers 204 rather than 500 for an unparseable stored blob`() = testApplication {
+        val userPreferencesRepository = FakeUserPreferencesRepository()
+        application {
+            module(
+                configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = FakeSyncRepository(),
+                userPreferencesRepository = userPreferencesRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+        userPreferencesRepository.upsertUserPreferences(UUID.fromString(auth.userId), "{", Clock.System.now())
 
         val response = client.get("/user/preferences") {
             bearerAuth(auth.token)
