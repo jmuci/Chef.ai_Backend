@@ -331,8 +331,10 @@ data class SyncGroceryListItem(
     val itemKey: String,
     val checked: Boolean,
     /** Whoever last checked/unchecked this item. Server-derived from the pushing caller, never
-     *  trusted from the payload — see [com.tenmilelabs.domain.service.SyncService]. */
-    val checkedBy: String?,
+     *  trusted from the payload — see [com.tenmilelabs.domain.service.SyncService]. Defaults to
+     *  null so a push that omits it deserializes: the Android client never sends it (it would be
+     *  ignored anyway), and without a default every such push failed with a 400. */
+    val checkedBy: String? = null,
     /** Client logical clock; the LWW comparand against `serverUpdatedAtMillis`. */
     val updatedAt: Long,
     val deletedAt: Long?

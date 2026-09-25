@@ -1097,7 +1097,7 @@ is no standalone grocery-list entity or endpoint.
   is an ordinary LWW update, so a check/uncheck cycle never accumulates `deleted_at` rows the way a
   delete-then-recreate would. `deletedAt` means only "this item left the list" (e.g. removed from
   the plan), a genuinely different event from unchecking it.
-- **`checkedBy`** in the request is ignored. The server always derives it from the pushing caller —
+- **`checkedBy`** in the request is optional and ignored (clients may omit it). The server always derives it from the pushing caller —
   whoever's device performed the toggle — never trusting the payload: `userId` when `checked` is
   `true`, `null` when `checked` is `false` (nobody currently has an unchecked item "checked").
 - **Authorization choke point**: `SyncRepository.getMealPlanForMember(mealPlanId, callerId) != null`,
