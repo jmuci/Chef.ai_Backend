@@ -323,7 +323,12 @@ class FakeSyncRepository : SyncRepository {
         val fromRemoval = if (removal != null && removal.second > sinceMillis) {
             val (removedHouseholdId, serverRemovedAtMillis) = removal
             mealPlans.values
-                .filter { it.plan.householdId == removedHouseholdId.toString() }
+                .filter {
+                    val planId = UUID.fromString(it.plan.uuid)
+                    (it.plan.householdId == removedHouseholdId.toString() ||
+                        planDetachedFromHousehold[planId]?.first == removedHouseholdId) &&
+                        it.plan.ownerId != userId.toString()
+                }
                 .associate { UUID.fromString(it.plan.uuid) to serverRemovedAtMillis }
         } else {
             emptyMap()
@@ -331,7 +336,10 @@ class FakeSyncRepository : SyncRepository {
 
         val myHouseholdId = activeHousehold[userId]
         val fromDetachment = planDetachedFromHousehold
-            .filter { (_, detachment) -> detachment.first == myHouseholdId && detachment.second > sinceMillis }
+            .filter { (planId, detachment) ->
+                detachment.first == myHouseholdId && detachment.second > sinceMillis &&
+                    mealPlans[planId]?.plan?.ownerId != userId.toString()
+            }
             .mapValues { (_, detachment) -> detachment.second }
 
         return fromRemoval + fromDetachment

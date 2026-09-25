@@ -783,9 +783,18 @@ class PostgresSyncRepository : SyncRepository {
                 removedHouseholdId to removedAtMillis
             }
             .flatMap { (removedHouseholdId, removedAtMillis) ->
+                val removedHousehold = EntityID(removedHouseholdId, HouseholdTable)
                 MealPlanTable
                     .selectAll()
-                    .where { MealPlanTable.household_id eq EntityID(removedHouseholdId, HouseholdTable) }
+                    .where {
+                        // former_household_id too: dissolveHousehold detaches every plan in the same
+                        // transaction that removes the members, so a co-member's plan the caller had
+                        // cached no longer matches on household_id. The caller's own plans are never
+                        // tombstoned — they keep owner access to those regardless of households.
+                        ((MealPlanTable.household_id eq removedHousehold) or
+                            (MealPlanTable.former_household_id eq removedHousehold)) and
+                            (MealPlanTable.user_id neq EntityID(userId, UserTable))
+                    }
                     .map { it[MealPlanTable.id].value to removedAtMillis }
             }
 
@@ -795,8 +804,12 @@ class PostgresSyncRepository : SyncRepository {
             MealPlanTable
                 .selectAll()
                 .where {
+                    // Excludes the caller's own plans: after leaving and rejoining the same
+                    // household before pulling, their own detached plans match here but are still
+                    // theirs.
                     (MealPlanTable.former_household_id eq EntityID(activeHouseholdId, HouseholdTable)) and
-                        (MealPlanTable.household_detached_at greater sinceInstant)
+                        (MealPlanTable.household_detached_at greater sinceInstant) and
+                        (MealPlanTable.user_id neq EntityID(userId, UserTable))
                 }
                 .mapNotNull { row ->
                     val detachedAtMillis = row[MealPlanTable.household_detached_at]?.toEpochMilliseconds()

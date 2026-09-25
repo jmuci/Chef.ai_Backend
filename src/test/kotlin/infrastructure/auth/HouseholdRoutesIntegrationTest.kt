@@ -531,6 +531,40 @@ class HouseholdRoutesIntegrationTest {
         assertEquals(HttpStatusCode.Forbidden, response.status)
     }
 
+    @Test
+    fun `accept by invite id refuses an open invite link`() = testSetup {
+        val owner = client.registerAndGetAuth("owner24b@example.com", "owner24b")
+        val household = client.createHousehold(owner, "Household")
+        client.post("/api/v1/households/${household.id}/invites") {
+            bearerAuth(owner.token)
+            contentType(ContentType.Application.Json)
+            setBody(CreateInviteRequest())
+        }
+        val inviteId = client.get("/api/v1/households/${household.id}/invites") { bearerAuth(owner.token) }
+            .body<List<InviteSummaryResponse>>().single().id
+        val outsider = client.registerAndGetAuth("outsider24b@example.com", "outsider24b")
+
+        val response = client.post("/api/v1/households/invites/$inviteId/accept") { bearerAuth(outsider.token) }
+
+        assertEquals(HttpStatusCode.Forbidden, response.status)
+    }
+
+    @Test
+    fun `create invite with a malformed body is a 400, not a silently open invite`() = testSetup {
+        val owner = client.registerAndGetAuth("owner24c@example.com", "owner24c")
+        val household = client.createHousehold(owner, "Household")
+
+        val malformed = client.post("/api/v1/households/${household.id}/invites") {
+            bearerAuth(owner.token)
+            contentType(ContentType.Application.Json)
+            setBody("""{"inviteeEmail":"someone@example.com","maxUses":{}}""")
+        }
+        val bodyless = client.post("/api/v1/households/${household.id}/invites") { bearerAuth(owner.token) }
+
+        assertEquals(HttpStatusCode.BadRequest, malformed.status)
+        assertEquals(HttpStatusCode.Created, bodyless.status)
+    }
+
     // ── POST /households/invites/{inviteId}/decline ───────────────────────────
 
     @Test

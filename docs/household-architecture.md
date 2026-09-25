@@ -78,17 +78,17 @@ every check below happens in `HouseholdService`.
 | `POST /households` | required | `201 HouseholdResponse` | |
 | `GET /households/me` | required | `200 HouseholdResponse` | `404` if the caller has no household |
 | `PATCH /households/{id}` | OWNER | `200 HouseholdResponse` | |
-| `DELETE /households/{id}` | OWNER | `204` | Dissolves immediately, regardless of member count |
+| `DELETE /households/{id}` | OWNER | `204` | Dissolves immediately, regardless of member count. Under the household row lock: removes every member, detaches every plan (`former_household_id` set), revokes outstanding invites |
 | `GET /households/{id}/members` | member | `200 List<MemberResponse>` | ACTIVE members only |
 | `DELETE /households/{id}/members/{userId}` | OWNER | `204` | `400` removing yourself or the owner |
 | `POST /households/{id}/members/me/leave` | member | `204` | |
-| `POST /households/{id}/invites` | OWNER | `201 CreateInviteResponse` | Rate-limited: 20/hour per caller |
+| `POST /households/{id}/invites` | OWNER | `201 CreateInviteResponse` | Rate-limited: 20/hour per caller. Body optional (empty = all defaults); a body that doesn't parse is `400`, never silently treated as `{}` |
 | `GET /households/{id}/invites` | OWNER | `200 List<InviteSummaryResponse>` | Never includes the raw token |
 | `DELETE /households/{id}/invites/{inviteId}` | OWNER | `204` | |
 | `GET /households/invites/preview?token=` | optional | `200 InvitePreviewResponse` | Rate-limited: 30/10s per caller-or-IP |
 | `POST /households/join` | required | `200 HouseholdResponse` | Rate-limited: 10/min per caller |
 | `GET /households/invites/pending` | required | `200 List<InviteSummaryResponse>` | Invites addressed to the caller |
-| `POST /households/invites/{inviteId}/accept` | required | `200 HouseholdResponse` | In-app accept, no token needed |
+| `POST /households/invites/{inviteId}/accept` | required | `200 HouseholdResponse` | In-app accept, no token needed — **only for invites addressed to the caller** (`403` otherwise). Open link invites must go through `/join` with the token: an invite id is not a secret (it's logged and listed to the owner) |
 | `POST /households/invites/{inviteId}/decline` | required | `204` | Shares `revoked_at` with owner-revoke |
 
 ## One-household-per-user enforcement
