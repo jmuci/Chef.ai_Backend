@@ -10,6 +10,21 @@ import com.tenmilelabs.application.dto.SyncUser
 import kotlinx.datetime.Instant
 import java.util.UUID
 
+/** Result of [SyncRepository.upsertRecipeAggregate]'s write-time re-validation. */
+sealed interface RecipeUpsertOutcome {
+    data object Applied : RecipeUpsertOutcome
+
+    /**
+     * The live row is newer than the payload — either it changed after the caller's own
+     * (separately transacted) pre-check, or a concurrent push inserted the same brand-new uuid
+     * first. Nothing was written.
+     */
+    data object ServerNewer : RecipeUpsertOutcome
+
+    /** A step uuid in the payload already belongs to a different recipe. Nothing was written. */
+    data object StepIdTaken : RecipeUpsertOutcome
+}
+
 data class SyncRecipeRecord(
     val recipe: SyncRecipe,
     val serverUpdatedAtMillis: Long
@@ -48,8 +63,12 @@ interface SyncRepository {
      * is atomically consistent with the client payload.
      *
      * [serverUpdatedAt] is stamped onto every row to serve as the sync cursor.
+     *
+     * Locks the existing row and re-runs the staleness check against it before writing, the same
+     * way [upsertMealPlan] does, so two concurrent pushes of one recipe can't both be accepted with
+     * the later silently overwriting the earlier.
      */
-    suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant)
+    suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant): RecipeUpsertOutcome
 
     /**
      * Returns recipe aggregates whose [server_updated_at] is after [sinceMillis],
@@ -121,19 +140,15 @@ interface SyncRepository {
     ): SyncReferenceData
 
     /**
-     * Collects user rows required for recipes in the current page.
+     * Collects the user rows for exactly [creatorIds] — the creators/owners the current response
+     * references — and nothing else.
      *
-     * When [sinceMillis] is non-null, applies the same delta+gap union semantics
-     * used by pull reference data:
-     *  - users updated after sinceMillis (delta)
-     *  - users referenced by [creatorIds] (gap)
-     *
-     * When [sinceMillis] is null, returns only [creatorIds].
+     * Deliberately gap-only, unlike [collectReferenceData]'s delta+gap union. Reference entities
+     * (tags, ingredients, ...) are a shared catalog, so sending every changed one is harmless; users
+     * are not. A delta clause here (`updated_at > since`) sent every account in the table — email
+     * included — to any caller pulling with `since=0`.
      */
-    suspend fun collectCreators(
-        creatorIds: Set<UUID>,
-        sinceMillis: Long?
-    ): List<SyncUser>
+    suspend fun collectCreators(creatorIds: Set<UUID>): List<SyncUser>
 
     /**
      * Resolves [ids] against the tag catalogue and returns only those UUIDs

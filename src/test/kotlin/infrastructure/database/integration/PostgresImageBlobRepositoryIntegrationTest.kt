@@ -105,9 +105,14 @@ class PostgresImageBlobRepositoryIntegrationTest {
         // Sanity: freshly pointed-at blob is referenced.
         assertNull(imageBlobRepository.findBlob(ownerId, hash)?.unreferencedSince)
 
-        // Soft-delete the recipe through the same path /sync/push uses.
+        // Soft-delete the recipe through the same path /sync/push uses. updatedAt must be at least
+        // the row's server timestamp, as a real client's would be, or the repository's write-time
+        // staleness check (mirroring SyncService's) rejects the push as ServerNewer.
         val deleteInstant = Clock.System.now()
-        syncRepository.upsertRecipeAggregate(recipe.copy(deletedAt = deleteInstant.toEpochMilliseconds()), deleteInstant)
+        syncRepository.upsertRecipeAggregate(
+            recipe.copy(updatedAt = deleteInstant.toEpochMilliseconds(), deletedAt = deleteInstant.toEpochMilliseconds()),
+            deleteInstant
+        )
 
         val blob = imageBlobRepository.findBlob(ownerId, hash)
         assertNotNull(blob)

@@ -62,6 +62,29 @@ class SyncRoutesIntegrationTest {
     }
 
     @Test
+    fun pullRejectsANegativeSinceWith400() = testApplication {
+        application {
+            module(
+                configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = FakeSyncRepository()
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+
+        val response = client.get("/sync/pull?since=-1") {
+            bearerAuth(auth.token)
+            accept(ContentType.Application.Json)
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    @Test
     fun pushRouteAcceptsValidRecipeAggregate() = testApplication {
         val syncRepository = FakeSyncRepository()
         val ingredientId = syncRepository.seedIngredient()

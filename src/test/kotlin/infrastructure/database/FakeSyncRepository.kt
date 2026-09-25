@@ -11,6 +11,7 @@ import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncTag
 import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.RecipeRankingMetadata
+import com.tenmilelabs.domain.repository.RecipeUpsertOutcome
 import com.tenmilelabs.domain.repository.SyncGroceryItemRecord
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
@@ -27,7 +28,6 @@ class FakeSyncRepository : SyncRepository {
     private val labels = mutableMapOf<UUID, SyncLabel>()
     private val labelServerTs = mutableMapOf<UUID, Long>()
     private val users = mutableMapOf<UUID, SyncUser>()
-    private val userServerTs = mutableMapOf<UUID, Long>()
     // key: (userId, recipeId), value: bookmark with server-stamped updatedAt
     private val bookmarks = mutableMapOf<Pair<UUID, UUID>, SyncBookmark>()
     private val bookmarkServerTs = mutableMapOf<Pair<UUID, UUID>, Long>()
@@ -115,7 +115,6 @@ class FakeSyncRepository : SyncRepository {
             updatedAt = serverUpdatedAt,
             deletedAt = null
         )
-        userServerTs[uuid] = serverUpdatedAt
         return uuid
     }
 
@@ -175,10 +174,21 @@ class FakeSyncRepository : SyncRepository {
 
     override suspend fun getRecipes(uuids: Set<UUID>): List<SyncRecipeRecord> = uuids.mapNotNull { recipes[it] }
 
-    override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) {
+    override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant): RecipeUpsertOutcome {
+        val existingRecord = recipes[UUID.fromString(recipe.uuid)]
+        // Mirrors PostgresSyncRepository's write-time re-validation.
+        if (existingRecord != null && existingRecord.serverUpdatedAtMillis > recipe.updatedAt) {
+            return RecipeUpsertOutcome.ServerNewer
+        }
+        val incomingStepIds = recipe.steps.map { it.uuid }.toSet()
+        val stepIdTaken = recipes.values.any { other ->
+            other.recipe.uuid != recipe.uuid && other.recipe.steps.any { it.uuid in incomingStepIds }
+        }
+        if (stepIdTaken) return RecipeUpsertOutcome.StepIdTaken
+
         // Mirrors PostgresSyncRepository: imageBlobId is set exclusively by the image-upload
         // endpoints, never by a push payload — preserve whatever the server already had.
-        val existing = recipes[UUID.fromString(recipe.uuid)]?.recipe
+        val existing = existingRecord?.recipe
         recipes[UUID.fromString(recipe.uuid)] = SyncRecipeRecord(
             recipe = recipe.copy(
                 imageBlobId = existing?.imageBlobId,
@@ -189,6 +199,7 @@ class FakeSyncRepository : SyncRepository {
             ),
             serverUpdatedAtMillis = serverUpdatedAt.toEpochMilliseconds()
         )
+        return RecipeUpsertOutcome.Applied
     }
 
     override suspend fun findDeltaRecipes(userId: UUID, sinceMillis: Long, limit: Int): List<SyncRecipeRecord> =
@@ -226,14 +237,8 @@ class FakeSyncRepository : SyncRepository {
 
     override suspend fun existingLabelIds(ids: Set<UUID>): Set<UUID> = ids.intersect(labels.keys)
 
-    override suspend fun collectCreators(creatorIds: Set<UUID>, sinceMillis: Long?): List<SyncUser> {
-        fun <V> Map<UUID, V>.unionFilter(ids: Set<UUID>, serverTs: Map<UUID, Long>): List<V> =
-            filter { (uuid, _) ->
-                (sinceMillis != null && (serverTs[uuid] ?: 0L) > sinceMillis) || uuid in ids
-            }.values.toList()
-
-        return users.unionFilter(creatorIds, userServerTs)
-    }
+    override suspend fun collectCreators(creatorIds: Set<UUID>): List<SyncUser> =
+        users.filterKeys { it in creatorIds }.values.toList()
 
     override suspend fun isRecipeAccessibleBy(userId: UUID, recipeId: UUID): Boolean {
         if (recipeId in inaccessibleRecipes) return false

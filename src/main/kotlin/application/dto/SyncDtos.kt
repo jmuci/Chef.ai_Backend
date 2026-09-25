@@ -102,13 +102,16 @@ enum class SyncErrors(val message: String) {
     INVALID_PRIVACY("privacy must be PUBLIC or PRIVATE"),
     INVALID_INGREDIENT("ingredientId is invalid"),
     INGREDIENT_NOT_FOUND("ingredientId does not exist"),
+    DUPLICATE_INGREDIENT("ingredientId appears more than once in the recipe"),
+    INVALID_STEP("step uuid is invalid, repeated, or already used by another recipe"),
     INVALID_TAG("tagId is invalid"),
     INVALID_LABEL("labelId is invalid"),
     INVALID_OWNER("ownerId is invalid"),
     OWNER_MISMATCH("ownerId does not match authenticated user for a new meal plan"),
     MEAL_PLAN_NOT_ACCESSIBLE("meal plan does not exist or caller cannot edit it"),
     INVALID_HOUSEHOLD("householdId does not correspond to caller's active household"),
-    MEAL_PLAN_RECIPE_NOT_ACCESSIBLE("a referenced recipe does not exist or is not accessible to the caller")
+    MEAL_PLAN_RECIPE_NOT_ACCESSIBLE("a referenced recipe does not exist or is not accessible to the caller"),
+    INVALID_MEAL_PLAN_DAY("a day uuid or recipe id is not a valid UUID, or a day uuid is repeated")
 }
 
 @Serializable

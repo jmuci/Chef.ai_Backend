@@ -1193,6 +1193,112 @@ class SyncServiceTest {
         assertTrue(response.hasMore, "clamped page must still advertise more")
     }
 
+    // ── Audit regressions ────────────────────────────────────────────────────
+
+    /** `creators` used to union in every user updated after `since` — every account's email on `since=0`. */
+    @Test
+    fun pullCreatorsAreLimitedToReferencedUsers() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val unrelatedUser = repo.seedUser(serverUpdatedAt = 5000L)
+        repo.seedRecipe(sampleRecipe(UUID.randomUUID(), userId, 1000L, repo.seedIngredient()), 1100L)
+
+        val response = service.pullRecipes(userId = userId, sinceMillis = 0L, limit = 10)
+
+        assertEquals(setOf(userId.toString()), response.creators.map { it.uuid }.toSet())
+        assertFalse(response.creators.any { it.uuid == unrelatedUser.toString() })
+    }
+
+    @Test
+    fun pushRejectsMalformedOrRepeatedStepIdsPerRecipeWithoutFailingTheBatch() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val badStepId = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+            .copy(steps = listOf(SyncRecipeStep("not-a-uuid", 0, "Step")))
+        val repeatedStepId = UUID.randomUUID().toString()
+        val repeatedSteps = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+            .copy(steps = listOf(SyncRecipeStep(repeatedStepId, 0, "A"), SyncRecipeStep(repeatedStepId, 1, "B")))
+        val good = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(badStepId, repeatedSteps, good)))
+
+        assertEquals(listOf(good.uuid), response.accepted.map { it.uuid })
+        assertEquals(
+            mapOf(badStepId.uuid to SyncErrors.INVALID_STEP, repeatedSteps.uuid to SyncErrors.INVALID_STEP),
+            response.errors.associate { it.uuid to it.reason }
+        )
+    }
+
+    @Test
+    fun pushRejectsAStepIdAlreadyOwnedByAnotherRecipe() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val existing = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId)
+        repo.seedRecipe(existing, 1100L)
+        val thief = sampleRecipe(UUID.randomUUID(), userId, 2000L, ingredientId).copy(steps = existing.steps)
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(thief)))
+
+        assertEquals(0, response.accepted.size)
+        assertEquals(SyncErrors.INVALID_STEP, response.errors.single().reason)
+    }
+
+    @Test
+    fun pushRejectsARepeatedIngredientId() = withService { service, repo ->
+        val userId = UUID.randomUUID()
+        val ingredientId = repo.seedIngredient()
+        val recipe = sampleRecipe(UUID.randomUUID(), userId, 1000L, ingredientId).copy(
+            ingredients = listOf(
+                SyncRecipeIngredient(ingredientId.toString(), 1.0, "g"),
+                SyncRecipeIngredient(ingredientId.toString(), 2.0, "g")
+            )
+        )
+
+        val response = service.pushRecipes(userId, SyncPushRequest(listOf(recipe)))
+
+        assertEquals(0, response.accepted.size)
+        assertEquals(SyncErrors.DUPLICATE_INGREDIENT, response.errors.single().reason)
+    }
+
+    @Test
+    fun pushRejectsAMealPlanWithAMalformedDayIdWithoutFailingTheBatch() = withService { service, _ ->
+        val userId = UUID.randomUUID()
+        val badPlan = buildMealPlan(UUID.randomUUID(), updatedAt = 1000L, ownerId = userId).copy(
+            days = listOf(SyncMealPlanDayDto(uuid = "nope", dayIndex = 0, dinnerRecipeId = null, lunchRecipeId = null))
+        )
+        val goodPlan = buildMealPlan(UUID.randomUUID(), updatedAt = 1000L, ownerId = userId)
+
+        val response = service.pushRecipes(userId, SyncPushRequest(recipes = emptyList(), mealPlans = listOf(badPlan, goodPlan)))
+
+        assertEquals(listOf(goodPlan.uuid), response.mealPlans.accepted.map { it.uuid })
+        assertEquals(SyncErrors.INVALID_MEAL_PLAN_DAY, response.mealPlans.errors.single().reason)
+    }
+
+    @Test
+    fun getRecipeDetailsAppliesHouseholdVisibilityInBatch() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val callerId = UUID.randomUUID()
+        val coMemberId = UUID.randomUUID()
+        repo.seedActiveHousehold(callerId, householdId)
+        val ingredientId = repo.seedIngredient()
+        val shared = sampleRecipe(UUID.randomUUID(), coMemberId, 1000L, ingredientId)
+        val hidden = sampleRecipe(UUID.randomUUID(), coMemberId, 1000L, ingredientId)
+        repo.seedRecipe(shared, 1000L)
+        repo.seedRecipe(hidden, 1000L)
+        repo.seedUser(coMemberId)
+        repo.seedMealPlan(
+            buildMealPlan(UUID.randomUUID(), updatedAt = 1000L, ownerId = coMemberId).copy(
+                householdId = householdId.toString(),
+                days = listOf(SyncMealPlanDayDto(UUID.randomUUID().toString(), 0, dinnerRecipeId = shared.uuid, lunchRecipeId = null))
+            ),
+            serverUpdatedAtMillis = 1000L
+        )
+
+        val bundle = service.getRecipeDetails(callerId, setOf(UUID.fromString(shared.uuid), UUID.fromString(hidden.uuid)))
+
+        assertEquals(listOf(shared.uuid), bundle.recipes.map { it.uuid })
+        assertEquals(listOf(coMemberId.toString()), bundle.creators.map { it.uuid })
+    }
+
     private fun sampleRecipe(
         uuid: UUID,
         creatorId: UUID,

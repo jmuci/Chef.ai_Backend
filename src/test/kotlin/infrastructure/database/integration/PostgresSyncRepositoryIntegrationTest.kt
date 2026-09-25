@@ -5,6 +5,7 @@ import com.tenmilelabs.application.dto.SyncRecipe
 import com.tenmilelabs.application.dto.SyncRecipeIngredient
 import com.tenmilelabs.application.dto.SyncRecipeStep
 import com.tenmilelabs.domain.model.HouseholdRole
+import com.tenmilelabs.domain.repository.RecipeUpsertOutcome
 import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Test
 import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @Tag("db-integration")
@@ -53,6 +55,72 @@ class PostgresSyncRepositoryIntegrationTest {
         }
 
         initDatabaseAndSchema()
+    }
+
+    // ── Audit regressions ────────────────────────────────────────────────────
+
+    private fun insertUser(): UUID {
+        val id = UUID.randomUUID()
+        transaction {
+            UserTable.insert {
+                it[UserTable.id] = EntityID(id, UserTable)
+                it[user_name] = "u"
+                it[email] = "u-$id@example.com"
+                it[display_name] = "U"
+                it[avatar_url] = ""
+                it[password_hash] = "hash"
+            }
+        }
+        return id
+    }
+
+    private fun recipeWithStep(creatorId: UUID, updatedAt: Long, stepId: UUID = UUID.randomUUID(), recipeId: UUID = UUID.randomUUID()) =
+        SyncRecipe(
+            uuid = recipeId.toString(),
+            title = "t",
+            description = "d",
+            imageUrl = "",
+            imageUrlThumbnail = "",
+            prepTimeMinutes = 1,
+            cookTimeMinutes = 1,
+            servings = 1,
+            creatorId = creatorId.toString(),
+            recipeExternalUrl = null,
+            privacy = "PRIVATE",
+            updatedAt = updatedAt,
+            deletedAt = null,
+            steps = listOf(SyncRecipeStep(stepId.toString(), 0, "step")),
+            ingredients = emptyList(),
+            tagIds = emptyList(),
+            labelIds = emptyList()
+        )
+
+    @Test
+    fun upsertRevalidatesStalenessAndStepOwnershipAtWriteTime() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val ownerId = insertUser()
+        val original = recipeWithStep(ownerId, updatedAt = 1_000L)
+        assertEquals(RecipeUpsertOutcome.Applied, repo.upsertRecipeAggregate(original, Instant.fromEpochMilliseconds(5_000L)))
+
+        // A payload older than the live row loses, and nothing is written.
+        val stale = original.copy(title = "stale", updatedAt = 4_000L)
+        assertEquals(RecipeUpsertOutcome.ServerNewer, repo.upsertRecipeAggregate(stale, Instant.fromEpochMilliseconds(6_000L)))
+        assertEquals("t", repo.getRecipe(UUID.fromString(original.uuid))?.recipe?.title)
+
+        // A step id already owned by another recipe is reported, not left to fail the push request.
+        val thief = recipeWithStep(ownerId, updatedAt = 7_000L, stepId = UUID.fromString(original.steps.single().uuid))
+        assertEquals(RecipeUpsertOutcome.StepIdTaken, repo.upsertRecipeAggregate(thief, Instant.fromEpochMilliseconds(7_000L)))
+        assertNull(repo.getRecipe(UUID.fromString(thief.uuid)))
+    }
+
+    @Test
+    fun collectCreatorsReturnsOnlyTheRequestedUsers() = runBlocking {
+        val repo = PostgresSyncRepository()
+        val creator = insertUser()
+        insertUser() // unrelated account that must never be sent to the caller
+
+        assertEquals(listOf(creator.toString()), repo.collectCreators(setOf(creator)).map { it.uuid })
+        assertTrue(repo.collectCreators(emptySet()).isEmpty())
     }
 
     /**
