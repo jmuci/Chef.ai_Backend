@@ -5,6 +5,7 @@ import com.tenmilelabs.domain.model.Privacy
 import com.tenmilelabs.domain.model.Recipe
 import com.tenmilelabs.domain.repository.RecipesRepository
 import com.tenmilelabs.infrastructure.database.FakeUserRepository.Companion.TEST_USER_ID
+import kotlinx.datetime.Instant
 import java.util.*
 
 class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository {
@@ -133,8 +134,10 @@ class FakeRecipesRepository(testUserId: UUID = TEST_USER_ID) : RecipesRepository
 
         val candidates = recipes
             .asSequence()
-            .filter { it.deletedAt != null && it.deletedAt <= olderThanMillis }
-            .sortedBy { it.deletedAt }
+            // Mirrors DefaultRecipeRepository: retention runs off the server-stamped timestamp,
+            // never the client-supplied deletedAt.
+            .filter { it.deletedAt != null && Instant.parse(it.serverUpdatedAt).toEpochMilliseconds() <= olderThanMillis }
+            .sortedBy { it.serverUpdatedAt }
             .take(limit)
             .map { it.uuid }
             .toSet()

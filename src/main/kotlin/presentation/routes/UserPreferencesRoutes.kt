@@ -31,7 +31,18 @@ fun Route.userPreferencesRoutes(
                 return@get
             }
 
-            val prefs = mealPlanGenerationService.parsePreferences(storedJson)
+            // parsePreferences tolerates wrong-typed fields, but a stored blob that isn't a JSON
+            // object at all (it's saved verbatim from pushes) still throws. Answer as "nothing
+            // usable stored" rather than 500 on every read until the next push overwrites it.
+            val prefs = try {
+                mealPlanGenerationService.parsePreferences(storedJson)
+            } catch (ex: IllegalArgumentException) {
+                // SerializationException (invalid JSON) is an IllegalArgumentException subtype, as
+                // is the one `.jsonObject` throws for a non-object.
+                call.application.environment.log.warn("Stored preferences for user $userId are unparseable", ex)
+                call.respond(HttpStatusCode.NoContent)
+                return@get
+            }
             call.respond(HttpStatusCode.OK, prefs.toResponse())
         }
     }

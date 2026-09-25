@@ -49,6 +49,13 @@ class RecipesService(private val recipesRepository: RecipesRepository, private v
         creatorId == userId.toString() || privacy == Privacy.PUBLIC
 
     suspend fun createRecipe(request: CreateRecipeRequest, userId: UUID): RecipeResponse? {
+        // Stored verbatim and read back with enumValueOf, so an unknown value would be accepted
+        // here and then fail every later read of the caller's recipes. /sync/push applies the same
+        // rule (SyncErrors.INVALID_PRIVACY).
+        if (Privacy.entries.none { it.name == request.privacy }) {
+            log.warn("400: Rejected recipe with invalid privacy '${request.privacy}' for user $userId")
+            return null
+        }
         try {
             return RecipeResponse(recipesRepository.addRecipe(request, userId))
         } catch (ex: IllegalArgumentException) {

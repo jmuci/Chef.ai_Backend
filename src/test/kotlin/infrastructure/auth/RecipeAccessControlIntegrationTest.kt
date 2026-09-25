@@ -104,6 +104,37 @@ class RecipeAccessControlIntegrationTest {
         assertEquals(HttpStatusCode.BadRequest, response.status)
     }
 
+    @Test
+    fun `delete rejects a malformed uuid with 400 rather than 500`() = withApp { client ->
+        val auth = client.registerAndGetAuth()
+
+        val response = client.delete("/recipes?uuid=not-a-uuid") { bearerAuth(auth.token) }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    /** An unknown privacy value used to be stored and then fail every later read of the caller's recipes. */
+    @Test
+    fun `create rejects an unknown privacy value`() = withApp { client ->
+        val auth = client.registerAndGetAuth()
+
+        val response = client.post("/recipes") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"title":"x","description":"d","imageUrl":"","imageUrlThumbnail":"",""" +
+                    """"prepTimeMinutes":1,"cookTimeMinutes":1,"servings":1,""" +
+                    """"recipeExternalUrl":null,"privacy":"bogus"}"""
+            )
+        }
+
+        assertEquals(HttpStatusCode.BadRequest, response.status)
+        assertEquals(
+            HttpStatusCode.OK,
+            client.get("/recipes") { bearerAuth(auth.token); accept(ContentType.Application.Json) }.status
+        )
+    }
+
     // ── F7: tokens carrying no usable userId claim ──────────────────────────────
 
     @Test

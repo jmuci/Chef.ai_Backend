@@ -53,7 +53,7 @@ no principal to read in the first place, since the route sits outside any `authe
 Top-level response:
 
 - `schemaVersion` (`String`)
-- `layoutChecksum` (`String`, MD5 of canonical `components` JSON)
+- `layoutChecksum` (`String`, MD5 over `schemaVersion` + canonical `components` JSON + canonical `sidecar` JSON)
 - `components` (`List<HomeComponent>`)
 - `sidecar` (`HomeSidecar?`) — see below
 
@@ -102,8 +102,12 @@ The custom `HomeComponent` serializer maps unrecognized `type` values to an `Unk
 
 `layoutChecksum` is computed as:
 
-1. Serialize the sanitized `components` list to compact canonical JSON.
-2. Compute MD5 of that JSON string.
+1. Serialize the sanitized `components` list and the `sidecar` to compact canonical JSON.
+2. Compute MD5 of `"$schemaVersion\n$componentsJson\n$sidecarJson"`.
+
+The sidecar is covered deliberately: clients revalidate with `If-None-Match: <layoutChecksum>`, so a
+components-only checksum kept answering `304` after a deploy that only changed sidecar content (recipe
+text, image URLs).
 3. Return the hex digest in both:
    - response body (`layoutChecksum`)
    - response header (`ETag` with quotes)
