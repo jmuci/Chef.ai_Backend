@@ -211,6 +211,61 @@ class MealPlanGenerationServiceTest {
         assertTrue(days.all { it.lunchRecipeId != null })
     }
 
+    // Regression: lunch and dinner ranked the same shuffled list with identical histories, so every
+    // variety level picked the same recipe for both slots of every day.
+    @Test
+    fun `DINNER_AND_LUNCH never repeats the same day's dinner as lunch at any variety`() {
+        val service = makeService(FakeSyncRepository())
+        val candidates = (1..20).map { UUID.randomUUID() }
+
+        VarietyPreference.entries.forEach { variety ->
+            val prefs = defaultPrefs(planLengthDays = 7, mealType = MealType.DINNER_AND_LUNCH, variety = variety)
+
+            val days = service.assignRecipesToDays(candidates, prefs)
+
+            days.forEach { day ->
+                assertNotNull(day.lunchRecipeId)
+                assertTrue(day.lunchRecipeId != day.dinnerRecipeId, "$variety day ${day.dayIndex}: lunch == dinner")
+            }
+        }
+    }
+
+    @Test
+    fun `HIGH DINNER_AND_LUNCH uses a distinct recipe for every slot when enough candidates exist`() {
+        val service = makeService(FakeSyncRepository())
+        val candidates = (1..14).map { UUID.randomUUID() }
+        val prefs = defaultPrefs(planLengthDays = 7, mealType = MealType.DINNER_AND_LUNCH, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(candidates, prefs)
+
+        val picks = days.flatMap { listOf(it.dinnerRecipeId, it.lunchRecipeId) }
+        assertEquals(14, picks.filterNotNull().distinct().size)
+    }
+
+    // Regression: MEDIUM reused the day-0 pick on day 4 (the first candidate outside the 3-day
+    // window) even when plenty of never-used candidates remained.
+    @Test
+    fun `MEDIUM prefers unused candidates over recycling once the 3-day gap has passed`() {
+        val service = makeService(FakeSyncRepository())
+        val candidates = (1..10).map { UUID.randomUUID() }
+        val prefs = defaultPrefs(planLengthDays = 7, variety = VarietyPreference.MEDIUM)
+
+        val days = service.assignRecipesToDays(candidates, prefs)
+
+        assertEquals(7, days.mapNotNull { it.dinnerRecipeId }.distinct().size)
+    }
+
+    @Test
+    fun `DINNER_AND_LUNCH with a single candidate still fills both slots`() {
+        val service = makeService(FakeSyncRepository())
+        val only = UUID.randomUUID()
+        val prefs = defaultPrefs(planLengthDays = 3, mealType = MealType.DINNER_AND_LUNCH, variety = VarietyPreference.HIGH)
+
+        val days = service.assignRecipesToDays(listOf(only), prefs)
+
+        assertTrue(days.all { it.dinnerRecipeId == only.toString() && it.lunchRecipeId == only.toString() })
+    }
+
     @Test
     fun `DINNER meal type leaves lunch slots null`() {
         val service = makeService(FakeSyncRepository())
