@@ -63,11 +63,13 @@ algorithm — no LLM involved yet (see Phase 5).
   `findCandidateRecipeIds`: resolves `recipeSource`
   (`COLLECTION_ONLY` / else own-or-public), intersects with dietary
   restriction tags, applies `maxPrepTimeMinutes`.
-- Day assignment: `HIGH` variety never repeats a recipe until every candidate
-  has been used once, then round-robins (see Phase 2 — this used to
-  partial-fill instead); `MEDIUM` allows a repeat after a 3-day gap; `LOW`
-  round-robins freely. `batchCooking` reuses the previous day's recipe on
-  odd-indexed days.
+- Day assignment: `HIGH` variety never repeats a recipe anywhere in the plan
+  (lunch or dinner) until every candidate has been used once, then
+  round-robins (see Phase 2 — this used to partial-fill instead); `MEDIUM`
+  prefers not-yet-used recipes, then allows a repeat after a 3-day gap; `LOW`
+  round-robins freely. Lunch never repeats the same day's dinner unless there
+  is only one candidate (it used to always match it). `batchCooking` reuses
+  the previous day's recipe on odd-indexed days.
 - Delivered to the client via the existing sync pull, not a dedicated
   fetch endpoint — status transitions are picked up on next pull.
 

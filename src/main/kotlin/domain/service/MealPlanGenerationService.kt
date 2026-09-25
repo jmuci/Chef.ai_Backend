@@ -121,11 +121,16 @@ class MealPlanGenerationService(
      * Assigns candidate recipe UUIDs to plan days according to [prefs].
      *
      * Variety rules:
-     * - HIGH: no recipe repeats until every candidate has been used once, then round-robins.
-     *   A plan is only ever partially filled when [candidateIds] itself is empty — never merely
-     *   for lack of variety headroom.
-     * - MEDIUM: a recipe may reappear only after a 3-day gap; cycles when all are blocked.
+     * - HIGH: no recipe repeats anywhere in the plan (lunch or dinner) until every candidate has
+     *   been used once, then round-robins. A plan is only ever partially filled when
+     *   [candidateIds] itself is empty — never merely for lack of variety headroom.
+     * - MEDIUM: prefers a recipe not yet used anywhere in the plan; once those run out, a recipe
+     *   may reappear in a slot only after a 3-day gap; cycles when all are blocked.
      * - LOW: free repetition — cycles round-robin through the candidate list.
+     *
+     * Lunch never repeats the same day's dinner unless there is only one candidate. Lunch and
+     * dinner rank the same shuffled list, so without that exclusion every rule above picks the
+     * identical recipe for both slots.
      *
      * Batch-cooking: when [prefs.batchCooking] is true, odd-indexed days reuse the previous
      * day's assignment (pairs intentionally share a recipe for batch-prep efficiency).
@@ -156,6 +161,8 @@ class MealPlanGenerationService(
         val lunchHistory = ArrayDeque<UUID>()
         var previousDinnerCategory: String? = null
         var previousLunchCategory: String? = null
+        // Every recipe assigned so far, either slot — HIGH/MEDIUM prefer recipes not in it.
+        val usedInPlan = mutableSetOf<UUID>()
 
         for (dayIndex in 0 until prefs.planLengthDays) {
             val dinnerRecipeId: UUID?
@@ -167,17 +174,19 @@ class MealPlanGenerationService(
                 lunchRecipeId = days.last().lunchRecipeId?.let { UUID.fromString(it) }
             } else {
                 val dinnerRanked = rankForDay(shuffled, prefs.varietyPreference, recentlyUsedElsewhere, previousDinnerCategory, rankingMetadata)
-                dinnerRecipeId = pickFrom(dinnerRanked, dinnerHistory, prefs.varietyPreference)
+                dinnerRecipeId = pickFrom(dinnerRanked, dinnerHistory, usedInPlan, exclude = emptySet(), prefs.varietyPreference)
                 dinnerRecipeId?.let {
                     dinnerHistory.addLast(it)
+                    usedInPlan += it
                     previousDinnerCategory = rankingMetadata[it]?.dominantCategory
                 }
 
                 lunchRecipeId = if (prefs.mealType == MealType.DINNER_AND_LUNCH) {
                     val lunchRanked = rankForDay(shuffled, prefs.varietyPreference, recentlyUsedElsewhere, previousLunchCategory, rankingMetadata)
-                    pickFrom(lunchRanked, lunchHistory, prefs.varietyPreference).also {
+                    pickFrom(lunchRanked, lunchHistory, usedInPlan, exclude = setOfNotNull(dinnerRecipeId), prefs.varietyPreference).also {
                         it?.let { id ->
                             lunchHistory.addLast(id)
+                            usedInPlan += id
                             previousLunchCategory = rankingMetadata[id]?.dominantCategory
                         }
                     }
@@ -242,34 +251,46 @@ class MealPlanGenerationService(
     }
 
     /**
-     * Picks the next recipe from [candidates] without consuming the list, using [history]
-     * to track previously assigned recipes.
+     * Picks the next recipe from [candidates] without consuming the list. [history] is this
+     * slot's (dinner or lunch) past picks; [usedInPlan] is every pick so far across both slots.
+     * [exclude] is skipped whenever any other candidate exists (lunch passes the same day's
+     * dinner), including in the round-robin fallbacks.
      *
-     * - HIGH: must not appear anywhere in history; once all candidates are used, falls back to
+     * - HIGH: must not appear in [usedInPlan]; once all candidates are used, falls back to
      *   round-robin via `history.size % candidates.size` — always succeeds when candidates is non-empty.
-     * - MEDIUM: must not appear in the last 3 history entries; cycles when all are blocked.
+     * - MEDIUM: prefers a candidate not in [usedInPlan]; otherwise one not in the slot's last 3
+     *   history entries; cycles when all are blocked.
      * - LOW: round-robin via `history.size % candidates.size` — always succeeds.
      */
     private fun pickFrom(
         candidates: List<UUID>,
         history: ArrayDeque<UUID>,
+        usedInPlan: Set<UUID>,
+        exclude: Set<UUID>,
         variety: VarietyPreference
     ): UUID? {
         if (candidates.isEmpty()) return null
+        val roundRobin = roundRobin(candidates, history.size, exclude)
         return when (variety) {
-            VarietyPreference.LOW ->
-                candidates[history.size % candidates.size]
+            VarietyPreference.LOW -> roundRobin
             VarietyPreference.MEDIUM -> {
                 val recent = history.takeLast(3).toSet()
-                candidates.firstOrNull { it !in recent }
-                    ?: candidates[history.size % candidates.size]
+                candidates.firstOrNull { it !in usedInPlan && it !in exclude }
+                    ?: candidates.firstOrNull { it !in recent && it !in exclude }
+                    ?: roundRobin
             }
-            VarietyPreference.HIGH -> {
-                val used = history.toSet()
-                candidates.firstOrNull { it !in used }
-                    ?: candidates[history.size % candidates.size]
-            }
+            VarietyPreference.HIGH ->
+                candidates.firstOrNull { it !in usedInPlan && it !in exclude } ?: roundRobin
         }
+    }
+
+    /** `candidates[index % size]`, stepping forward past [exclude] when another candidate exists. */
+    private fun roundRobin(candidates: List<UUID>, index: Int, exclude: Set<UUID>): UUID {
+        val start = index % candidates.size
+        return candidates.indices
+            .map { candidates[(start + it) % candidates.size] }
+            .firstOrNull { it !in exclude }
+            ?: candidates[start]
     }
 
     private fun buildEmptyDays(count: Int): List<SyncMealPlanDayDto> =
