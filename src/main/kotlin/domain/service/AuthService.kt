@@ -141,13 +141,21 @@ class AuthService(
                 throw UserNotFoundException("User not found")
             }
 
-        // Generate new tokens BEFORE revoking old one
-        // This ensures we have the new token ready before invalidating the old one
+        // Claim the presented token atomically BEFORE issuing anything. The isRevoked check above
+        // read it in a separate transaction, so two concurrent refreshes with the same token (an
+        // attacker racing the victim) could both pass it; revokeToken only succeeds for the one
+        // call that actually flips the flag, and the loser is treated exactly like reuse. The cost
+        // of claiming first: if storing the new token fails below, the client has to sign in again.
+        if (!refreshTokenRepository.revokeToken(storedToken.id)) {
+            log.warn("Concurrent reuse of refresh token detected for user: ${storedToken.userId}")
+            refreshTokenRepository.revokeAllUserTokens(storedToken.userId)
+            throw TokenReuseDetectedException("Token reuse detected. All sessions have been terminated for security.")
+        }
+
         val newAccessToken = jwtService.generateToken(user.uuid.toString(), user.email)
         val newRefreshTokenString = jwtService.generateRefreshToken()
         val newRefreshTokenHash = hashRefreshToken(newRefreshTokenString)
 
-        // Store new refresh token FIRST
         val duration = jwtService.getRefreshTokenExpirationMs().toDuration(DurationUnit.MILLISECONDS)
         val refreshExpiresAt = now.plus(duration)
         refreshTokenRepository.createRefreshToken(
@@ -155,14 +163,6 @@ class AuthService(
             tokenHash = newRefreshTokenHash,
             expiresAt = refreshExpiresAt
         ) ?: throw AuthInternalException("Failed to store new refresh token for user: ${user.uuid}")
-
-        // Token rotation: Revoke the old token AFTER new one is safely stored
-        // If revocation fails, the new token is already valid, so return success anyway
-        val revoked = refreshTokenRepository.revokeToken(storedToken.id)
-        if (!revoked) {
-            log.warn("Failed to revoke old refresh token, but new token was created successfully")
-            // Continue - new token works, old token will be cleaned up eventually
-        }
 
         log.info("Successfully refreshed tokens for user: ${user.uuid}")
 
