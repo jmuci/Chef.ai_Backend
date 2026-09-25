@@ -3,6 +3,14 @@
   "layoutChecksum": "sdui-v1-bundled",
   "components": [
     {
+      "type": "week_plan_days",
+      "id": "this-week"
+    },
+    {
+      "type": "grocery_teaser",
+      "id": "grocery-teaser"
+    },
+    {
       "type": "section_header",
       "id": "header-for-you",
       "title": "For You",

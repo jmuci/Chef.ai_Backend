@@ -126,6 +126,20 @@ data class ListCardComponent(
 ) : HomeComponent
 
 @Serializable
+data class WeekPlanDaysComponent(
+    override val id: String,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    override val type: String = WEEK_PLAN_DAYS_TYPE,
+) : HomeComponent
+
+@Serializable
+data class GroceryTeaserComponent(
+    override val id: String,
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    override val type: String = GROCERY_TEASER_TYPE,
+) : HomeComponent
+
+@Serializable
 data class UnknownHomeComponent(
     override val id: String,
     override val type: String,
@@ -150,6 +164,12 @@ object HomeComponentSerializer : KSerializer<HomeComponent> {
 
             is ListCardComponent ->
                 encoder.encodeSerializableValue(ListCardComponent.serializer(), value)
+
+            is WeekPlanDaysComponent ->
+                encoder.encodeSerializableValue(WeekPlanDaysComponent.serializer(), value)
+
+            is GroceryTeaserComponent ->
+                encoder.encodeSerializableValue(GroceryTeaserComponent.serializer(), value)
 
             is UnknownHomeComponent ->
                 encoder.encodeSerializableValue(UnknownHomeComponent.serializer(), value)
@@ -186,6 +206,12 @@ object HomeComponentSerializer : KSerializer<HomeComponent> {
                 LIST_CARD_TYPE ->
                     input.json.decodeFromJsonElement(ListCardComponent.serializer(), element)
 
+                WEEK_PLAN_DAYS_TYPE ->
+                    input.json.decodeFromJsonElement(WeekPlanDaysComponent.serializer(), element)
+
+                GROCERY_TEASER_TYPE ->
+                    input.json.decodeFromJsonElement(GroceryTeaserComponent.serializer(), element)
+
                 else -> UnknownHomeComponent(id = fallbackId, type = type)
             }
         } catch (_: SerializationException) {
@@ -216,6 +242,8 @@ const val CAROUSEL_TYPE = "carousel"
 const val LARGE_CARD_TYPE = "large_card"
 const val SQUARED_CARD_TYPE = "squared_card"
 const val LIST_CARD_TYPE = "list_card"
+const val WEEK_PLAN_DAYS_TYPE = "week_plan_days"
+const val GROCERY_TEASER_TYPE = "grocery_teaser"
 
 private const val UNKNOWN_COMPONENT_TYPE = "unknown"
 private const val UNKNOWN_COMPONENT_ID = "unknown"

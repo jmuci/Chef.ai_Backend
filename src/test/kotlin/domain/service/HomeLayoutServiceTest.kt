@@ -31,11 +31,43 @@ class HomeLayoutServiceTest {
     }
 
     @Test
+    fun `week_plan_days and grocery_teaser components decode with no extra data`() {
+        val json = """
+            {
+              "schemaVersion": "1.0.0",
+              "components": [
+                { "type": "week_plan_days", "id": "this-week" },
+                { "type": "grocery_teaser", "id": "grocery-teaser" }
+              ]
+            }
+        """.trimIndent()
+        val service = HomeLayoutService(loadLayoutJson = { json }, log = log)
+
+        val layout = service.getHomeLayout()
+
+        assertEquals(2, layout.components.size)
+        val weekPlanDays = layout.components[0] as WeekPlanDaysComponent
+        assertEquals("this-week", weekPlanDays.id)
+        val groceryTeaser = layout.components[1] as GroceryTeaserComponent
+        assertEquals("grocery-teaser", groceryTeaser.id)
+    }
+
+    @Test
     fun `checksum generation is deterministic`() {
         val json = """[{"id":"one","type":"section_header","title":"For You"}]"""
         val checksumA = HomeLayoutService.computeLayoutChecksum(json)
         val checksumB = HomeLayoutService.computeLayoutChecksum(json)
         assertEquals(checksumA, checksumB)
+    }
+
+    @Test
+    fun `bundled layout places week_plan_days and grocery_teaser before the first section`() {
+        val service = HomeLayoutService(log = log)
+        val layout = service.getHomeLayout()
+
+        assertTrue(layout.components[0] is WeekPlanDaysComponent)
+        assertTrue(layout.components[1] is GroceryTeaserComponent)
+        assertTrue(layout.components[2] is SectionHeaderComponent)
     }
 
     @Test

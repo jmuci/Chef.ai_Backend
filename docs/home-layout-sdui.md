@@ -64,6 +64,8 @@ Component `type` values:
 - `large_card`
 - `squared_card`
 - `list_card`
+- `week_plan_days`
+- `grocery_teaser`
 
 Card components (`large_card`, `squared_card`, `list_card`) carry only a `recipeId` pointer —
 they don't embed recipe content. `HomeSidecar` is where that content actually lives:
@@ -93,6 +95,32 @@ Implementation location:
 - Service: `/src/main/kotlin/domain/service/HomeLayoutService.kt`
 - Route: `/src/main/kotlin/presentation/routes/HomeRoutes.kt`
 - Bundled resources: `/src/main/resources/home_layout.json`, `/src/main/resources/home_sidecar.json`
+
+## Structural Placement Markers (`week_plan_days`, `grocery_teaser`)
+
+`week_plan_days` and `grocery_teaser` mark where the "This Week" plan section and the grocery-list
+teaser sit in the Home layout. Each carries only `id` + `type` — no title, count, or other content
+field.
+
+This is deliberate, not an oversight: neither the current week's meal plan contents nor the
+grocery-list item count are safe or possible to put in this response.
+
+- `GET /api/v1/home/layout` is anonymous and cacheable (`ETag`/`layoutChecksum`, `max-age=300`,
+  shared across all callers). A specific user's meal plan baked into it would force per-user
+  caching (`Vary` on the JWT, no more anonymous-safe response) for a feature that doesn't need it.
+- The backend has no source of truth for either. Meal plans sync via `/sync/push`/`/sync/pull`,
+  but the grocery list is computed entirely client-side from a meal plan's recipes
+  (`ShoppingListBuilder`) and its checked-off state never leaves the device — there's no backend
+  concept of a grocery list to report a count for.
+
+The Android client resolves both from its own already-synced Room data at render time: the day
+list and section copy ("This Week", "Plan →") from `MealPlanRepository`, and the item count for
+`grocery_teaser` from its local `ShoppingListBuilder` output. The backend's only job is deciding
+whether/where these markers appear in the ordered `components` list.
+
+If a future feature needs the backend to push a specific meal plan onto a user's Home (e.g. a
+"chef's pick" plan for new users), that's a distinct per-user personalization endpoint, not an
+extension of these marker types.
 
 ## Unknown Type Handling
 
