@@ -128,14 +128,40 @@ class PostgresHouseholdRepository : HouseholdRepository {
             }
         }
 
+    /**
+     * Locks the household row (same lock [departFromHousehold] and [acceptInvite] take) so a
+     * concurrent invite acceptance can't slip an ACTIVE membership into a household this is
+     * deleting. Detaches every member's shared plans, exactly as each member leaving would: left
+     * pointing at the dissolved household, a plan's own owner was sent a removal tombstone for it
+     * on their next pull (see PostgresSyncRepository.tombstoneTimestampsByPlanId) and it vanished
+     * from their devices while still existing on the server. Outstanding invites are revoked so
+     * they stop showing up as pending.
+     */
     override suspend fun dissolveHousehold(householdId: UUID, at: Instant): Unit = suspendTransaction {
-        HouseholdTable.update({ HouseholdTable.id eq EntityID(householdId, HouseholdTable) }) {
+        val householdEntityId = EntityID(householdId, HouseholdTable)
+        HouseholdTable.selectAll()
+            .where { HouseholdTable.id eq householdEntityId }
+            .forUpdate()
+            .firstOrNull()
+            ?: throw HouseholdNotFoundException("Household $householdId not found")
+
+        HouseholdTable.update({ HouseholdTable.id eq householdEntityId }) {
             it[deleted_at] = at
             it[updated_at] = at
         }
         markMembersRemoved(at) {
-            (HouseholdMemberTable.household_id eq EntityID(householdId, HouseholdTable)) and
+            (HouseholdMemberTable.household_id eq householdEntityId) and
                 (HouseholdMemberTable.status eq HouseholdMemberStatus.ACTIVE.name)
+        }
+        MealPlanTable.update({ MealPlanTable.household_id eq householdEntityId }) {
+            it[household_id] = null
+            it[former_household_id] = householdEntityId
+            it[household_detached_at] = at
+        }
+        HouseholdInviteTable.update({
+            (HouseholdInviteTable.household_id eq householdEntityId) and HouseholdInviteTable.revoked_at.isNull()
+        }) {
+            it[revoked_at] = at
         }
     }
 
@@ -193,6 +219,9 @@ class PostgresHouseholdRepository : HouseholdRepository {
             }
             .orderBy(HouseholdInviteTable.created_at, SortOrder.DESC)
             .map { it.toHouseholdInvite() }
+            // Same usability rule acceptInvite applies, so the inbox never lists an invite that
+            // would fail on tap (expired, or a multi-use one whose budget is spent).
+            .filter { it.isUsable(Clock.System.now()) }
     }
 
     override suspend fun revokeInvite(inviteId: UUID, at: Instant): Unit = suspendTransaction {
@@ -348,13 +377,34 @@ class PostgresHouseholdRepository : HouseholdRepository {
     }
 
     /**
-     * Locks the invite row for the whole operation so a second, concurrent acceptor of the same
-     * single-use invite blocks here rather than racing the usability check — see
-     * [HouseholdRepository.acceptInvite]'s KDoc.
+     * Locks the household row and then the invite row for the whole operation, so a second,
+     * concurrent acceptor of the same single-use invite blocks here rather than racing the
+     * usability check (see [HouseholdRepository.acceptInvite]'s KDoc), and so a concurrent
+     * dissolve/last-member departure can't delete the household out from under the new membership.
      */
     override suspend fun acceptInvite(inviteId: UUID, callerId: UUID, at: Instant): Household = suspendTransaction {
+        val inviteEntityId = EntityID(inviteId, HouseholdInviteTable)
+        // Unlocked read just to learn the household — invites never change household.
+        val householdId = HouseholdInviteTable.selectAll()
+            .where { HouseholdInviteTable.id eq inviteEntityId }
+            .firstOrNull()
+            ?.get(HouseholdInviteTable.household_id)
+            ?: throw InviteNotFoundException("No invite found for id $inviteId")
+
+        // Household row first, invite row second — the same order dissolveHousehold takes them in,
+        // so the two can't deadlock. Locking the household serializes this with
+        // dissolveHousehold/departFromHousehold: without it, a last member leaving concurrently
+        // could dissolve the household under the ACTIVE membership inserted below, stranding the
+        // caller in a deleted household that the one-active-per-user index then keeps them from
+        // ever leaving. A household that's already gone reads as a dead invite.
+        HouseholdTable.selectAll()
+            .where { (HouseholdTable.id eq householdId) and HouseholdTable.deleted_at.isNull() }
+            .forUpdate()
+            .firstOrNull()
+            ?: throw InviteNotFoundException("Invite $inviteId is for a household that no longer exists")
+
         val inviteRow = HouseholdInviteTable.selectAll()
-            .where { HouseholdInviteTable.id eq EntityID(inviteId, HouseholdInviteTable) }
+            .where { HouseholdInviteTable.id eq inviteEntityId }
             .forUpdate()
             .firstOrNull()
             ?: throw InviteNotFoundException("No invite found for id $inviteId")

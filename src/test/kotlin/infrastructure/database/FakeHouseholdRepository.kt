@@ -115,6 +115,10 @@ class FakeHouseholdRepository : HouseholdRepository {
                 memberships[i] = m.copy(status = HouseholdMemberStatus.REMOVED, removedAt = at, serverRemovedAt = at)
             }
         }
+        // Mirrors PostgresHouseholdRepository: outstanding invites die with the household.
+        invites.replaceAll { _, invite ->
+            if (invite.householdId == householdId && invite.revokedAt == null) invite.copy(revokedAt = at) else invite
+        }
     }
 
     override suspend fun createInvite(invite: NewHouseholdInvite): HouseholdInvite {
@@ -150,7 +154,9 @@ class FakeHouseholdRepository : HouseholdRepository {
     }
 
     override suspend fun listPendingInvitesForUser(userId: UUID): List<HouseholdInvite> =
-        invites.values.filter { it.inviteeUserId == userId && it.revokedAt == null && it.acceptedAt == null }
+        invites.values.filter {
+            it.inviteeUserId == userId && it.revokedAt == null && it.acceptedAt == null && it.isUsable(Clock.System.now())
+        }
 
     override suspend fun revokeInvite(inviteId: UUID, at: Instant) {
         invites[inviteId]?.let { invites[inviteId] = it.copy(revokedAt = at) }
@@ -199,6 +205,9 @@ class FakeHouseholdRepository : HouseholdRepository {
 
     override suspend fun acceptInvite(inviteId: UUID, callerId: UUID, at: Instant): Household {
         val invite = invites[inviteId] ?: throw InviteNotFoundException("No invite found for id $inviteId")
+        if (households[invite.householdId]?.deletedAt != null) {
+            throw InviteNotFoundException("Invite $inviteId is for a household that no longer exists")
+        }
         if (!invite.isUsable(at)) {
             throw InviteNotFoundException("Invite ${invite.id} is expired, revoked, or exhausted")
         }

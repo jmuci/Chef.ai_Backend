@@ -24,6 +24,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.ratelimit.RateLimitName
 import io.ktor.server.plugins.ratelimit.rateLimit
 import io.ktor.server.request.receive
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.routing.RoutingCall
 import io.ktor.server.routing.Route
@@ -32,6 +33,7 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
+import kotlinx.serialization.json.Json
 import java.util.UUID
 
 val HOUSEHOLD_INVITE_CREATE_RATE_LIMIT_NAME = RateLimitName("household-invite-create")
@@ -180,12 +182,21 @@ fun Route.householdRoutes(householdService: HouseholdService, inviteBaseUrl: Str
                     val callerId = call.requireUserId() ?: return@post
                     val householdId = call.requireUuidParam("id") ?: return@post
                     // Every field is optional on the wire (see CreateInviteRequest defaults), so a
-                    // body-less POST — or one that fails to parse for any reason — is treated the
-                    // same as `{}` rather than rejected.
-                    val request = try {
-                        call.receive<CreateInviteRequest>()
-                    } catch (_: Exception) {
+                    // body-less POST is treated the same as `{}`. A body that is present but
+                    // doesn't parse is rejected: silently substituting the defaults turned e.g. an
+                    // intended email-restricted invite with one mistyped field into an open,
+                    // unrestricted invite link.
+                    val rawBody = call.receiveText()
+                    val request = if (rawBody.isBlank()) {
                         CreateInviteRequest()
+                    } else {
+                        try {
+                            inviteRequestJson.decodeFromString<CreateInviteRequest>(rawBody)
+                        } catch (_: IllegalArgumentException) {
+                            // SerializationException is an IllegalArgumentException subtype.
+                            call.respond(HttpStatusCode.BadRequest, ErrorResponse("Malformed invite request body"))
+                            return@post
+                        }
                     }
                     call.handleHousehold {
                         val (invite, rawToken) = householdService.createInvite(
@@ -257,6 +268,9 @@ private suspend fun RoutingCall.requireUserId(): UUID? {
     }
     return parsed
 }
+
+/** Same decoding rules as the ContentNegotiation config in Routing.kt. */
+private val inviteRequestJson = Json { ignoreUnknownKeys = true }
 
 private suspend inline fun <reified T : Any> RoutingCall.receiveOrRespondBadRequest(message: String): T? =
     try {

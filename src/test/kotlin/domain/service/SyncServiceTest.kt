@@ -729,6 +729,45 @@ class SyncServiceTest {
         assertEquals(5000L, tombstoned.deletedAt)
     }
 
+    /**
+     * Dissolving a household detaches every plan and removes every member at once. A former member
+     * must still get tombstones for co-members' plans they had cached — but never for their own.
+     */
+    @Test
+    fun pullAfterHouseholdRemovalNeverTombstonesTheCallersOwnPlans() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        val coMemberId = UUID.randomUUID()
+        repo.seedRemovedFromHousehold(memberId, householdId, serverRemovedAtMillis = 5000L)
+
+        val ownPlanId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(ownPlanId, updatedAt = 1000L, ownerId = memberId), serverUpdatedAtMillis = 1000L)
+        repo.seedPlanDetachedFromHousehold(ownPlanId, householdId, detachedAtMillis = 5000L)
+        val coMemberPlanId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(coMemberPlanId, updatedAt = 1000L, ownerId = coMemberId), serverUpdatedAtMillis = 1000L)
+        repo.seedPlanDetachedFromHousehold(coMemberPlanId, householdId, detachedAtMillis = 5000L)
+
+        val pull = service.pullRecipes(memberId, sinceMillis = 2000L, limit = 10)
+
+        assertFalse(pull.mealPlans.any { it.uuid == ownPlanId.toString() && it.deletedAt != null })
+        assertEquals(5000L, pull.mealPlans.single { it.uuid == coMemberPlanId.toString() }.deletedAt)
+    }
+
+    /** Leaving and rejoining the same household before pulling must not tombstone your own detached plans. */
+    @Test
+    fun pullDetachmentTombstoneSkipsTheCallersOwnPlans() = withService { service, repo ->
+        val householdId = UUID.randomUUID()
+        val memberId = UUID.randomUUID()
+        repo.seedActiveHousehold(memberId, householdId)
+        val ownPlanId = UUID.randomUUID()
+        repo.seedMealPlan(buildMealPlan(ownPlanId, updatedAt = 1000L, ownerId = memberId), serverUpdatedAtMillis = 1000L)
+        repo.seedPlanDetachedFromHousehold(ownPlanId, householdId, detachedAtMillis = 5000L)
+
+        val pull = service.pullRecipes(memberId, sinceMillis = 2000L, limit = 10)
+
+        assertFalse(pull.mealPlans.any { it.uuid == ownPlanId.toString() })
+    }
+
     @Test
     fun pullIncludesAHouseholdMatesOldPreCursorPrivateRecipeReferencedByASharedPlan() = withService { service, repo ->
         val householdId = UUID.randomUUID()

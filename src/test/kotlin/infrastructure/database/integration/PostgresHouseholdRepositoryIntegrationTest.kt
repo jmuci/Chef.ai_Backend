@@ -1,8 +1,10 @@
 package com.tenmilelabs.infrastructure.database.integration
 
 import com.tenmilelabs.domain.exception.AlreadyInHouseholdException
+import com.tenmilelabs.domain.exception.InviteNotFoundException
 import com.tenmilelabs.domain.model.HouseholdMemberStatus
 import com.tenmilelabs.domain.model.HouseholdRole
+import com.tenmilelabs.domain.model.NewHouseholdInvite
 import com.tenmilelabs.domain.util.millisecondPrecisionNow
 import com.tenmilelabs.infrastructure.database.initDatabaseAndSchema
 import com.tenmilelabs.infrastructure.database.repositoryImpl.PostgresHouseholdRepository
@@ -28,6 +30,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 
 @Tag("db-integration")
 class PostgresHouseholdRepositoryIntegrationTest {
@@ -167,6 +170,50 @@ class PostgresHouseholdRepositoryIntegrationTest {
             groceryItemServerUpdatedAtMillis(otherHouseholdPlanId, "milk"),
             "an unrelated household's grocery item must be untouched"
         )
+    }
+
+    /**
+     * Dissolve used to leave every plan pointing at the deleted household, so each former member's
+     * next pull tombstoned their own plans. It must detach them like a departure does, and revoke
+     * outstanding invites; accepting one afterwards is a dead invite, not a 500.
+     */
+    @Test
+    fun dissolveDetachesEveryPlanRevokesInvitesAndRejectsLaterAccepts() = runBlocking {
+        val repo = PostgresHouseholdRepository()
+        val ownerId = seedUser()
+        val memberId = seedUser()
+        val latecomer = seedUser()
+        val household = repo.createHousehold("Household", ownerId)
+        repo.addMember(household.id, memberId, HouseholdRole.MEMBER, millisecondPrecisionNow())
+        val ownersPlanId = seedMealPlan(ownerId, household.id)
+        val membersPlanId = seedMealPlan(memberId, household.id)
+        val invite = repo.createInvite(
+            NewHouseholdInvite(
+                householdId = household.id,
+                createdBy = ownerId,
+                tokenHash = "hash-${UUID.randomUUID()}",
+                inviteeUserId = latecomer,
+                inviteeEmail = null,
+                singleUse = true,
+                maxUses = null,
+                expiresAt = millisecondPrecisionNow().plus(30.days)
+            )
+        )
+
+        repo.dissolveHousehold(household.id, millisecondPrecisionNow())
+
+        for (planId in listOf(ownersPlanId, membersPlanId)) {
+            assertNull(mealPlanHouseholdId(planId))
+            val formerHouseholdId = transaction {
+                MealPlanTable.selectAll().where { MealPlanTable.id eq planId }.first()[MealPlanTable.former_household_id]?.value
+            }
+            assertEquals(household.id, formerHouseholdId)
+        }
+        assertTrue(repo.listPendingInvitesForUser(latecomer).isEmpty())
+        assertFailsWith<InviteNotFoundException> {
+            repo.acceptInvite(invite.id, latecomer, millisecondPrecisionNow())
+        }
+        assertNull(repo.getActiveMembership(household.id, latecomer))
     }
 
     private fun seedMealPlan(ownerId: UUID, householdId: UUID, serverUpdatedAtMillis: Long = 0L): UUID {

@@ -195,7 +195,25 @@ class HouseholdServiceTest {
     }
 
     @Test
-    fun `acceptInviteById happy path adds the caller as a member`() = runTest {
+    fun `acceptInviteById happy path adds the addressed invitee as a member`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+        val invitee = requireNotNull(userRepository.createUser("joiner@example.com", "joiner", "hash"))
+        val (invite, _) = householdService.createInvite(
+            household.id, ownerId, inviteeEmail = "joiner@example.com", maxUses = null, expiresInHours = null
+        )
+
+        householdService.acceptInviteById(invite.id, invitee.uuid)
+
+        assertEquals(HouseholdRole.MEMBER, householdRepository.getActiveMembership(household.id, invitee.uuid)?.role)
+    }
+
+    /**
+     * An open (link-style) invite's id is not a secret — it's logged and listed to the owner — so
+     * the id-only accept path must not redeem it; only the token path can.
+     */
+    @Test
+    fun `acceptInviteById refuses an open invite that is not addressed to the caller`() = runTest {
         val ownerId = UUID.randomUUID()
         val household = householdService.createHousehold("Household", ownerId)
         val (invite, _) = householdService.createInvite(
@@ -203,9 +221,26 @@ class HouseholdServiceTest {
         )
         val joinerId = UUID.randomUUID()
 
-        householdService.acceptInviteById(invite.id, joinerId)
+        assertFailsWith<InviteNotForCallerException> {
+            householdService.acceptInviteById(invite.id, joinerId)
+        }
+        assertNull(householdRepository.getActiveMembership(household.id, joinerId))
+    }
 
-        assertEquals(HouseholdRole.MEMBER, householdRepository.getActiveMembership(household.id, joinerId)?.role)
+    @Test
+    fun `an invite to a deleted household fails as not found and leaves the pending inbox`() = runTest {
+        val ownerId = UUID.randomUUID()
+        val household = householdService.createHousehold("Household", ownerId)
+        val invitee = requireNotNull(userRepository.createUser("late@example.com", "late", "hash"))
+        val (invite, rawToken) = householdService.createInvite(
+            household.id, ownerId, inviteeEmail = "late@example.com", maxUses = null, expiresInHours = null
+        )
+
+        householdService.deleteHousehold(household.id, ownerId)
+
+        assertTrue(householdService.listPendingInvitesForCaller(invitee.uuid).none { it.id == invite.id })
+        assertFailsWith<InviteNotFoundException> { householdService.joinByToken(rawToken, invitee.uuid) }
+        assertFailsWith<InviteNotFoundException> { householdService.acceptInviteById(invite.id, invitee.uuid) }
     }
 
     @Test

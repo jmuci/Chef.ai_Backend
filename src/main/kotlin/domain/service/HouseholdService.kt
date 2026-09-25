@@ -196,7 +196,20 @@ class HouseholdService(
         return acceptInvite(invite.id, callerId)
     }
 
-    suspend fun acceptInviteById(inviteId: UUID, callerId: UUID): Household = acceptInvite(inviteId, callerId)
+    /**
+     * The in-app inbox path. Unlike [joinByToken] it presents no secret — only the invite's id — so
+     * it is restricted to invites addressed to the caller, which is all the pending-invites inbox
+     * ever lists. An open (link-style) invite must be redeemed with its token: its id is not a
+     * secret (it's logged, and returned to the owner by `GET /{id}/invites`), and accepting one by
+     * id would let anyone who learned it join without ever holding the link.
+     */
+    suspend fun acceptInviteById(inviteId: UUID, callerId: UUID): Household {
+        val invite = requireInvite(inviteId)
+        if (invite.inviteeUserId != callerId) {
+            throw InviteNotForCallerException("Invite $inviteId is not addressed to caller $callerId")
+        }
+        return acceptInvite(inviteId, callerId)
+    }
 
     /**
      * Shared core for the token path ([joinByToken]) and the in-app path ([acceptInviteById]).
