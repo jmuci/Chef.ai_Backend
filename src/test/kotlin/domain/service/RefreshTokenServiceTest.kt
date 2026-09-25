@@ -304,4 +304,39 @@ class RefreshTokenServiceTest {
         val averageLength = tokens.map { it.length }.average()
         assertTrue(averageLength > 80, "Tokens should be long enough to be secure")
     }
+    /**
+     * Two refreshes racing with the same token both read it as not-yet-revoked (the lookup is its
+     * own transaction). Simulated by serving the second call a stale, pre-rotation snapshot of the
+     * token row: the atomic claim must still reject it as reuse and kill every session.
+     */
+    @Test
+    fun `concurrent refresh with the same token is treated as reuse`() = runTest {
+        val authResponse = authService.register(
+            RegisterRequest(email = "race@example.com", username = "raceuser", password = "SecurePass123")
+        )
+        val presented = RefreshTokenRequest(authResponse.refreshToken)
+        val staleSnapshot = requireNotNull(
+            refreshTokenRepository.findByTokenHash(sha256Base64(authResponse.refreshToken))
+        )
+        val racingService = AuthService(
+            userRepository,
+            object : com.tenmilelabs.infrastructure.database.repositoryImpl.RefreshTokenRepository by refreshTokenRepository {
+                override suspend fun findByTokenHash(tokenHash: String) = staleSnapshot
+            },
+            jwtService,
+            logger
+        )
+
+        val winner = authService.refreshToken(presented)
+        assertFailsWith<TokenReuseDetectedException> { racingService.refreshToken(presented) }
+
+        // Reuse detection revokes everything, including the winner's freshly issued token.
+        assertFailsWith<TokenReuseDetectedException> {
+            authService.refreshToken(RefreshTokenRequest(winner.refreshToken))
+        }
+    }
+
+    private fun sha256Base64(value: String): String =
+        Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(value.toByteArray()))
+
 }

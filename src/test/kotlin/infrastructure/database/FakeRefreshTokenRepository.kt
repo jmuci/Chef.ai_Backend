@@ -31,7 +31,8 @@ class FakeRefreshTokenRepository : RefreshTokenRepository {
 
     override suspend fun revokeToken(tokenId: String): Boolean {
         val token = tokens[tokenId]
-        return if (token != null) {
+        // Conditional, like the Postgres implementation: only the call that flips it counts.
+        return if (token != null && !token.isRevoked) {
             tokens[tokenId] = token.copy(
                 isRevoked = true,
                 revokedAt = Clock.System.now().toString()

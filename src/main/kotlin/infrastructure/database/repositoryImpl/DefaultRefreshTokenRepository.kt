@@ -11,11 +11,18 @@ import kotlinx.datetime.Instant
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.deleteWhere
+import org.jetbrains.exposed.sql.update
 import java.util.*
 
 interface RefreshTokenRepository {
     suspend fun createRefreshToken(userId: UUID, tokenHash: String, expiresAt: Instant): RefreshToken?
     suspend fun findByTokenHash(tokenHash: String): RefreshToken?
+    /**
+     * Revokes [tokenId] if, and only if, it is not already revoked — a single conditional
+     * `UPDATE ... WHERE is_revoked = false`. Returns true only for the one call that actually made
+     * the transition, which is what lets refresh-token rotation treat a `false` as reuse: of two
+     * concurrent refreshes presenting the same token, exactly one wins.
+     */
     suspend fun revokeToken(tokenId: String): Boolean
     suspend fun revokeAllUserTokens(userId: UUID): Int
     suspend fun deleteExpiredTokens(): Int
@@ -52,14 +59,13 @@ class PostgresRefreshTokenRepository(private val log: Logger) : RefreshTokenRepo
 
     override suspend fun revokeToken(tokenId: String): Boolean = suspendTransaction {
         try {
-            val token = RefreshTokenDAO.findById(UUID.fromString(tokenId))
-            if (token != null) {
-                token.isRevoked = true
-                token.revokedAt = Clock.System.now()
-                true
-            } else {
-                false
+            val updated = RefreshTokenTable.update({
+                (RefreshTokenTable.id eq UUID.fromString(tokenId)) and (RefreshTokenTable.isRevoked eq false)
+            }) {
+                it[isRevoked] = true
+                it[revokedAt] = Clock.System.now()
             }
+            updated == 1
         } catch (ex: Exception) {
             log.error("Failed to revoke token: $tokenId", ex)
             false
