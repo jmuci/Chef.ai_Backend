@@ -4,6 +4,7 @@ import com.tenmilelabs.application.dto.AuthResponse
 import com.tenmilelabs.application.dto.BookmarkErrors
 import com.tenmilelabs.application.dto.RegisterRequest
 import com.tenmilelabs.application.dto.SyncBookmark
+import com.tenmilelabs.application.dto.SyncMealPlanDto
 import com.tenmilelabs.application.dto.SyncPushRequest
 import com.tenmilelabs.application.dto.SyncPullResponse
 import com.tenmilelabs.application.dto.SyncPushResponse
@@ -1028,6 +1029,54 @@ class SyncRoutesIntegrationTest {
         }
 
         assertEquals(HttpStatusCode.BadRequest, response.status)
+    }
+
+    // Regression: SyncGroceryListItem.checkedBy had no default, so kotlinx.serialization treated
+    // it as required. The Android client omits it (it's server-derived), so every push carrying a
+    // grocery check was rejected with a 400 — failing the whole batch, recipes and plans included.
+    @Test
+    fun pushAcceptsGroceryItemThatOmitsCheckedBy() = testApplication {
+        val syncRepository = FakeSyncRepository()
+
+        application {
+            module(configureDatabase = false,
+                recipeRepository = FakeRecipesRepository(),
+                userRepository = FakeUserRepository(),
+                refreshTokenRepository = FakeRefreshTokenRepository(),
+                syncRepository = syncRepository
+            )
+        }
+
+        val client = createClient { install(ContentNegotiation) { json() } }
+        val auth = client.registerAndGetAuth()
+        val planId = syncRepository.seedMealPlan(
+            SyncMealPlanDto(
+                uuid = UUID.randomUUID().toString(),
+                ownerId = auth.userId,
+                name = "Week",
+                status = "READY",
+                preferencesJson = "{}",
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+                deletedAt = null,
+                days = emptyList()
+            )
+        )
+
+        // Raw JSON, exactly as the Android client encodes it: no "checkedBy" key at all.
+        val response = client.post("/sync/push") {
+            bearerAuth(auth.token)
+            contentType(ContentType.Application.Json)
+            accept(ContentType.Application.Json)
+            setBody(
+                """{"recipes":[],"groceryListItems":[""" +
+                    """{"mealPlanId":"$planId","itemKey":"eggs","checked":true,"updatedAt":2000,"deletedAt":null}]}"""
+            )
+        }
+
+        assertEquals(HttpStatusCode.OK, response.status)
+        val body = response.body<SyncPushResponse>()
+        assertEquals("eggs", body.groceryListItems.accepted.single().itemKey)
     }
 
     private suspend fun HttpClient.registerAndGetAuth(): AuthResponse {
