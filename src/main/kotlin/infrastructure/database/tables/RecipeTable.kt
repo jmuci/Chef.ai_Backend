@@ -12,7 +12,7 @@ object RecipeTable : UUIDTable("recipes", "uuid") {
     val prep_time_minutes = integer("prep_time_minutes")
     val cook_time_minutes = integer("cook_time_minutes")
     val servings = integer("servings")
-    val creator_id = reference("creator_id", UserTable, onDelete = ReferenceOption.CASCADE)
+    val creator_id = reference("creator_id", UserTable, onDelete = ReferenceOption.CASCADE).index("idx_recipes_creator_id")
     val recipe_external_url = text("recipe_external_url").nullable()
     val privacy = text("privacy")
     val updated_at = long("updated_at")

@@ -25,6 +25,7 @@ import com.tenmilelabs.application.dto.SyncReferenceData
 import com.tenmilelabs.application.dto.SyncUser
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
+import com.tenmilelabs.domain.repository.RecipeUpsertOutcome
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.repository.UserPreferencesRepository
 import com.tenmilelabs.domain.util.millisecondPrecisionNow
@@ -107,6 +108,10 @@ class SyncService(
                 return@forEach
             }
 
+            if (!validateSteps(recipe, errors)) {
+                return@forEach
+            }
+
             if (!validateIngredients(recipe, errors)) {
                 return@forEach
             }
@@ -145,11 +150,37 @@ class SyncService(
             }
 
             val now = millisecondPrecisionNow()
-            syncRepository.upsertRecipeAggregate(recipe, now)
-            accepted += AcceptedEntity(
-                uuid = recipe.uuid,
-                serverUpdatedAt = now.toEpochMilliseconds()
-            )
+            when (syncRepository.upsertRecipeAggregate(recipe, now)) {
+                RecipeUpsertOutcome.Applied -> accepted += AcceptedEntity(
+                    uuid = recipe.uuid,
+                    serverUpdatedAt = now.toEpochMilliseconds()
+                )
+                RecipeUpsertOutcome.StepIdTaken -> errors += SyncError(
+                    recipe.uuid,
+                    SyncErrors.INVALID_STEP,
+                    SyncErrors.INVALID_STEP.message
+                )
+                // The pre-check above read `existing` in its own, already-committed transaction;
+                // the write-time re-check caught a concurrent push landing in between. Re-read so
+                // the conflict carries the row that actually won - and re-apply the ownership
+                // check, since a concurrent insert of a brand-new uuid may be someone else's.
+                RecipeUpsertOutcome.ServerNewer -> {
+                    val winner = syncRepository.getRecipe(recipeUuid)
+                    if (winner == null || winner.recipe.creatorId != userId.toString()) {
+                        errors += SyncError(
+                            uuid = recipe.uuid,
+                            reason = SyncErrors.CREATOR_MISMATCH,
+                            message = SyncErrors.CREATOR_MISMATCH.message
+                        )
+                    } else {
+                        conflicts += ConflictEntity(
+                            uuid = recipe.uuid,
+                            reason = ConflictReasons.SERVER_NEWER,
+                            serverVersion = winner.recipe
+                        )
+                    }
+                }
+            }
         }
 
         val conflictReferenceData = if (conflicts.isEmpty()) {
@@ -245,6 +276,18 @@ class SyncService(
                 }
             }
             if (householdParseFailed) return@forEach
+
+            // Day uuids and recipe ids reach UUID.fromString / a primary key inside upsertMealPlan;
+            // a malformed or repeated one there used to fail the whole push request instead of
+            // just this plan.
+            val dayIds = plan.days.map { parseUuid(it.uuid) {} }
+            val recipeRefsValid = plan.days
+                .flatMap { listOfNotNull(it.dinnerRecipeId, it.lunchRecipeId) }
+                .all { parseUuid(it) {} != null }
+            if (dayIds.any { it == null } || dayIds.toSet().size != dayIds.size || !recipeRefsValid) {
+                errors += SyncError(plan.uuid, SyncErrors.INVALID_MEAL_PLAN_DAY, SyncErrors.INVALID_MEAL_PLAN_DAY.message)
+                return@forEach
+            }
 
             val existing = syncRepository.getMealPlanForMember(planUuid, userId)
 
@@ -518,10 +561,7 @@ class SyncService(
         // missing a row it needs.
         val creatorIds = allRecipes.map { UUID.fromString(it.recipe.creatorId) }.toSet() +
             mealPlans.map { UUID.fromString(it.plan.ownerId) }.toSet()
-        val creators = syncRepository.collectCreators(
-            creatorIds = creatorIds,
-            sinceMillis = sinceMillis
-        )
+        val creators = syncRepository.collectCreators(creatorIds)
 
         log.info(
             "Sync pull for user $userId: recipes=${page.size}, gapRecipes=${gapRecipes.size}, hasMore=$hasMore, " +
@@ -575,8 +615,11 @@ class SyncService(
         if (recipe.deletedAt != null) return RecipeDetailResult.NotFound
 
         val isOwner = userId != null && recipe.creatorId == userId.toString()
-        val isHouseholdVisible = userId != null && syncRepository.isRecipeHouseholdVisible(userId, recipeId)
-        if (recipe.privacy != "PUBLIC" && !isOwner && !isHouseholdVisible) return RecipeDetailResult.NotFound
+        // Evaluated last and only when needed: the household check loads every plan day in the
+        // caller's household, which PUBLIC and owned recipes never need.
+        val isVisible = recipe.privacy == "PUBLIC" || isOwner ||
+            (userId != null && syncRepository.isRecipeHouseholdVisible(userId, recipeId))
+        if (!isVisible) return RecipeDetailResult.NotFound
 
         val referenceData = syncRepository.collectReferenceData(
             ingredientIds = recipe.ingredients.map { UUID.fromString(it.ingredientId) }.toSet(),
@@ -584,38 +627,46 @@ class SyncService(
             labelIds = recipe.labelIds.map { UUID.fromString(it) }.toSet(),
             sinceMillis = null
         )
-        val creators = syncRepository.collectCreators(
-            creatorIds = setOf(UUID.fromString(recipe.creatorId)),
-            sinceMillis = null
-        )
+        val creators = syncRepository.collectCreators(setOf(UUID.fromString(recipe.creatorId)))
 
         return RecipeDetailResult.Found(recipe, referenceData, creators)
     }
 
     /**
      * Batched counterpart to [getRecipeDetail], used to hydrate the recipes a stateless-generated
-     * meal plan references (see `MealPlanGenerationService.generateStateless`). Fetches each of
-     * [recipeIds] individually via [getRecipeDetail] and merges the results, de-duplicating
-     * reference entities and creators shared across recipes by `uuid` — a plan's dinner and lunch
-     * picks commonly share tags/labels/ingredients, and repeating them would just bloat the
-     * response. An id that resolves to [RecipeDetailResult.NotFound] (e.g. deleted between
-     * generation and this call) is silently omitted rather than failing the whole batch.
+     * meal plan references (see `MealPlanGenerationService.generateStateless`). Applies the same
+     * visibility rule as [getRecipeDetail], but loads every aggregate, the caller's household
+     * visibility set, the reference data and the creators once for the whole batch — a 31-day
+     * lunch+dinner plan references up to 62 recipes, and resolving each one separately cost several
+     * transactions apiece. Reference data is a single gap-only fetch over the union of ids, so
+     * entities shared across recipes are naturally de-duplicated. An id that isn't visible (e.g.
+     * deleted between generation and this call) is silently omitted rather than failing the batch.
      */
     suspend fun getRecipeDetails(userId: UUID?, recipeIds: Set<UUID>): RecipeDetailsBundle {
-        val found = recipeIds.mapNotNull { id ->
-            getRecipeDetail(userId, id) as? RecipeDetailResult.Found
+        val candidates = syncRepository.getRecipes(recipeIds).filter { it.recipe.deletedAt == null }
+        val needsHouseholdCheck = userId != null && candidates.any {
+            it.recipe.privacy != "PUBLIC" && it.recipe.creatorId != userId.toString()
+        }
+        val householdVisibleIds = if (needsHouseholdCheck && userId != null) {
+            syncRepository.findHouseholdVisibleRecipeIds(userId)
+        } else {
+            emptySet()
+        }
+        val recipes = candidates.map { it.recipe }.filter { recipe ->
+            recipe.privacy == "PUBLIC" ||
+                (userId != null && recipe.creatorId == userId.toString()) ||
+                UUID.fromString(recipe.uuid) in householdVisibleIds
         }
 
         return RecipeDetailsBundle(
-            recipes = found.map { it.recipe },
-            referenceData = SyncReferenceData(
-                ingredients = found.flatMap { it.referenceData.ingredients }.distinctBy { it.uuid },
-                allergens = found.flatMap { it.referenceData.allergens }.distinctBy { it.uuid },
-                sourceClassifications = found.flatMap { it.referenceData.sourceClassifications }.distinctBy { it.uuid },
-                tags = found.flatMap { it.referenceData.tags }.distinctBy { it.uuid },
-                labels = found.flatMap { it.referenceData.labels }.distinctBy { it.uuid }
+            recipes = recipes,
+            referenceData = syncRepository.collectReferenceData(
+                ingredientIds = recipes.flatMap { it.ingredients }.map { UUID.fromString(it.ingredientId) }.toSet(),
+                tagIds = recipes.flatMap { it.tagIds }.map { UUID.fromString(it) }.toSet(),
+                labelIds = recipes.flatMap { it.labelIds }.map { UUID.fromString(it) }.toSet(),
+                sinceMillis = null
             ),
-            creators = found.flatMap { it.creators }.distinctBy { it.uuid }
+            creators = syncRepository.collectCreators(recipes.map { UUID.fromString(it.creatorId) }.toSet())
         )
     }
 
@@ -671,12 +722,38 @@ class SyncService(
     }
 
     /**
+     * Step uuids are client-generated primary keys: an unparseable one used to throw out of the
+     * per-recipe loop (failing the whole push request, after earlier recipes had already
+     * committed), and a repeated one violated the primary key the same way. Cross-recipe reuse
+     * can only be checked against the table, so that part is re-checked at write time
+     * ([RecipeUpsertOutcome.StepIdTaken]).
+     */
+    private fun validateSteps(recipe: SyncRecipe, errors: MutableList<SyncError>): Boolean {
+        val stepIds = recipe.steps.map { step ->
+            parseUuid(step.uuid) {} ?: run {
+                errors += SyncError(recipe.uuid, SyncErrors.INVALID_STEP, SyncErrors.INVALID_STEP.message)
+                return false
+            }
+        }
+        if (stepIds.size != stepIds.toSet().size) {
+            errors += SyncError(recipe.uuid, SyncErrors.INVALID_STEP, SyncErrors.INVALID_STEP.message)
+            return false
+        }
+        return true
+    }
+
+    /**
      * Validates ingredient references in a pushed recipe aggregate.
+     *
+     * A repeated ingredient id is rejected here: `recipe_ingredients` is keyed on
+     * `(recipe_id, ingredient_id)`, so the second insert would violate the primary key and abort
+     * the whole push request rather than just this recipe.
      */
     private suspend fun validateIngredients(
         recipe: SyncRecipe,
         errors: MutableList<SyncError>
     ): Boolean {
+        val seenIngredientIds = mutableSetOf<UUID>()
         for (ingredient in recipe.ingredients) {
             val ingredientId = parseUuid(ingredient.ingredientId) {
                 errors += SyncError(
@@ -685,6 +762,15 @@ class SyncService(
                     SyncErrors.INVALID_INGREDIENT.message
                 )
             } ?: return false
+
+            if (!seenIngredientIds.add(ingredientId)) {
+                errors += SyncError(
+                    recipe.uuid,
+                    SyncErrors.DUPLICATE_INGREDIENT,
+                    SyncErrors.DUPLICATE_INGREDIENT.message
+                )
+                return false
+            }
 
             if (!syncRepository.ingredientExists(ingredientId)) {
                 errors += SyncError(

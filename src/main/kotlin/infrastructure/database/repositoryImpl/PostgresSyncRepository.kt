@@ -5,6 +5,7 @@ import com.tenmilelabs.domain.repository.RecipeRankingMetadata
 import com.tenmilelabs.domain.repository.SyncGroceryItemRecord
 import com.tenmilelabs.domain.repository.SyncMealPlanRecord
 import com.tenmilelabs.domain.repository.SyncRecipeRecord
+import com.tenmilelabs.domain.repository.RecipeUpsertOutcome
 import com.tenmilelabs.domain.repository.SyncRepository
 import com.tenmilelabs.domain.service.MealPlanGenerationService
 import com.tenmilelabs.infrastructure.database.mappers.suspendTransaction
@@ -31,14 +32,22 @@ class PostgresSyncRepository : SyncRepository {
             .firstOrNull()
             ?: return@suspendTransaction null
 
-        toSyncRecipeRecord(recipeRow)
+        loadRecipeAggregates(listOf(recipeRow)).single()
     }
 
     override suspend fun getRecipes(uuids: Set<UUID>): List<SyncRecipeRecord> = suspendTransaction {
         if (uuids.isEmpty()) return@suspendTransaction emptyList()
         val entityIds = uuids.map { EntityID(it, RecipeTable) }
-        val recipeRows = RecipeTable.selectAll().where { RecipeTable.id inList entityIds }.toList()
-        if (recipeRows.isEmpty()) return@suspendTransaction emptyList()
+        loadRecipeAggregates(RecipeTable.selectAll().where { RecipeTable.id inList entityIds }.toList())
+    }
+
+    /**
+     * Hydrates [recipeRows] into full aggregates with one query per child table for the whole
+     * batch (not per recipe), preserving [recipeRows]' order. Must run inside a transaction.
+     */
+    private fun loadRecipeAggregates(recipeRows: List<ResultRow>): List<SyncRecipeRecord> {
+        if (recipeRows.isEmpty()) return emptyList()
+        val entityIds = recipeRows.map { it[RecipeTable.id] }
 
         val stepsByRecipe = RecipeStepTable.selectAll()
             .where { (RecipeStepTable.recipe_id inList entityIds) and RecipeStepTable.deleted_at.isNull() }
@@ -66,7 +75,7 @@ class PostgresSyncRepository : SyncRepository {
             .where { (RecipeLabelTable.recipeId inList entityIds) and RecipeLabelTable.deletedAt.isNull() }
             .groupBy({ it[RecipeLabelTable.recipeId].value }) { it[RecipeLabelTable.labelId].value.toString() }
 
-        recipeRows.map { recipeRow ->
+        return recipeRows.map { recipeRow ->
             val recipeId = recipeRow[RecipeTable.id].value
             val recipe = SyncRecipe(
                 uuid = recipeId.toString(),
@@ -98,16 +107,39 @@ class PostgresSyncRepository : SyncRepository {
      * Existing child rows are deleted and re-inserted from the incoming payload
      * so the server snapshot matches the client aggregate atomically.
      */
-    override suspend fun upsertRecipeAggregate(recipe: SyncRecipe, serverUpdatedAt: Instant) = suspendTransaction {
+    override suspend fun upsertRecipeAggregate(
+        recipe: SyncRecipe,
+        serverUpdatedAt: Instant
+    ): RecipeUpsertOutcome = suspendTransaction {
         val recipeUuid = UUID.fromString(recipe.uuid)
         val recipeEntityId = EntityID(recipeUuid, RecipeTable)
 
+        // Locked so a concurrent push of the same recipe blocks here rather than racing the
+        // staleness re-check below - see upsertMealPlan, which this mirrors.
         val existingRow = RecipeTable
             .selectAll()
             .where { RecipeTable.id eq recipeUuid }
-            .limit(1)
+            .forUpdate()
             .firstOrNull()
         val exists = existingRow != null
+
+        if (existingRow != null &&
+            existingRow[RecipeTable.server_updated_at].toEpochMilliseconds() > recipe.updatedAt
+        ) {
+            return@suspendTransaction RecipeUpsertOutcome.ServerNewer
+        }
+
+        // Step ids are client-generated primary keys. One already owned by a different recipe
+        // would fail the insert below with a constraint violation that aborts the whole push
+        // request, so detect it up front and report it per-recipe instead.
+        val stepEntityIds = recipe.steps.map { EntityID(UUID.fromString(it.uuid), RecipeStepTable) }
+        if (stepEntityIds.isNotEmpty()) {
+            val stepIdTaken = RecipeStepTable.selectAll()
+                .where { (RecipeStepTable.id inList stepEntityIds) and (RecipeStepTable.recipe_id neq recipeEntityId) }
+                .limit(1)
+                .any()
+            if (stepIdTaken) return@suspendTransaction RecipeUpsertOutcome.StepIdTaken
+        }
 
         if (exists) {
             RecipeTable.update({ RecipeTable.id eq recipeUuid }) {
@@ -130,21 +162,30 @@ class PostgresSyncRepository : SyncRepository {
                 it[RecipeTable.server_updated_at] = serverUpdatedAt
             }
         } else {
-            RecipeTable.insert {
-                it[id] = recipeEntityId
-                it[title] = recipe.title
-                it[description] = recipe.description
-                it[image_url] = recipe.imageUrl
-                it[image_url_thumbnail] = recipe.imageUrlThumbnail
-                it[prep_time_minutes] = recipe.prepTimeMinutes
-                it[cook_time_minutes] = recipe.cookTimeMinutes
-                it[servings] = recipe.servings
-                it[creator_id] = EntityID(UUID.fromString(recipe.creatorId), UserTable)
-                it[recipe_external_url] = recipe.recipeExternalUrl
-                it[privacy] = recipe.privacy
-                it[updated_at] = recipe.updatedAt
-                it[deleted_at] = recipe.deletedAt
-                it[RecipeTable.server_updated_at] = serverUpdatedAt
+            try {
+                RecipeTable.insert {
+                    it[id] = recipeEntityId
+                    it[title] = recipe.title
+                    it[description] = recipe.description
+                    it[image_url] = recipe.imageUrl
+                    it[image_url_thumbnail] = recipe.imageUrlThumbnail
+                    it[prep_time_minutes] = recipe.prepTimeMinutes
+                    it[cook_time_minutes] = recipe.cookTimeMinutes
+                    it[servings] = recipe.servings
+                    it[creator_id] = EntityID(UUID.fromString(recipe.creatorId), UserTable)
+                    it[recipe_external_url] = recipe.recipeExternalUrl
+                    it[privacy] = recipe.privacy
+                    it[updated_at] = recipe.updatedAt
+                    it[deleted_at] = recipe.deletedAt
+                    it[RecipeTable.server_updated_at] = serverUpdatedAt
+                }
+            } catch (ex: ExposedSQLException) {
+                // A concurrent push (e.g. a client retry after a timeout) inserted this brand-new
+                // uuid first - report a conflict rather than letting the violation fail the batch.
+                if (ex.message?.contains("recipes_pkey", ignoreCase = true) == true) {
+                    return@suspendTransaction RecipeUpsertOutcome.ServerNewer
+                }
+                throw ex
             }
         }
 
@@ -230,6 +271,7 @@ class PostgresSyncRepository : SyncRepository {
                 it[RecipeLabelTable.serverUpdatedAt] = serverUpdatedAt
             }
         }
+        RecipeUpsertOutcome.Applied
     }
 
     /**
@@ -252,7 +294,8 @@ class PostgresSyncRepository : SyncRepository {
             }
             .orderBy(RecipeTable.server_updated_at to SortOrder.ASC)
             .limit(limit)
-            .map(::toSyncRecipeRecord)
+            .toList()
+            .let(::loadRecipeAggregates)
     }
 
     override suspend fun ingredientExists(uuid: UUID): Boolean = suspendTransaction {
@@ -283,12 +326,8 @@ class PostgresSyncRepository : SyncRepository {
         )
     }
 
-    override suspend fun collectCreators(
-        creatorIds: Set<UUID>,
-        sinceMillis: Long?
-    ): List<SyncUser> = suspendTransaction {
-        val sinceInstant = sinceMillis?.let { Instant.fromEpochMilliseconds(it) }
-        queryCreators(creatorIds, sinceInstant)
+    override suspend fun collectCreators(creatorIds: Set<UUID>): List<SyncUser> = suspendTransaction {
+        queryCreators(creatorIds)
     }
 
     // ── Private query helpers ──────────────────────────────────────────────────
@@ -410,19 +449,11 @@ class PostgresSyncRepository : SyncRepository {
         }
     }
 
-    private fun queryCreators(ids: Set<UUID>, sinceInstant: Instant?): List<SyncUser> {
-        if (sinceInstant == null && ids.isEmpty()) return emptyList()
+    /** Gap-only by design — see [SyncRepository.collectCreators] for why users get no delta clause. */
+    private fun queryCreators(ids: Set<UUID>): List<SyncUser> {
+        if (ids.isEmpty()) return emptyList()
         val entityIds = ids.map { EntityID(it, UserTable) }
-        return UserTable.selectAll().where {
-            when {
-                sinceInstant != null && entityIds.isNotEmpty() ->
-                    (UserTable.updated_at greater sinceInstant) or (UserTable.id inList entityIds)
-                sinceInstant != null ->
-                    UserTable.updated_at greater sinceInstant
-                else ->
-                    UserTable.id inList entityIds
-            }
-        }.map { row ->
+        return UserTable.selectAll().where { UserTable.id inList entityIds }.map { row ->
             val email = row.getOrNull(UserTable.email).orEmpty()
             val displayName = row.getOrNull(UserTable.display_name)
                 ?.takeIf { it.isNotBlank() }
@@ -1146,71 +1177,4 @@ class PostgresSyncRepository : SyncRepository {
         ),
         serverUpdatedAtMillis = row[GroceryListItemCheckTable.server_updated_at].toEpochMilliseconds()
     )
-
-    /**
-     * Maps one recipe row into a sync aggregate payload plus server cursor value.
-     */
-    private fun toSyncRecipeRecord(recipeRow: ResultRow): SyncRecipeRecord {
-        val recipeId = recipeRow[RecipeTable.id].value
-        val recipeEntityId = EntityID(recipeId, RecipeTable)
-
-        val steps = RecipeStepTable
-            .selectAll()
-            .where { (RecipeStepTable.recipe_id eq recipeEntityId) and (RecipeStepTable.deleted_at.isNull()) }
-            .orderBy(RecipeStepTable.order_index to SortOrder.ASC)
-            .map {
-                SyncRecipeStep(
-                    uuid = it[RecipeStepTable.id].value.toString(),
-                    orderIndex = it[RecipeStepTable.order_index],
-                    instruction = it[RecipeStepTable.instruction]
-                )
-            }
-
-        val ingredients = RecipeIngredientTable
-            .selectAll()
-            .where { (RecipeIngredientTable.recipeId eq recipeEntityId) and (RecipeIngredientTable.deletedAt.isNull()) }
-            .map {
-                SyncRecipeIngredient(
-                    ingredientId = it[RecipeIngredientTable.ingredientId].value.toString(),
-                    quantity = it[RecipeIngredientTable.quantity],
-                    unit = it[RecipeIngredientTable.unit]
-                )
-            }
-
-        val tagIds = RecipeTagTable
-            .selectAll()
-            .where { (RecipeTagTable.recipeId eq recipeEntityId) and (RecipeTagTable.deletedAt.isNull()) }
-            .map { it[RecipeTagTable.tagId].value.toString() }
-
-        val labelIds = RecipeLabelTable
-            .selectAll()
-            .where { (RecipeLabelTable.recipeId eq recipeEntityId) and (RecipeLabelTable.deletedAt.isNull()) }
-            .map { it[RecipeLabelTable.labelId].value.toString() }
-
-        val recipe = SyncRecipe(
-            uuid = recipeId.toString(),
-            title = recipeRow[RecipeTable.title],
-            description = recipeRow[RecipeTable.description],
-            imageUrl = recipeRow[RecipeTable.image_url],
-            imageUrlThumbnail = recipeRow[RecipeTable.image_url_thumbnail],
-            prepTimeMinutes = recipeRow[RecipeTable.prep_time_minutes],
-            cookTimeMinutes = recipeRow[RecipeTable.cook_time_minutes],
-            servings = recipeRow[RecipeTable.servings],
-            creatorId = recipeRow[RecipeTable.creator_id].value.toString(),
-            recipeExternalUrl = recipeRow[RecipeTable.recipe_external_url],
-            privacy = recipeRow[RecipeTable.privacy],
-            updatedAt = recipeRow[RecipeTable.updated_at],
-            deletedAt = recipeRow[RecipeTable.deleted_at],
-            steps = steps,
-            ingredients = ingredients,
-            tagIds = tagIds,
-            labelIds = labelIds,
-            imageBlobId = recipeRow[RecipeTable.image_blob_id]
-        )
-
-        return SyncRecipeRecord(
-            recipe = recipe,
-            serverUpdatedAtMillis = recipeRow[RecipeTable.server_updated_at].toEpochMilliseconds()
-        )
-    }
 }

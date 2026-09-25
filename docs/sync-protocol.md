@@ -138,7 +138,7 @@ Authorization: Bearer <token>
 
 **Key Behavior**:
 - `recipes`: All recipes where `creatorId == userId OR privacy == PUBLIC` AND `server_updated_at > since`
-- `creators`: The `SyncUser` (display name, email, avatar) for every distinct `creatorId` appearing in `recipes`, via the same delta + gap union as reference data — lets the client render "by {creator}" without a separate user lookup
+- `creators`: The `SyncUser` (display name, email, avatar) for every distinct `creatorId` appearing in `recipes` plus every meal-plan owner in `mealPlans` — **gap-only**, never the delta+gap union reference data uses. Users aren't a shared catalog: a delta clause (`updated_at > since`) sent every account in the table, email included, to any caller pulling with `since=0`. Consequence: a creator's profile edit reaches a client only when one of their recipes/plans is next in a response.
 - `ingredients`, `tags`, `labels`, `allergens`, `sourceClassifications`: Union of delta + gap entities
   - **Delta**: `server_updated_at > since`
   - **Gap**: Referenced by recipes in the current page but old (allows FK resolution)
@@ -830,7 +830,7 @@ Bookmark errors are per-item and don't fail the rest of the push batch.
 
 ### Cursor Advancement with Bookmarks
 
-The pull response `serverTimestamp` is derived from recipe `server_updated_at` values. Since bookmarks are stamped with real epoch time (`Clock.System.now()`), clients should advance their cursor to the **maximum of all timestamps** in the response:
+The pull response `serverTimestamp` is derived from recipe `server_updated_at` values. Bookmarks are stamped with `millisecondPrecisionNow()`, so when — and **only** when — `hasMore` is `false`, clients may advance their cursor to the maximum of the two:
 
 ```
 advancedCursor = max(
@@ -839,7 +839,7 @@ advancedCursor = max(
 )
 ```
 
-This ensures no bookmark deltas are re-fetched on the next pull.
+This avoids re-fetching the same bookmark deltas on the next pull. **Never apply it while `hasMore` is `true`**: bookmarks aren't paginated, so a bookmark newer than the page's last recipe would jump the cursor past recipes that haven't been delivered yet. Never fold meal-plan or grocery-item `updatedAt` into the cursor either — those carry the pushing client's clock, not the server's. Re-receiving a bookmark is harmless (upserts are idempotent); skipping a recipe page is not.
 
 ### Authorization
 
@@ -1326,11 +1326,15 @@ The server validates each pushed recipe, in this order — the first failing che
 | creatorId well-formed UUID? | `INVALID_CREATOR` | Skip recipe, record error |
 | creatorId matches auth user? | `CREATOR_MISMATCH` | Skip recipe, record error |
 | Privacy is `PUBLIC` or `PRIVATE`? | `INVALID_PRIVACY` | Skip recipe, record error |
+| Step UUIDs well-formed and unique within the recipe? | `INVALID_STEP` | Skip recipe, record error |
 | Ingredient UUIDs well-formed? | `INVALID_INGREDIENT` | Skip recipe, record error |
+| Ingredient id repeated within the recipe? | `DUPLICATE_INGREDIENT` | Skip recipe, record error |
 | Ingredients exist in catalogue? | `INGREDIENT_NOT_FOUND` | Skip recipe, record error |
 | Tag UUIDs well-formed? | `INVALID_TAG` | Skip recipe, record error |
 | Label UUIDs well-formed? | `INVALID_LABEL` | Skip recipe, record error |
 | Tag/label UUIDs exist in database? | (silently ignored) | Accept; unknown-but-well-formed tags/labels are allowed |
+| *At write time:* a step UUID already belongs to another recipe? | `INVALID_STEP` | Skip recipe, record error |
+| *At write time:* the locked row is newer than the payload (concurrent push)? | — | Conflict with the winning row as `serverVersion` |
 
 Errors are **per-recipe** and don't fail the entire push request. Client receives all three lists: accepted, conflicts, errors.
 
@@ -1341,6 +1345,7 @@ Meal plans follow the same per-item, first-failing-check-wins shape:
 | UUID format valid? | `INVALID_UUID` | Skip plan, record error |
 | ownerId well-formed UUID? | `INVALID_OWNER` | Skip plan, record error |
 | householdId well-formed UUID (if present)? | `INVALID_HOUSEHOLD` | Skip plan, record error |
+| Day UUIDs well-formed and unique, recipe ids well-formed? | `INVALID_MEAL_PLAN_DAY` | Skip plan, record error |
 | Plan exists and caller may write it (owner, or active member of its household)? | `MEAL_PLAN_NOT_ACCESSIBLE` | Skip plan, record error |
 | New plan: ownerId names the caller? | `OWNER_MISMATCH` | Skip plan, record error |
 | New plan: householdId (if any) is caller's own active household? | `INVALID_HOUSEHOLD` | Skip plan, record error |
@@ -1374,7 +1379,8 @@ undocumented elsewhere and worth knowing if you're writing client retry logic (s
 ### Atomicity
 - Each recipe's decision (accept/conflict/error) is independent
 - No cross-recipe failures
-- All recipes in a push are processed atomically as a batch (single transaction for sync)
+- Each recipe (and each bookmark, meal plan, grocery item) is written in its own transaction — a push is **not** one atomic batch
+- The recipe write locks the existing row (`SELECT ... FOR UPDATE`) and re-runs the staleness check before writing, so two concurrent pushes of one recipe can't both be accepted
 
 ### Clock
 - Any write to `server_updated_at` (recipes, bookmarks, meal plans) uses

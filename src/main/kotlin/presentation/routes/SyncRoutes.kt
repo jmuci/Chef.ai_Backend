@@ -93,6 +93,12 @@ fun Route.syncRoutes(syncService: SyncService) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("since query parameter is required"))
                 return@get
             }
+            if (since < 0) {
+                // Checked here, not left to pullRecipes' require(): that IllegalArgumentException
+                // would land in the generic catch below and answer 500.
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("since must be non-negative"))
+                return@get
+            }
 
             val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 100
             if (limit <= 0) {
